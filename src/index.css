@@ -1,0 +1,319 @@
+/* ─── Design tokens (CSS custom properties) ─────────────────────────────
+ * Color theme + density + font stack are driven by data-* attributes on
+ * <html>, set by the TweaksContext. Components reference these vars via
+ * the T constants in src/design/tokens.ts.
+ */
+:root {
+  /* Editorial palette — the locked aesthetic from the design canvas. */
+  --ink: #16110a;
+  --paper: #f4efe6;
+  --paper-2: #ebe6dc;
+  --accent: #ff5b1f;
+  --accent-2: #d4ff3a;
+  --accent-3: #7c9c7e;
+  --accent-4: #1d4ed8;
+  --accent-you: #ff2d92;
+  --accent-ai: #00d4ff;
+
+  --hair: rgba(22, 17, 10, 0.12);
+  --hair-strong: rgba(22, 17, 10, 0.18);
+  --muted: rgba(22, 17, 10, 0.55);
+
+  /* Editorial font stack (default). */
+  --font-sans: 'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+  --font-slab: 'Roboto Slab', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Density scaffolding. */
+  --pad-screen: 36px;
+  --gap-card: 12px;
+  --row-pad-y: 14px;
+
+  /* Premium easing curves. */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+}
+
+[data-theme='cool']  { --accent: #1d4ed8; --accent-2: #7c9c7e; --accent-3: #1d4ed8; --accent-4: #1d4ed8; --accent-you: #1d4ed8; --accent-ai: #00d4ff; }
+[data-theme='acid']  { --accent: #d4ff3a; --accent-2: #d4ff3a; --accent-3: #d4ff3a; --accent-4: #d4ff3a; --accent-you: #d4ff3a; --accent-ai: #ff2d92; }
+[data-theme='mono']  { --accent: #16110a; --accent-2: #16110a; --accent-3: #16110a; --accent-4: #16110a; --accent-you: #16110a; --accent-ai: #888888; }
+
+[data-font='technical'] {
+  --font-sans: 'JetBrains Mono', ui-monospace, monospace;
+  --font-serif: 'JetBrains Mono', ui-monospace, monospace;
+  --font-slab: 'JetBrains Mono', ui-monospace, monospace;
+}
+[data-font='plain'] {
+  --font-serif: 'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+  --font-slab: 'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-density='compact'] { --pad-screen: 24px; --gap-card: 8px;  --row-pad-y: 10px; }
+[data-density='comfy']   { --pad-screen: 56px; --gap-card: 18px; --row-pad-y: 18px; }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Subtle paper grain — barely-there SVG noise — so cream doesn't read flat. */
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.086  0 0 0 0 0.066  0 0 0 0 0.039  0 0 0 0.045 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 180px 180px;
+}
+
+button { font-family: inherit; }
+input, textarea { font-family: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; cursor: pointer; }
+::selection { background: var(--accent); color: var(--paper); }
+
+/* ─── Focus rings ───────────────────────────────────────────────────────
+ * Editorial ink rings, only on keyboard focus (focus-visible) — clicks
+ * stay clean. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* ─── Animations & motion language ─────────────────────────────────── */
+@keyframes pulse-fade { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
+
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes reveal-tight {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes ink-rise {
+  from { opacity: 0; clip-path: inset(0 0 100% 0); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@keyframes draw-rule {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+.fade-in { animation: reveal-tight 240ms var(--ease-out-quart) both; }
+
+/* Reveal up: hero text, section headers. Stagger via .reveal-N delays. */
+.reveal     { animation: reveal-up 700ms var(--ease-out-expo) both; }
+.reveal-1   { animation-delay: 60ms; }
+.reveal-2   { animation-delay: 140ms; }
+.reveal-3   { animation-delay: 220ms; }
+.reveal-4   { animation-delay: 300ms; }
+.reveal-5   { animation-delay: 380ms; }
+.reveal-6   { animation-delay: 460ms; }
+
+/* Drop-cap-style "ink rise" — clip-path from bottom up. */
+.ink-rise { animation: ink-rise 900ms var(--ease-out-expo) both; }
+
+/* Page transition wrapper. */
+.page-enter { animation: page-enter 360ms var(--ease-out-expo) both; }
+
+/* Newspaper rule that draws in. */
+.draw-rule { transform-origin: left; animation: draw-rule 700ms var(--ease-out-expo) 200ms both; }
+
+/* Stagger children in a flex/grid container — apply .stagger-children
+ * to the parent. Each child animates with an increasing delay. */
+.stagger-children > * {
+  animation: reveal-up 600ms var(--ease-out-expo) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 420ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 480ms; }
+.stagger-children > *:nth-child(n+9) { animation-delay: 520ms; }
+
+/* ─── Microinteractions ───────────────────────────────────────────── */
+
+/* Cards / buttons that gently float on hover. */
+.lift {
+  transition: transform 280ms var(--ease-out-expo),
+              box-shadow 280ms var(--ease-out-expo),
+              border-color 200ms;
+}
+.lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(22, 17, 10, 0.12),
+              0 2px 6px rgba(22, 17, 10, 0.06);
+}
+.lift:active { transform: translateY(-1px); }
+
+/* Pressable button: subtle scale on press. */
+.btn-press {
+  transition: transform 120ms var(--ease-out-quart),
+              background 200ms,
+              color 200ms;
+}
+.btn-press:active { transform: scale(0.98); }
+
+/* Editorial nav link with animated underline that wipes in from left. */
+.nav-link {
+  position: relative;
+  padding: 6px 0;
+  transition: color 200ms;
+}
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 380ms var(--ease-out-expo);
+}
+.nav-link:hover::after,
+.nav-link.is-active::after { transform: scaleX(1); }
+.nav-link.is-active { color: var(--ink); }
+
+/* Arrow that nudges right on hover (e.g. "Start drill →"). */
+.arrow-nudge {
+  display: inline-block;
+  transition: transform 280ms var(--ease-out-expo);
+}
+.lift:hover .arrow-nudge,
+.btn-press:hover .arrow-nudge { transform: translateX(4px); }
+
+/* Inline link with a wiped underline (in body copy). */
+.ink-link {
+  position: relative;
+  padding-bottom: 1px;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 100% 1px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  transition: background-size 240ms var(--ease-out-expo);
+}
+.ink-link:hover { background-size: 100% 2px; }
+
+/* Drill back button — same shape on every drill, hover brightens. */
+.drill-back { transition: background 160ms, transform 160ms; }
+.drill-back:hover { background: rgba(244, 239, 230, 0.96) !important; }
+.drill-back:active { transform: scale(0.97); }
+
+/* Highlight-on-input ring that the answer field uses. */
+.answer-ring { transition: border-color 160ms, box-shadow 160ms; }
+.answer-ring:focus-within { box-shadow: 0 0 0 3px rgba(255, 91, 31, 0.18); }
+
+/* ─── Responsive grid overrides ────────────────────────────────────────
+ * Each grid screen gets a class name (e.g. .grid-dashboard). Inline
+ * styles set the desktop grid; these media queries override on smaller
+ * viewports (`!important` is the cheapest way to win against inline
+ * styles without refactoring every screen).
+ *
+ * Breakpoints: 1024 (tablet — collapse 3-col to 2), 900 (phablet —
+ * stack everything to single column).
+ */
+@media (max-width: 1024px) {
+  .grid-tutor    { grid-template-columns: 220px minmax(0, 1fr) !important; }
+  .grid-tutor > .tutor-side { display: none !important; }
+}
+
+@media (max-width: 900px) {
+  .grid-dashboard,
+  .grid-profile,
+  .grid-onboard,
+  .grid-stream,
+  .grid-voice,
+  .grid-layers,
+  .grid-tutor {
+    grid-template-columns: 1fr !important;
+    gap: 24px !important;
+  }
+  .grid-pulse {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  .grid-pulse > .rule,
+  .grid-pulse > .pulse-aside-l,
+  .grid-pulse > .pulse-aside-r,
+  .grid-stream > .stream-aside,
+  .grid-voice  > .voice-aside,
+  .grid-tutor  > .tutor-side,
+  .grid-tutor  > .tutor-rail {
+    display: none !important;
+  }
+  .arena-scoreboard {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 16px !important;
+  }
+  .arena-scoreboard > .arena-round {
+    grid-column: 1 / -1;
+    text-align: center;
+  }
+
+  .responsive-pad { padding: 24px 20px !important; }
+  .responsive-pad-x { padding-left: 20px !important; padding-right: 20px !important; }
+  .responsive-tight { padding: 18px 16px !important; }
+
+  .hide-on-mobile { display: none !important; }
+
+  /* Top nav becomes scrollable on narrow viewports. */
+  .top-nav-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .top-nav-tabs::-webkit-scrollbar { display: none; }
+}
+
+@media (max-width: 640px) {
+  .top-nav-actions .actions-collapse { display: none !important; }
+  .grid-onboard { padding: 24px !important; }
+  .footer-collapse { display: none !important; }
+}
+
+/* ─── Skeleton shimmer (for loading states) ────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--hair) 0%, var(--paper-2) 50%, var(--hair) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { scrollbar-width: none; }
+
+/* Constrain images, etc. */
+img, svg { max-width: 100%; }
+
+/* Reduce motion: respect user preferences. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,89 @@
+# ─── Dependencies ──────────────────────────────────────────────────────
+node_modules
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# ─── Build output ──────────────────────────────────────────────────────
+dist
+dist-ssr
+build
+out
+.cache
+.parcel-cache
+.turbo
+
+# ─── Vite / Vitest ─────────────────────────────────────────────────────
+.vite
+vite.config.ts.timestamp-*
+vite.config.js.timestamp-*
+
+# ─── TypeScript ────────────────────────────────────────────────────────
+*.tsbuildinfo
+.tscache
+
+# ─── Linter / formatter caches ─────────────────────────────────────────
+.eslintcache
+.stylelintcache
+.prettiercache
+
+# ─── Test coverage ─────────────────────────────────────────────────────
+coverage
+.nyc_output
+*.lcov
+
+# ─── Logs ──────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.yarn-integrity
+
+# ─── Environment / secrets ─────────────────────────────────────────────
+*.local
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+secrets.json
+
+# ─── Editors / IDEs ────────────────────────────────────────────────────
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.history
+.fleet
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ─── OS junk ───────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+
+# ─── Local tooling ─────────────────────────────────────────────────────
+.claude/
+.tmp
+tmp

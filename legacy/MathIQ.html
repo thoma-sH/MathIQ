@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>MathIQ — Mental math, every level</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;600&family=Roboto+Slab:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ink: #16110a;
+    --paper: #f4efe6;
+    --paper-2: #ebe6dc;
+    --accent: #ff5b1f;
+    --hair: rgba(22, 17, 10, 0.12);
+    --hair-strong: rgba(22, 17, 10, 0.18);
+    --muted: rgba(22, 17, 10, 0.55);
+    --serif: "Instrument Serif", "Times New Roman", serif;
+    --slab: "Roboto Slab", Georgia, serif;
+    --sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body { font-family: var(--sans); font-size: 15px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+  input, textarea { font-family: inherit; color: inherit; }
+  a { color: inherit; text-decoration: none; cursor: pointer; }
+  ::selection { background: var(--accent); color: var(--paper); }
+  @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.3 } }
+  @keyframes blink { 50% { opacity: 0 } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+  .fade-in { animation: fadeIn 240ms cubic-bezier(.2,.7,.3,1) both; }
+  /* hide scrollbars in drill chrome */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+// ─── Design tokens ────────────────────────────────────────────────────────
+const T = {
+  ink: '#16110a',
+  paper: '#f4efe6',
+  paper2: '#ebe6dc',
+  accent: '#ff5b1f',
+  hair: 'rgba(22, 17, 10, 0.12)',
+  hairStrong: 'rgba(22, 17, 10, 0.18)',
+  muted: 'rgba(22, 17, 10, 0.55)',
+  serif: '"Instrument Serif", "Times New Roman", serif',
+  slab: '"Roboto Slab", Georgia, serif',
+  sans: '"Inter Tight", ui-sans-serif, system-ui, sans-serif',
+  mono: '"JetBrains Mono", ui-monospace, monospace',
+};
+
+// ─── Problem generators (arithmetic → calculus) ──────────────────────────
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+const GENERATORS = {
+  arithmetic: () => {
+    const kind = pick(['mul', 'add', 'sub', 'div', 'square', 'percent']);
+    if (kind === 'mul') {
+      const a = rnd(11, 99), b = rnd(2, 9);
+      return { q: `${a} × ${b}`, a: a * b, kicker: 'two-digit by one', topic: 'Arith.' };
+    }
+    if (kind === 'add') {
+      const a = rnd(20, 199), b = rnd(20, 199);
+      return { q: `${a} + ${b}`, a: a + b, kicker: 'three-digit sum', topic: 'Arith.' };
+    }
+    if (kind === 'sub') {
+      const a = rnd(120, 500), b = rnd(20, 119);
+      return { q: `${a} − ${b}`, a: a - b, kicker: 'difference', topic: 'Arith.' };
+    }
+    if (kind === 'div') {
+      const b = rnd(2, 12), q = rnd(3, 25);
+      return { q: `${b * q} ÷ ${b}`, a: q, kicker: 'clean division', topic: 'Arith.' };
+    }
+    if (kind === 'square') {
+      const a = rnd(11, 25);
+      return { q: `${a}²`, a: a * a, kicker: 'square', topic: 'Arith.' };
+    }
+    if (kind === 'percent') {
+      const pct = pick([10, 15, 20, 25, 50]);
+      const n = rnd(2, 20) * 20;
+      return { q: `${pct}% of ${n}`, a: (pct * n) / 100, kicker: 'percent', topic: 'Arith.' };
+    }
+  },
+  algebra: () => {
+    const kind = pick(['linear', 'pow', 'log']);
+    if (kind === 'linear') {
+      const m = rnd(2, 9), x = rnd(2, 12), b = rnd(1, 30);
+      return { q: `${m}x + ${b} = ${m * x + b}, x = ?`, a: x, kicker: 'solve for x', topic: 'Algebra' };
+    }
+    if (kind === 'pow') {
+      const base = pick([2, 3, 4, 5]);
+      const exp = rnd(2, 4);
+      return { q: `${base}^${exp}`, a: Math.pow(base, exp), kicker: 'powers', topic: 'Algebra' };
+    }
+    if (kind === 'log') {
+      const base = pick([2, 3]);
+      const exp = rnd(2, 5);
+      return { q: `log_${base} ${Math.pow(base, exp)}`, a: exp, kicker: 'logs', topic: 'Algebra' };
+    }
+  },
+  trig: () => {
+    const angles = [
+      ['sin 0°', 0], ['sin 30°', 0.5], ['sin 45°', '√2/2'], ['sin 60°', '√3/2'], ['sin 90°', 1],
+      ['cos 0°', 1], ['cos 30°', '√3/2'], ['cos 45°', '√2/2'], ['cos 60°', 0.5], ['cos 90°', 0],
+      ['tan 0°', 0], ['tan 30°', '√3/3'], ['tan 45°', 1], ['tan 60°', '√3'],
+    ];
+    const [q, a] = pick(angles);
+    return { q, a, kicker: 'unit circle', topic: 'Trig.' };
+  },
+  calculus: () => {
+    const kind = pick(['deriv', 'integ', 'limit']);
+    if (kind === 'deriv') {
+      const c = rnd(2, 9), n = rnd(2, 5);
+      return { q: `d/dx (${c}x^${n})`, a: `${c * n}x^${n - 1}`.replace('x^1', 'x'), kicker: 'power rule', topic: 'Calc.' };
+    }
+    if (kind === 'integ') {
+      const c = rnd(2, 9), n = rnd(1, 4);
+      return { q: `∫ ${c}x^${n} dx`, a: `${c / (n + 1) === Math.floor(c / (n + 1)) ? c / (n + 1) : c + '/' + (n + 1)}x^${n + 1}`, kicker: 'integrate', topic: 'Calc.' };
+    }
+    if (kind === 'limit') {
+      const fns = [
+        ['lim x→0 sin(x)/x', 1],
+        ['lim x→∞ 1/x', 0],
+        ['lim x→0 (e^x − 1)/x', 1],
+        ['lim x→0 (1 − cos x)/x', 0],
+      ];
+      const [q, a] = pick(fns);
+      return { q, a, kicker: 'limits', topic: 'Calc.' };
+    }
+  },
+  discrete: () => {
+    const kind = pick(['gcd', 'mod', 'fact']);
+    if (kind === 'gcd') {
+      const a = rnd(12, 60), b = rnd(8, 36);
+      const g = (function gcd(x, y) { return y ? gcd(y, x % y) : x; })(a, b);
+      return { q: `gcd(${a}, ${b})`, a: g, kicker: 'gcd', topic: 'Discrete' };
+    }
+    if (kind === 'mod') {
+      const a = rnd(20, 99), b = rnd(3, 12);
+      return { q: `${a} mod ${b}`, a: a % b, kicker: 'modulo', topic: 'Discrete' };
+    }
+    if (kind === 'fact') {
+      const n = rnd(3, 6);
+      return { q: `${n}!`, a: [1, 1, 2, 6, 24, 120, 720][n], kicker: 'factorial', topic: 'Discrete' };
+    }
+  },
+};
+
+const DOMAINS = ['arithmetic', 'algebra', 'trig', 'calculus', 'discrete'];
+
+function genProblem(domain) {
+  const d = domain === 'mixed' ? pick(DOMAINS) : domain;
+  return GENERATORS[d]();
+}
+
+const checkAnswer = (input, answer) => {
+  if (input == null) return false;
+  const i = String(input).trim();
+  if (i === '') return false;
+  if (typeof answer === 'number') {
+    const n = Number(i);
+    return !Number.isNaN(n) && n === answer;
+  }
+  // string: normalize spacing + case
+  const norm = (s) => String(s).toLowerCase().replace(/\s+/g, '').replace(/×/g, '*');
+  return norm(i) === norm(answer);
+};
+
+// ─── Reusable label/kicker bits ──────────────────────────────────────────
+const Kicker = ({ children, color, style }) => (
+  <div style={{
+    fontFamily: T.mono, fontSize: 10, letterSpacing: '0.2em',
+    textTransform: 'uppercase', color: color || T.muted, ...style,
+  }}>{children}</div>
+);
+
+const Rule = ({ thick, color, style }) => (
+  <div style={{ height: 0, borderTop: `${thick ? 2 : 1}px solid ${color || T.ink}`, ...style }} />
+);
+
+// ─── Top navigation ──────────────────────────────────────────────────────
+function TopNav({ route, setRoute, streak }) {
+  const tabs = [
+    { id: 'home', label: 'Today' },
+    { id: 'drills', label: 'Drills' },
+    { id: 'tutor', label: 'Tutor' },
+    { id: 'library', label: 'Library' },
+    { id: 'profile', label: 'Stats' },
+  ];
+  return (
+    <header style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '18px 36px', borderBottom: `1px solid ${T.hair}`,
+      background: T.paper, position: 'sticky', top: 0, zIndex: 20,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 36 }}>
+        <a onClick={() => setRoute({ name: 'home' })} style={{
+          fontFamily: T.serif, fontSize: 26, letterSpacing: '-0.02em', lineHeight: 1,
+        }}>MathIQ</a>
+        <nav style={{ display: 'flex', gap: 24 }}>
+          {tabs.map(t => (
+            <a key={t.id} onClick={() => setRoute({ name: t.id })} style={{
+              fontSize: 14, fontWeight: 500, padding: '6px 0',
+              borderBottom: route.name === t.id ? `2px solid ${T.ink}` : '2px solid transparent',
+              color: route.name === t.id ? T.ink : T.muted,
+              transition: 'color 120ms',
+            }}>{t.label}</a>
+          ))}
+        </nav>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <span style={{
+          fontFamily: T.mono, fontSize: 11, letterSpacing: '0.15em',
+          padding: '6px 12px', background: T.ink, color: T.paper,
+        }}>STREAK · {String(streak).padStart(3, '0')}</span>
+        <div style={{
+          width: 32, height: 32, borderRadius: 16, background: T.accent,
+          display: 'grid', placeItems: 'center', color: T.ink, fontWeight: 700, fontSize: 13,
+        }}>K</div>
+      </div>
+    </header>
+  );
+}
+
+// ─── HOME / DASHBOARD ─────────────────────────────────────────────────────
+function Dashboard({ setRoute, stats }) {
+  const continues = [
+    { t: 'Squaring 2-digit numbers', s: 'Algebra · 12 / 30 problems', p: 0.4, mode: 'pulse', domain: 'algebra' },
+    { t: 'Mental derivatives of polynomials', s: 'Calculus · 4 / 12 problems', p: 0.33, mode: 'layers', domain: 'calculus' },
+    { t: 'Fraction → decimal flash', s: 'Arithmetic · 28 / 30 problems', p: 0.93, mode: 'stream', domain: 'arithmetic' },
+    { t: 'Modular arithmetic', s: 'Discrete · 7 / 20 problems', p: 0.35, mode: 'pulse', domain: 'discrete' },
+  ];
+  return (
+    <main style={{ padding: '40px 36px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 320px', gap: 36, maxWidth: 1440, margin: '0 auto' }}>
+      <div>
+        <Kicker style={{ marginBottom: 8 }}>WEDNESDAY · GOAL {stats.solvedToday} / 50</Kicker>
+        <h1 style={{
+          fontFamily: T.serif, fontSize: 'clamp(40px, 5vw, 64px)', lineHeight: 0.96,
+          letterSpacing: '-0.03em', fontWeight: 400, margin: '0 0 32px', maxWidth: 740,
+        }}>
+          Good evening. <span style={{ opacity: 0.45 }}>Your warm-up is ready —<br/>4 minutes, mostly in your head.</span>
+        </h1>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', gap: 12, marginBottom: 40 }}>
+          <button onClick={() => setRoute({ name: 'drill', mode: 'pulse', domain: 'mixed' })} style={{
+            background: T.ink, color: T.paper, padding: 28, position: 'relative',
+            overflow: 'hidden', minHeight: 220, border: 'none', textAlign: 'left',
+            cursor: 'pointer', display: 'block', borderRadius: 0,
+          }}>
+            <Kicker color="rgba(244,239,230,0.6)">RECOMMENDED · PULSE</Kicker>
+            <div style={{ fontSize: 34, fontFamily: T.serif, marginTop: 8, lineHeight: 1.05 }}>
+              Mental multiplication, 2-digit × 1
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.7, marginTop: 12, maxWidth: 320 }}>
+              You've gotten 6 in a row right at this size. Time to push to ×2.
+            </div>
+            <span style={{
+              position: 'absolute', bottom: 24, left: 28, background: T.accent, color: T.ink,
+              padding: '10px 18px', fontSize: 14, fontWeight: 500,
+            }}>Start drill →</span>
+            <div style={{ position: 'absolute', right: 24, bottom: 16, fontSize: 96, fontFamily: T.serif, opacity: 0.18, lineHeight: 1 }}>×</div>
+          </button>
+          <DashCard onClick={() => setRoute({ name: 'drill', mode: 'voice', domain: 'mixed' })}
+            title="Voice with Iris" sub="Voice · multi-step" big="◉" cta="Speak →" />
+          <DashCard onClick={() => setRoute({ name: 'drill', mode: 'arena', domain: 'arithmetic' })}
+            title="Today's puzzle" sub="Arena · medium" big="◆" cta="Open →" />
+        </div>
+
+        <Kicker style={{ marginBottom: 14 }}>CONTINUE</Kicker>
+        <div style={{ display: 'grid', gap: 0 }}>
+          {continues.map((r, i) => (
+            <button key={i} onClick={() => setRoute({ name: 'drill', mode: r.mode, domain: r.domain })} style={{
+              display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 24,
+              padding: '14px 16px',
+              background: 'transparent', border: 'none', borderTop: `1px solid ${T.hair}`, cursor: 'pointer',
+              textAlign: 'left', fontFamily: 'inherit', color: 'inherit',
+            }}>
+              <div>
+                <div style={{ fontSize: 16 }}>{r.t}</div>
+                <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>{r.s}</div>
+              </div>
+              <div style={{ width: 120, height: 4, background: T.hair, position: 'relative' }}>
+                <div style={{ position: 'absolute', inset: 0, width: `${r.p * 100}%`, background: T.ink }} />
+              </div>
+              <span style={{ fontFamily: T.mono, fontSize: 14, opacity: 0.6 }}>↗</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <aside>
+        <Kicker style={{ marginBottom: 14 }}>THIS WEEK</Kicker>
+        <div style={{ display: 'flex', gap: 4, marginBottom: 28, alignItems: 'flex-end', height: 80 }}>
+          {[0.3, 0.5, 0.7, 0.4, 0.85, 0.6, 0.95].map((h, i) => (
+            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: '100%', height: `${h * 100}%`, background: i === 6 ? T.accent : T.ink }} />
+              <span style={{ fontSize: 10, fontFamily: T.mono, opacity: 0.5 }}>{['M','T','W','T','F','S','S'][i]}</span>
+            </div>
+          ))}
+        </div>
+
+        <Kicker style={{ marginBottom: 14 }}>STRENGTHS / GAPS</Kicker>
+        {[
+          { l: 'Mental ×, ÷', v: 0.92 },
+          { l: 'Squares to 50', v: 0.85 },
+          { l: 'Trig identities', v: 0.61 },
+          { l: 'Limits', v: 0.42 },
+          { l: 'Probability', v: 0.38 },
+        ].map((r, i) => (
+          <div key={i} style={{ marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+              <span>{r.l}</span>
+              <span style={{ opacity: 0.5, fontFamily: T.mono }}>{Math.round(r.v * 100)}</span>
+            </div>
+            <div style={{ height: 3, background: T.hair, position: 'relative' }}>
+              <div style={{ position: 'absolute', inset: 0, width: `${r.v * 100}%`, background: r.v > 0.7 ? T.ink : T.accent }} />
+            </div>
+          </div>
+        ))}
+
+        <div style={{ marginTop: 28, padding: 18, background: T.ink, color: T.paper }}>
+          <Kicker color="rgba(244,239,230,0.6)">IRIS NOTICED</Kicker>
+          <div style={{ fontFamily: T.serif, fontSize: 18, marginTop: 6, lineHeight: 1.3 }}>
+            You hesitate on 7× table — want a 2-min focus drill?
+          </div>
+          <button onClick={() => setRoute({ name: 'drill', mode: 'pulse', domain: 'arithmetic' })} style={{
+            marginTop: 10, background: 'transparent', border: `1px solid rgba(244,239,230,0.4)`,
+            color: T.paper, padding: '6px 12px', fontSize: 12, cursor: 'pointer',
+          }}>Sure →</button>
+        </div>
+      </aside>
+    </main>
+  );
+}
+
+function DashCard({ title, sub, big, cta, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      background: T.paper, border: `1px solid ${T.hair}`, padding: 24, position: 'relative',
+      minHeight: 220, textAlign: 'left', cursor: 'pointer',
+      display: 'block', fontFamily: 'inherit', color: 'inherit', borderRadius: 0,
+    }}>
+      <Kicker>{sub.split('·')[0].trim().toUpperCase()}</Kicker>
+      <div style={{ fontSize: 22, fontFamily: T.serif, marginTop: 6, lineHeight: 1.15 }}>{title}</div>
+      <div style={{ fontSize: 12, opacity: 0.55, marginTop: 6 }}>{sub}</div>
+      <div style={{ position: 'absolute', right: 18, bottom: 14, fontSize: 56, fontFamily: T.serif, opacity: 0.5, lineHeight: 1 }}>{big}</div>
+      <span style={{ position: 'absolute', bottom: 18, left: 24, fontSize: 13, fontWeight: 500, borderBottom: `1px solid ${T.ink}` }}>{cta}</span>
+    </button>
+  );
+}
+
+// ─── DRILLS PICKER ────────────────────────────────────────────────────────
+function DrillPicker({ setRoute }) {
+  const modes = [
+    { id: 'pulse', name: 'Pulse', tag: '01', kicker: 'rhythmic timed drills', desc: 'Front-page editorial · beat tracker · single problem at a time on a metronome.' },
+    { id: 'stream', name: 'Stream', tag: '02', kicker: 'endless ledger feed', desc: 'Problems flow past you. Solve fast — combo for higher score. The Ledger.' },
+    { id: 'voice', name: 'Voice', tag: '03', kicker: 'hands-free with Iris', desc: 'Eyes off the screen. Iris reads, you answer aloud. Multi-step chains.' },
+    { id: 'layers', name: 'Layers', tag: '04', kicker: 'visual decomposition', desc: 'See the math. Break the problem into atoms — graph-paper diagrams.' },
+    { id: 'arena', name: 'Arena', tag: '05', kicker: 'head-to-head with AI', desc: 'Race the model. Best of 15. No paper. Your reflexes vs. its softmax.' },
+  ];
+  const domains = [
+    { id: 'mixed', l: 'Mixed', s: 'across all domains' },
+    { id: 'arithmetic', l: 'Arithmetic', s: 'sums, products, percent' },
+    { id: 'algebra', l: 'Algebra', s: 'powers, logs, linear' },
+    { id: 'trig', l: 'Trigonometry', s: 'unit circle' },
+    { id: 'calculus', l: 'Calculus', s: 'derivatives, integrals, limits' },
+    { id: 'discrete', l: 'Discrete', s: 'gcd, mod, factorial' },
+  ];
+  const [domain, setDomain] = useState('mixed');
+
+  return (
+    <main style={{ padding: '40px 36px', maxWidth: 1440, margin: '0 auto' }}>
+      <Kicker style={{ marginBottom: 8 }}>DRILLS · FIVE WAYS TO TRAIN</Kicker>
+      <h1 style={{
+        fontFamily: T.serif, fontSize: 'clamp(40px, 5vw, 64px)', lineHeight: 0.96,
+        letterSpacing: '-0.03em', fontWeight: 400, margin: '0 0 12px', maxWidth: 900,
+      }}>Pick your tempo.</h1>
+      <p style={{ fontSize: 16, opacity: 0.7, maxWidth: 620, marginBottom: 32 }}>
+        Each mode is a different take on the same loop — generate, solve, learn. Pick one and a domain. Switch any time.
+      </p>
+
+      <Kicker style={{ marginBottom: 10 }}>DOMAIN</Kicker>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 36 }}>
+        {domains.map(d => (
+          <button key={d.id} onClick={() => setDomain(d.id)} style={{
+            padding: '10px 16px',
+            border: `1px solid ${domain === d.id ? T.ink : T.hair}`,
+            background: domain === d.id ? T.ink : 'transparent',
+            color: domain === d.id ? T.paper : T.ink,
+            cursor: 'pointer', fontFamily: T.sans, fontSize: 13,
+          }}>
+            <div style={{ fontWeight: 600 }}>{d.l}</div>
+            <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{d.s}</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+        {modes.map(m => (
+          <button key={m.id} onClick={() => setRoute({ name: 'drill', mode: m.id, domain })} style={{
+            background: T.paper, border: `1px solid ${T.hair}`, padding: 24, minHeight: 200,
+            textAlign: 'left', cursor: 'pointer', position: 'relative',
+            fontFamily: 'inherit', color: 'inherit', borderRadius: 0,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 11, color: T.accent, letterSpacing: '0.15em' }}>{m.tag}</span>
+              <span style={{ fontFamily: T.serif, fontSize: 32, lineHeight: 1 }}>{m.name}</span>
+            </div>
+            <Kicker>{m.kicker.toUpperCase()}</Kicker>
+            <p style={{ fontSize: 13, opacity: 0.7, marginTop: 12, lineHeight: 1.5 }}>{m.desc}</p>
+            <span style={{
+              position: 'absolute', bottom: 18, left: 24, fontSize: 13,
+              fontWeight: 500, borderBottom: `1px solid ${T.ink}`,
+            }}>Start →</span>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+// ─── DRILL CHROME (back button + masthead) ───────────────────────────────
+function DrillBack({ onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      position: 'absolute', top: 14, left: 16, zIndex: 30,
+      background: 'rgba(244,239,230,0.85)', border: `1px solid ${T.hair}`,
+      padding: '6px 12px', fontFamily: T.mono, fontSize: 11,
+      letterSpacing: '0.15em', cursor: 'pointer', backdropFilter: 'blur(8px)',
+    }}>← BACK</button>
+  );
+}
+
+// ─── 01 PULSE ────────────────────────────────────────────────────────────
+function PulseDrill({ setRoute, domain, onComplete, drillTimer }) {
+  const [bpm, setBpm] = useState(72);
+  const [tick, setTick] = useState(0);
+  const [problem, setProblem] = useState(() => genProblem(domain));
+  const [answer, setAnswer] = useState('');
+  const [streak, setStreak] = useState(0);
+  const [solved, setSolved] = useState(0);
+  const [start] = useState(() => Date.now());
+  const [running, setRunning] = useState(true);
+  const [timeLeft, setTimeLeft] = useState(drillTimer || 60);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setTick(t => t + 1), 60000 / bpm);
+    return () => clearInterval(id);
+  }, [bpm, running]);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setTimeLeft(t => Math.max(0, t - 1)), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && running) {
+      setRunning(false);
+      onComplete?.({ solved, streak, mode: 'Pulse', durationSec: drillTimer || 60 });
+    }
+  }, [timeLeft]);
+
+  const submit = () => {
+    if (checkAnswer(answer, problem.a)) {
+      setStreak(s => s + 1);
+      setSolved(s => s + 1);
+    } else {
+      setStreak(0);
+    }
+    setAnswer('');
+    setProblem(genProblem(domain));
+    setTick(0);
+  };
+
+  const beat = tick % 4;
+  const HAIR = 'rgba(22,17,10,0.18)';
+  const SLAB = T.slab, SERIF = T.serif, SANS = T.sans, MONO = T.mono, INK = T.ink, PAPER = T.paper;
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', minHeight: 'calc(100vh - 60px)',
+      background: PAPER, color: INK, fontFamily: SANS,
+      display: 'grid', gridTemplateRows: 'auto auto 1fr auto', overflow: 'hidden',
+    }}>
+      <DrillBack onClick={() => setRoute({ name: 'drills' })} />
+
+      <div style={{
+        padding: '14px 32px 10px', display: 'grid',
+        gridTemplateColumns: '1fr auto 1fr', alignItems: 'baseline',
+        borderBottom: `2px solid ${INK}`,
+      }}>
+        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', paddingLeft: 80 }}>
+          Vol. III · No. 142 · Established 2024
+        </div>
+        <div style={{ fontFamily: SERIF, fontSize: 36, lineHeight: 1, letterSpacing: '-0.01em', textAlign: 'center' }}>
+          The MathIQ Daily
+        </div>
+        <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', textAlign: 'right' }}>
+          Wed · Apr 29 · {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}
+        </div>
+      </div>
+
+      <div style={{
+        padding: '6px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        borderBottom: `1px solid ${INK}`,
+        fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase',
+      }}>
+        <div style={{ display: 'flex', gap: 18 }}>
+          <span style={{ fontWeight: 700 }}>Pulse Edition</span>
+          <span style={{ opacity: 0.6 }}>{domain}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 18 }}>
+          <span>Solved · <b style={{ fontFamily: SLAB }}>{String(solved).padStart(3, '0')}</b></span>
+          <span>Streak · <b style={{ fontFamily: SLAB }}>{String(streak).padStart(2, '0')}</b></span>
+          <span>Time · <b style={{ fontFamily: SLAB, color: timeLeft < 10 ? T.accent : INK }}>{timeLeft}s</b></span>
+          <span style={{ color: T.accent }}>● live</span>
+        </div>
+      </div>
+
+      <main style={{
+        display: 'grid', gridTemplateColumns: '180px 1px minmax(0,1fr) 1px 220px',
+        gap: 24, padding: '24px 32px', position: 'relative', overflow: 'hidden',
+      }}>
+        <aside>
+          <Kicker style={{ marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${INK}` }}>Tempo Table</Kicker>
+          {[0, 1, 2, 3].map(i => (
+            <div key={i} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+              padding: '8px 0', borderBottom: `1px dotted ${HAIR}`,
+              opacity: beat === i ? 1 : 0.5,
+            }}>
+              <span style={{
+                fontFamily: SLAB, fontSize: 16, fontWeight: beat === i ? 700 : 400,
+                color: beat === i ? T.accent : INK,
+              }}>{['I', 'II', 'III', 'IV'][i]}</span>
+              <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                {['set', 'breathe', 'compute', 'answer'][i]}
+              </span>
+            </div>
+          ))}
+
+          <Kicker style={{ marginTop: 24, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${INK}` }}>Forecast</Kicker>
+          <div style={{ fontSize: 11, lineHeight: 1.45, opacity: 0.8 }}>
+            Mostly multiplication today, with brief showers of percent. Squares improving by sundown.
+          </div>
+
+          <div style={{ marginTop: 24, padding: 10, background: INK, color: PAPER }}>
+            <Kicker color="rgba(244,239,230,0.7)" style={{ letterSpacing: '0.18em' }}>YESTERDAY</Kicker>
+            <div style={{ fontFamily: SLAB, fontSize: 28, fontWeight: 600, lineHeight: 1, marginTop: 4 }}>48</div>
+            <div style={{ fontSize: 10, opacity: 0.7, marginTop: 2 }}>problems solved</div>
+          </div>
+        </aside>
+
+        <div style={{ background: INK, opacity: 0.9 }} />
+
+        <article style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <Kicker color={T.accent} style={{ letterSpacing: '0.25em', marginBottom: 8, fontWeight: 600 }}>
+            ◆ The Lead · solve in your head ◆
+          </Kicker>
+          <h1 style={{
+            fontFamily: SERIF, fontSize: 30, lineHeight: 1.05, letterSpacing: '-0.01em',
+            fontWeight: 400, margin: 0, textAlign: 'center', fontStyle: 'italic',
+          }}>
+            "{problem.kicker}"
+          </h1>
+
+          <div style={{ display: 'grid', placeItems: 'center', flex: 1, position: 'relative', minHeight: 220 }}>
+            <div style={{
+              position: 'absolute', width: 360, height: 360,
+              border: `1px solid ${T.accent}`, borderRadius: '50%',
+              opacity: beat === 0 ? 0.18 : 0,
+              transform: `scale(${beat === 0 ? 1 : 0.6})`,
+              transition: 'opacity 600ms, transform 600ms cubic-bezier(0.2, 0.7, 0.3, 1)',
+              pointerEvents: 'none',
+            }} />
+            <div className="fade-in" key={problem.q} style={{
+              fontFamily: SLAB, fontSize: 'clamp(72px, 14vw, 168px)', lineHeight: 0.92,
+              letterSpacing: '-0.04em', fontWeight: 600,
+              whiteSpace: 'nowrap', position: 'relative',
+            }}>
+              {problem.q}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+            <div style={{ display: 'flex', border: `1.5px solid ${INK}`, background: '#fff' }}>
+              <input
+                ref={inputRef}
+                value={answer}
+                onChange={e => setAnswer(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                placeholder="your answer"
+                style={{
+                  border: 'none', outline: 'none', background: 'transparent',
+                  padding: '12px 18px', fontSize: 22, width: 220,
+                  fontFamily: SLAB, fontWeight: 500, textAlign: 'center',
+                }}
+              />
+              <button onClick={submit} style={{
+                border: 'none', borderLeft: `1.5px solid ${INK}`,
+                background: INK, color: PAPER,
+                padding: '0 22px', cursor: 'pointer',
+                fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em',
+              }}>SUBMIT ↵</button>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex', justifyContent: 'center', gap: 14,
+            fontFamily: MONO, fontSize: 9, letterSpacing: '0.15em',
+            textTransform: 'uppercase', opacity: 0.55, marginTop: 4,
+          }}>
+            <span>filed by · iris</span>
+            <span>·</span>
+            <span>topic · {problem.kicker}</span>
+            <span>·</span>
+            <span>est. 3.0s</span>
+          </div>
+        </article>
+
+        <div style={{ background: INK, opacity: 0.9 }} />
+
+        <aside>
+          <Kicker style={{ marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${INK}` }}>Today's Records</Kicker>
+          {[
+            ['Avg time', '3.2s', '↓ 0.4s vs Mon'],
+            ['Accuracy', `${solved > 0 ? Math.round((streak / Math.max(solved, 1)) * 100) : 0}%`, 'session'],
+            ['Solved', solved, 'session'],
+            ['Best run', streak, 'session'],
+          ].map(([l, v, sub], i) => (
+            <div key={i} style={{ padding: '10px 0', borderBottom: `1px dotted ${HAIR}` }}>
+              <Kicker style={{ letterSpacing: '0.12em' }}>{l}</Kicker>
+              <div style={{ fontFamily: SLAB, fontSize: 32, lineHeight: 1, fontWeight: 600, letterSpacing: '-0.02em', marginTop: 2 }}>{v}</div>
+              <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>{sub}</div>
+            </div>
+          ))}
+
+          <div style={{ marginTop: 16 }}>
+            <Kicker style={{ marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${INK}` }}>Op-Iris</Kicker>
+            <div style={{ fontFamily: SERIF, fontSize: 14, fontStyle: 'italic', lineHeight: 1.4, opacity: 0.85 }}>
+              "Numbers are people in disguise. <span style={{ background: `${T.accent}30`, padding: '1px 4px' }}>Get to know forty-seven</span> and eight will follow you home."
+            </div>
+            <Kicker style={{ marginTop: 6, letterSpacing: '0.12em' }}>— iris, ai tutor</Kicker>
+          </div>
+        </aside>
+      </main>
+
+      <footer style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '8px 32px', borderTop: `2px solid ${INK}`,
+        fontFamily: MONO, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase',
+      }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ opacity: 0.55, marginRight: 8 }}>Tempo</span>
+          {[60, 72, 96, 120].map(v => (
+            <button key={v} onClick={() => setBpm(v)} style={{
+              padding: '4px 10px', border: `1px solid ${INK}`,
+              background: bpm === v ? INK : 'transparent',
+              color: bpm === v ? PAPER : INK,
+              fontFamily: SLAB, fontSize: 11, letterSpacing: '0.04em',
+              cursor: 'pointer',
+            }}>{v}</button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 18, opacity: 0.55 }}>
+          <span>Enter · submit</span>
+          <span>Esc · exit</span>
+        </div>
+        <div style={{ opacity: 0.55 }}>"All the math that fits in your head."</div>
+      </footer>
+    </div>
+  );
+}
+
+// ─── 02 STREAM ───────────────────────────────────────────────────────────
+function StreamDrill({ setRoute, domain, onComplete }) {
+  const [score, setScore] = useState(0);
+  const [combo, setCombo] = useState(0);
+  const [solved, setSolved] = useState(0);
+  const [problems, setProblems] = useState(() =>
+    Array.from({ length: 7 }, (_, i) => ({ ...genProblem(domain), id: i, age: i }))
+  );
+  const [input, setInput] = useState('');
+  const inputRef = useRef(null);
+  const [timeLeft, setTimeLeft] = useState(120);
+  const [running, setRunning] = useState(true);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setProblems(prev => {
+        const next = prev.map(p => ({ ...p, age: p.age + 1 }));
+        if (next.length > 0 && next[0].age > 18) next.shift();
+        next.push({ ...genProblem(domain), id: Date.now() + Math.random(), age: 0 });
+        return next.slice(-9);
+      });
+    }, 2200);
+    return () => clearInterval(id);
+  }, [running, domain]);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setTimeLeft(t => Math.max(0, t - 1)), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  useEffect(() => {
+    if (timeLeft === 0 && running) {
+      setRunning(false);
+      onComplete?.({ solved, score, mode: 'Stream', durationSec: 120 });
+    }
+  }, [timeLeft]);
+
+  const submit = () => {
+    const target = problems[0];
+    if (!target) return;
+    if (checkAnswer(input, target.a)) {
+      setScore(s => s + 50 * Math.max(combo + 1, 1));
+      setCombo(c => c + 1);
+      setSolved(s => s + 1);
+    } else {
+      setCombo(0);
+    }
+    setInput('');
+    setProblems(prev => prev.slice(1));
+  };
+
+  const target = problems[0] || { q: '—', a: 0, topic: '—', age: 0 };
+  const HAIR = 'rgba(22,17,10,0.18)';
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', minHeight: 'calc(100vh - 60px)',
+      background: T.paper, color: T.ink, fontFamily: T.sans,
+      display: 'grid', gridTemplateRows: 'auto auto 1fr auto', overflow: 'hidden',
+    }}>
+      <DrillBack onClick={() => setRoute({ name: 'drills' })} />
+
+      <div style={{ padding: '14px 32px 8px', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'baseline', borderBottom: `2px solid ${T.ink}` }}>
+        <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', paddingLeft: 80 }}>Vol. III · No. 142 · Stream Edition</div>
+        <div style={{ fontFamily: T.serif, fontSize: 32, textAlign: 'center', lineHeight: 1 }}>The Ledger</div>
+        <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', textAlign: 'right' }}>Session · live</div>
+      </div>
+
+      <div style={{ padding: '6px 32px', display: 'flex', justifyContent: 'space-between', borderBottom: `1px solid ${T.ink}`, fontFamily: T.mono, fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+        <span><b>Score</b> · <span style={{ fontFamily: T.slab, fontWeight: 600 }}>{score.toLocaleString()}</span></span>
+        <span><b>Combo</b> · <span style={{ fontFamily: T.slab, fontWeight: 600, color: T.accent }}>×{combo}</span></span>
+        <span><b>Solved</b> · {solved}</span>
+        <span><b>Time</b> · <span style={{ color: timeLeft < 15 ? T.accent : T.ink }}>{timeLeft}s</span></span>
+      </div>
+
+      <main style={{ display: 'grid', gridTemplateColumns: '280px minmax(0,1fr) 280px', position: 'relative' }}>
+        <div style={{ borderRight: `1px solid ${T.ink}`, padding: '20px 24px', overflow: 'hidden' }}>
+          <Kicker style={{ marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.ink}` }}>Incoming ↓</Kicker>
+          {problems.slice(1, 7).map((p, i) => (
+            <div key={p.id} style={{ padding: '10px 0', borderBottom: `1px dotted ${HAIR}`, opacity: 1 - i * 0.13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: T.mono, fontSize: 9, letterSpacing: '0.12em', opacity: 0.6, textTransform: 'uppercase' }}>
+                <span>{p.topic}</span>
+                <span style={{ fontFamily: T.slab }}>+{Math.max(2, 20 - p.age * 1.5).toFixed(0)}pt</span>
+              </div>
+              <div style={{ fontFamily: T.slab, fontSize: 22, fontWeight: 500, marginTop: 2 }}>{p.q}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', placeItems: 'center', position: 'relative', padding: 32, minWidth: 0 }}>
+          <div style={{ textAlign: 'center', maxWidth: '100%' }}>
+            <Kicker style={{ letterSpacing: '0.25em', marginBottom: 14 }}>
+              [ {target.topic} · expires in {Math.max(0, 18 - target.age)}s ]
+            </Kicker>
+            <div style={{ fontFamily: T.serif, fontSize: 22, fontStyle: 'italic', opacity: 0.6, marginBottom: 16 }}>
+              "the bell rings every two seconds"
+            </div>
+            <div className="fade-in" key={target.id} style={{ fontFamily: T.slab, fontSize: 'clamp(72px, 12vw, 156px)', lineHeight: 0.95, letterSpacing: '-0.04em', fontWeight: 600 }}>
+              {target.q}
+            </div>
+            <div style={{ marginTop: 28, display: 'inline-flex', alignItems: 'center', border: `1.5px solid ${T.ink}`, background: '#fff' }}>
+              <span style={{ padding: '0 16px', color: T.accent, fontFamily: T.slab, fontSize: 22 }}>›</span>
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                placeholder="solve"
+                style={{ background: 'transparent', border: 'none', outline: 'none', fontFamily: T.slab, fontSize: 24, fontWeight: 500, padding: '12px 0', width: 200, textAlign: 'center', color: T.ink }}
+              />
+              <button onClick={submit} style={{ padding: '12px 16px', background: T.ink, color: T.paper, fontFamily: T.mono, fontWeight: 600, fontSize: 11, letterSpacing: '0.18em', border: 'none', cursor: 'pointer' }}>↵ FILE</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ borderLeft: `1px solid ${T.ink}`, padding: '20px 24px' }}>
+          <Kicker style={{ marginBottom: 10, paddingBottom: 6, borderBottom: `1px solid ${T.ink}` }}>Tallies by domain</Kicker>
+          {[
+            { l: 'Arithmetic', v: 94 }, { l: 'Algebra', v: 81 }, { l: 'Calculus', v: 62 },
+            { l: 'Trigonometry', v: 73 }, { l: 'Statistics', v: 55 }, { l: 'Discrete', v: 88 },
+          ].map(d => (
+            <div key={d.l} style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 3 }}>
+                <span>{d.l}</span>
+                <span style={{ fontFamily: T.slab, opacity: 0.7 }}>{d.v}</span>
+              </div>
+              <div style={{ height: 4, background: HAIR, position: 'relative' }}>
+                <div style={{ position: 'absolute', inset: 0, width: `${d.v}%`, background: T.ink }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      <footer style={{ padding: '8px 32px', borderTop: `2px solid ${T.ink}`, display: 'flex', justifyContent: 'space-between', fontFamily: T.mono, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', opacity: 0.7 }}>
+        <span>Enter · file · Esc · pause</span>
+        <span style={{ color: T.accent }}>● Recording {String(Math.floor((120 - timeLeft) / 60)).padStart(2, '0')}:{String((120 - timeLeft) % 60).padStart(2, '0')}</span>
+      </footer>
+    </div>
+  );
+}
+
+// ─── 03 VOICE ────────────────────────────────────────────────────────────
+function VoiceDrill({ setRoute, domain, onComplete }) {
+  const [phase, setPhase] = useState('listening');
+  const [tick, setTick] = useState(0);
+  const [transcript, setTranscript] = useState([
+    { who: 'AI', text: '372', kind: 'problem', tag: 'WARM-UP' },
+    { who: 'YOU', text: 'three hundred seventy-two', kind: 'echo' },
+    { who: 'AI', text: 'Now divide by twelve.', kind: 'problem' },
+    { who: 'YOU', text: 'thirty-one', kind: 'answer' },
+    { who: 'AI', text: 'Correct. Subtract seven.', kind: 'problem' },
+    { who: 'YOU', text: 'twenty-four', kind: 'answer' },
+    { who: 'AI', text: 'Now square it.', kind: 'problem' },
+  ]);
+  const [problem, setProblem] = useState(() => genProblem(domain));
+  const [input, setInput] = useState('');
+  const [solved, setSolved] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setTick(x => x + 1), 80);
+    const p = setInterval(() => setPhase(ph => ph === 'listening' ? 'thinking' : ph === 'thinking' ? 'speaking' : 'listening'), 2400);
+    const e = setInterval(() => setElapsed(x => x + 1), 1000);
+    return () => { clearInterval(t); clearInterval(p); clearInterval(e); };
+  }, []);
+
+  const submit = () => {
+    if (checkAnswer(input, problem.a)) {
+      setTranscript(t => [...t, { who: 'YOU', text: input, kind: 'answer' }, { who: 'AI', text: 'Correct. Next: ' + problem.q, kind: 'problem' }].slice(-8));
+      setSolved(s => s + 1);
+    } else {
+      setTranscript(t => [...t, { who: 'YOU', text: input, kind: 'wrong' }, { who: 'AI', text: `Not quite — answer was ${problem.a}.`, kind: 'problem' }].slice(-8));
+    }
+    setProblem(genProblem(domain));
+    setInput('');
+  };
+
+  const accent = '#7c9c7e';
+  const bg = '#eef0e8';
+  const bars = Array.from({ length: 64 }, (_, i) => {
+    const offset = i * 0.4;
+    const base = phase === 'speaking' ? 0.5 : phase === 'listening' ? 0.3 : 0.15;
+    const amp = phase === 'thinking' ? 0.05 : 0.45;
+    return base + Math.abs(Math.sin(tick * 0.15 + offset)) * amp;
+  });
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', minHeight: 'calc(100vh - 60px)',
+      background: bg, color: '#1f2a1f',
+      fontFamily: T.sans, display: 'grid', gridTemplateRows: 'auto 1fr auto',
+    }}>
+      <DrillBack onClick={() => setRoute({ name: 'drills' })} />
+
+      <header style={{ padding: '24px 36px 24px 80px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 8, height: 8, borderRadius: 4, background: accent,
+            boxShadow: `0 0 0 ${4 + Math.sin(tick * 0.15) * 4}px ${accent}30`,
+          }} />
+          <span style={{ fontSize: 14, fontWeight: 500, letterSpacing: '-0.01em' }}>MathIQ Voice</span>
+          <span style={{ fontSize: 13, opacity: 0.5 }}>· session in progress</span>
+        </div>
+        <div style={{ display: 'flex', gap: 28, fontSize: 12, opacity: 0.7 }}>
+          <span>{String(Math.floor(elapsed / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')} elapsed</span>
+          <span>{solved} solved</span>
+          <span>tutor: <b style={{ fontWeight: 600 }}>Iris</b></span>
+        </div>
+      </header>
+
+      <main style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 380px', gap: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40, padding: 40 }}>
+          <div style={{ textAlign: 'center', maxWidth: 560 }}>
+            <Kicker style={{ marginBottom: 18 }}>
+              {phase === 'listening' ? 'Iris is listening…' : phase === 'thinking' ? 'thinking' : 'Iris is speaking'}
+            </Kicker>
+            <div style={{ fontSize: 'clamp(36px, 5vw, 56px)', lineHeight: 1.1, letterSpacing: '-0.03em', fontFamily: T.serif }}>
+              <span style={{ opacity: 0.4 }}>"</span>{problem.q}<span style={{ opacity: 0.4 }}>"</span>
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.5, marginTop: 12 }}>{problem.kicker}</div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center', height: 100 }}>
+            {bars.map((h, i) => (
+              <div key={i} style={{ width: 4, height: `${h * 100}%`, background: accent, borderRadius: 2, opacity: 0.4 + h * 0.6, transition: 'height 80ms linear' }} />
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', border: `2px solid #1f2a1f30`, borderRadius: 28, background: '#fff' }}>
+              <input ref={inputRef}
+                value={input} onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+                placeholder="say or type your answer"
+                style={{ background: 'transparent', border: 'none', outline: 'none', fontSize: 16, padding: '14px 22px', width: 240, fontFamily: T.sans }}
+              />
+              <button onClick={submit} style={{ padding: '0 22px', borderRadius: '0 26px 26px 0', border: 'none', background: '#1f2a1f', color: bg, fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>Send ↵</button>
+            </div>
+            <button onClick={() => onComplete?.({ solved, mode: 'Voice', durationSec: elapsed })} style={{ padding: '14px 22px', borderRadius: 28, border: 'none', background: '#1f2a1f', color: bg, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ width: 8, height: 8, borderRadius: 4, background: '#ff5b5b' }} />
+              End session
+            </button>
+            <button style={{ padding: '14px 18px', borderRadius: 28, border: '1px solid #1f2a1f30', background: 'transparent', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>Hint</button>
+          </div>
+        </div>
+
+        <aside style={{ background: '#fff', padding: '28px', display: 'flex', flexDirection: 'column', borderLeft: '1px solid #00000010' }}>
+          <Kicker style={{ marginBottom: 18 }}>Transcript · live</Kicker>
+          <div className="no-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
+            {transcript.map((t, i) => (
+              <div key={i} style={{ opacity: i < transcript.length - 4 ? 0.4 : 1 }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.6, marginBottom: 4, color: t.who === 'AI' ? accent : '#1f2a1f', fontFamily: T.mono }}>
+                  {t.who} {t.tag && <span style={{ marginLeft: 8, opacity: 0.6 }}>· {t.tag}</span>}
+                </div>
+                <div style={{ fontSize: t.kind === 'problem' && t.who === 'AI' ? 22 : 16, fontFamily: t.kind === 'problem' ? T.serif : T.sans, letterSpacing: '-0.01em', lineHeight: 1.35, color: t.kind === 'wrong' ? '#b04a3a' : 'inherit' }}>
+                  {t.text}
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 3, background: '#1f2a1f', animation: 'pulse 1s infinite' }} />
+              <span style={{ fontSize: 13, opacity: 0.5 }}>thinking…</span>
+            </div>
+          </div>
+        </aside>
+      </main>
+
+      <footer style={{ padding: '14px 36px', borderTop: '1px solid #00000010', display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.55 }}>
+        <span>Hold SPACE to mute · Enter to send · Esc to pause</span>
+        <span>Mental math · Multi-step · Adaptive</span>
+      </footer>
+    </div>
+  );
+}
+
+// ─── 04 LAYERS ───────────────────────────────────────────────────────────
+function LayersDrill({ setRoute }) {
+  const [step, setStep] = useState(0);
+  const accent = '#1d4ed8';
+  const bg = '#fafaf3';
+  const steps = [
+    { l: '47 × 8', expand: 'Break 47 into 40 + 7' },
+    { l: '40 × 8', expand: '40 × 8 = 320' },
+    { l: '7 × 8', expand: '7 × 8 = 56' },
+    { l: '320 + 56', expand: 'Sum: 376' },
+  ];
+  const next = () => step < 3 ? setStep(step + 1) : setRoute({ name: 'drills' });
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', minHeight: 'calc(100vh - 60px)',
+      background: bg, color: '#0a0a0a', fontFamily: T.sans,
+      display: 'grid', gridTemplateRows: 'auto 1fr auto',
+      backgroundImage: `linear-gradient(${accent}08 1px, transparent 1px), linear-gradient(90deg, ${accent}08 1px, transparent 1px)`,
+      backgroundSize: '32px 32px',
+    }}>
+      <DrillBack onClick={() => setRoute({ name: 'drills' })} />
+
+      <header style={{ padding: '20px 40px 20px 100px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${accent}20` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>MathIQ</span>
+          <span style={{ fontSize: 12, opacity: 0.5 }}>/ Layers / Multiplication / Two-digit × One</span>
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {steps.map((_, i) => (
+            <div key={i} style={{ width: 28, height: 4, borderRadius: 2, background: i <= step ? accent : `${accent}25`, transition: 'background 200ms' }} />
+          ))}
+        </div>
+      </header>
+
+      <main style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 360px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, position: 'relative' }}>
+          <Kicker style={{ marginBottom: 12 }}>Step {step + 1} of {steps.length}</Kicker>
+
+          <div className="fade-in" key={step} style={{ fontSize: 'clamp(64px, 8vw, 96px)', lineHeight: 1, letterSpacing: '-0.04em', fontWeight: 500, marginBottom: 8, fontFamily: T.slab }}>
+            {step === 0 && (<><Underline>47</Underline> × 8</>)}
+            {step === 1 && (<><span style={{ color: accent }}>40</span> × 8 = <span style={{ color: accent }}>320</span></>)}
+            {step === 2 && (<><span style={{ color: accent }}>7</span> × 8 = <span style={{ color: accent }}>56</span></>)}
+            {step === 3 && (<>320 + 56 = <span style={{ color: accent }}>376</span></>)}
+          </div>
+
+          <div style={{ fontSize: 18, opacity: 0.7, marginBottom: 36 }}>{steps[step].expand}</div>
+
+          <div style={{ width: 440, height: 200, position: 'relative', border: `1.5px solid ${accent}`, background: '#fff', display: 'flex', flexDirection: 'column', maxWidth: '100%' }}>
+            <div style={{ display: 'flex', height: 36, borderBottom: `1px solid ${accent}40` }}>
+              <div style={{ flex: 40, display: 'grid', placeItems: 'center', fontSize: 14, fontFamily: T.mono, background: step >= 1 ? `${accent}15` : 'transparent', transition: 'background 300ms' }}>40</div>
+              <div style={{ flex: 7, display: 'grid', placeItems: 'center', borderLeft: `1px dashed ${accent}60`, fontSize: 14, fontFamily: T.mono, background: step >= 2 ? `${accent}15` : 'transparent', transition: 'background 300ms' }}>7</div>
+            </div>
+            <div style={{ flex: 1, display: 'flex', position: 'relative' }}>
+              <div style={{ flex: 40, position: 'relative', background: step >= 1 ? `${accent}10` : 'transparent', transition: 'background 300ms' }}>
+                {step >= 1 && (
+                  <div className="fade-in" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 36, fontWeight: 600, color: accent }}>320</div>
+                )}
+              </div>
+              <div style={{ flex: 7, position: 'relative', borderLeft: `1px dashed ${accent}60`, background: step >= 2 ? `${accent}10` : 'transparent', transition: 'background 300ms' }}>
+                {step >= 2 && (
+                  <div className="fade-in" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 22, fontWeight: 600, color: accent }}>56</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 32, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button onClick={() => setStep(s => Math.max(0, s - 1))} style={ghostBtn(accent)}>← Back</button>
+            <button onClick={next} style={primaryBtn(accent)}>{step === 3 ? 'Got it ↵' : 'Next step →'}</button>
+            <button onClick={() => setStep(3)} style={{ ...ghostBtn(accent), marginLeft: 12 }}>I knew this</button>
+          </div>
+        </div>
+
+        <aside style={{ borderLeft: `1px solid ${accent}20`, padding: '32px', background: '#ffffff80' }}>
+          <Kicker style={{ marginBottom: 20 }}>Decomposition</Kicker>
+          {steps.map((s, i) => (
+            <div key={i} onClick={() => setStep(i)} style={{
+              padding: '14px 16px', marginBottom: 6, cursor: 'pointer',
+              border: `1px solid ${i === step ? accent : 'transparent'}`,
+              background: i === step ? `${accent}08` : (i < step ? '#0000000a' : 'transparent'),
+              transition: 'all 150ms',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <span style={{ fontSize: 11, fontFamily: T.mono, opacity: 0.5 }}>L{i + 1}</span>
+                {i < step && <span style={{ fontSize: 11, color: accent }}>✓</span>}
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 500, marginTop: 4, opacity: i <= step ? 1 : 0.4, fontFamily: T.slab }}>{s.l}</div>
+              <div style={{ fontSize: 12, opacity: 0.55, marginTop: 2 }}>{s.expand}</div>
+            </div>
+          ))}
+          <div style={{ marginTop: 24, padding: 14, background: `${accent}08`, borderLeft: `2px solid ${accent}`, fontSize: 13, lineHeight: 1.5 }}>
+            <b style={{ fontFamily: T.mono, fontSize: 11, letterSpacing: '0.1em' }}>MENTAL TIP</b>
+            <div style={{ marginTop: 6, opacity: 0.8 }}>When multiplying by 8, double three times: 47 → 94 → 188 → 376.</div>
+          </div>
+        </aside>
+      </main>
+
+      <footer style={{ padding: '14px 40px', borderTop: `1px solid ${accent}20`, display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.55, fontFamily: T.mono }}>
+        <span>↑↓ navigate decomposition · ↵ next · ⌘K change problem</span>
+        <span>Algebra II · 2 weeks ahead of plan</span>
+      </footer>
+    </div>
+  );
+}
+const Underline = ({ children }) => <span style={{ borderBottom: '2px solid currentColor', paddingBottom: 2 }}>{children}</span>;
+const primaryBtn = (a) => ({ padding: '10px 18px', border: 'none', background: a, color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer' });
+const ghostBtn = (a) => ({ padding: '10px 16px', border: `1px solid ${a}40`, background: 'transparent', color: '#0a0a0a', fontSize: 13, fontWeight: 500, cursor: 'pointer' });
+
+// ─── 05 ARENA ────────────────────────────────────────────────────────────
+function ArenaDrill({ setRoute, domain, onComplete }) {
+  const [you, setYou] = useState({ score: 0 });
+  const [ai, setAi] = useState({ score: 0 });
+  const [round, setRound] = useState(1);
+  const TOTAL_ROUNDS = 15;
+  const [problem, setProblem] = useState(() => genProblem(domain));
+  const [input, setInput] = useState('');
+  const [yourBar, setYourBar] = useState(0);
+  const [aiBar, setAiBar] = useState(0);
+  const [done, setDone] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    if (done) return;
+    setYourBar(0); setAiBar(0);
+    const speed = 0.012 + Math.random() * 0.018;
+    const id = setInterval(() => setAiBar(b => {
+      const nb = b + speed;
+      if (nb >= 1) {
+        clearInterval(id);
+        // AI scores
+        setAi(a => ({ score: a.score + 1 }));
+        nextRound(false);
+        return 1;
+      }
+      return nb;
+    }), 100);
+    return () => clearInterval(id);
+  }, [round, done]);
+
+  const nextRound = (youScored) => {
+    if (round >= TOTAL_ROUNDS) {
+      setDone(true);
+      onComplete?.({ youScore: you.score + (youScored ? 1 : 0), aiScore: ai.score + (youScored ? 0 : 1), mode: 'Arena' });
+      return;
+    }
+    setRound(r => r + 1);
+    setProblem(genProblem(domain));
+    setInput('');
+  };
+
+  const submit = () => {
+    if (checkAnswer(input, problem.a)) {
+      setYou(y => ({ score: y.score + 1 }));
+      setYourBar(1);
+      setTimeout(() => nextRound(true), 200);
+    } else {
+      setInput('');
+    }
+  };
+
+  const youColor = '#ff2d92', aiColor = '#00d4ff';
+
+  return (
+    <div style={{
+      position: 'relative', width: '100%', minHeight: 'calc(100vh - 60px)',
+      background: '#08070d', color: '#fff', fontFamily: T.sans,
+      display: 'grid', gridTemplateRows: 'auto auto 1fr auto', overflow: 'hidden',
+    }}>
+      <DrillBack onClick={() => setRoute({ name: 'drills' })} />
+
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: `radial-gradient(circle at 25% 50%, ${youColor}25, transparent 50%), radial-gradient(circle at 75% 50%, ${aiColor}25, transparent 50%)`,
+      }} />
+
+      <header style={{ padding: '20px 32px 20px 80px', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 32, position: 'relative', borderBottom: '1px solid #ffffff10' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 26, background: `linear-gradient(135deg, ${youColor}, ${youColor}80)`, display: 'grid', placeItems: 'center', fontSize: 22, fontWeight: 700, boxShadow: `0 0 32px ${youColor}80` }}>K</div>
+          <div>
+            <div style={{ fontSize: 11, opacity: 0.6, letterSpacing: '0.15em', textTransform: 'uppercase' }}>YOU · ELO 1840</div>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>karina</div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 11, letterSpacing: '0.25em', opacity: 0.5, fontFamily: T.mono }}>ROUND</div>
+          <div style={{ fontSize: 32, fontWeight: 700, letterSpacing: '-0.02em', lineHeight: 1, fontFamily: T.slab }}>{String(round).padStart(2, '0')}<span style={{ opacity: 0.4 }}>/{TOTAL_ROUNDS}</span></div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, justifyContent: 'flex-end' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, opacity: 0.6, letterSpacing: '0.15em', textTransform: 'uppercase' }}>OPP · ELO 2050</div>
+            <div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>HAIKU.7</div>
+          </div>
+          <div style={{ width: 52, height: 52, borderRadius: 26, background: `linear-gradient(135deg, ${aiColor}, ${aiColor}80)`, display: 'grid', placeItems: 'center', fontSize: 22, fontWeight: 700, color: '#08070d', boxShadow: `0 0 32px ${aiColor}80` }}>◐</div>
+        </div>
+      </header>
+
+      <div style={{ padding: '24px 32px 0', position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center', gap: 32 }}>
+        <div style={{ fontSize: 'clamp(56px, 8vw, 92px)', fontWeight: 700, letterSpacing: '-0.04em', color: youColor, textShadow: `0 0 40px ${youColor}60`, lineHeight: 1, fontFamily: T.slab }}>{String(you.score).padStart(2, '0')}</div>
+        <div style={{ fontSize: 24, opacity: 0.4, fontWeight: 300 }}>vs</div>
+        <div style={{ fontSize: 'clamp(56px, 8vw, 92px)', fontWeight: 700, letterSpacing: '-0.04em', color: aiColor, textShadow: `0 0 40px ${aiColor}60`, lineHeight: 1, textAlign: 'right', fontFamily: T.slab }}>{String(ai.score).padStart(2, '0')}</div>
+      </div>
+
+      <main style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <Kicker style={{ letterSpacing: '0.3em', marginBottom: 16, color: 'rgba(255,255,255,0.5)' }}>SOLVE FIRST · 2 PT</Kicker>
+        <div className="fade-in" key={round} style={{
+          fontSize: 'clamp(96px, 14vw, 192px)', lineHeight: 0.95, letterSpacing: '-0.04em',
+          fontWeight: 600, fontFamily: T.slab,
+          background: `linear-gradient(180deg, #fff, #ffffff80)`,
+          WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text', marginBottom: 28, textAlign: 'center',
+        }}>{problem.q}</div>
+
+        <div style={{ width: '100%', maxWidth: 720, display: 'grid', gap: 14, marginBottom: 28 }}>
+          <Lane color={youColor} label="YOU" v={yourBar} />
+          <Lane color={aiColor} label="AI" v={aiBar} />
+        </div>
+
+        <div style={{ display: 'flex', border: `2px solid ${youColor}`, background: `${youColor}10`, boxShadow: `0 0 32px ${youColor}40` }}>
+          <input
+            ref={inputRef}
+            value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+            placeholder={done ? 'match over' : 'lock in answer'}
+            disabled={done}
+            style={{ background: 'transparent', border: 'none', outline: 'none', color: '#fff', fontFamily: T.sans, fontSize: 28, padding: '14px 24px', width: 320, textAlign: 'center' }}
+          />
+          <button onClick={submit} disabled={done} style={{ border: 'none', background: youColor, color: '#08070d', padding: '0 28px', fontSize: 13, fontWeight: 700, letterSpacing: '0.15em', cursor: done ? 'default' : 'pointer' }}>
+            {done ? 'END' : 'FIRE ↵'}
+          </button>
+        </div>
+      </main>
+
+      <footer style={{ padding: '14px 32px', borderTop: '1px solid #ffffff10', display: 'flex', justifyContent: 'space-between', fontSize: 11, opacity: 0.5, fontFamily: T.mono, letterSpacing: '0.15em' }}>
+        <span>BEST OF {TOTAL_ROUNDS} · MENTAL ONLY · NO CALC</span>
+        <span>↵ SUBMIT · ESC EXIT</span>
+        <span style={{ color: youColor }}>● {done ? (you.score > ai.score ? 'YOU WIN' : you.score < ai.score ? 'AI WINS' : 'TIE') : 'LIVE'}</span>
+      </footer>
+    </div>
+  );
+}
+function Lane({ color, label, v }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+      <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.15em', color, width: 30, fontFamily: T.mono }}>{label}</span>
+      <div style={{ flex: 1, height: 8, background: '#ffffff10', position: 'relative', borderRadius: 4, overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${v * 100}%`, background: color, boxShadow: `0 0 12px ${color}`, transition: 'width 100ms linear' }} />
+      </div>
+    </div>
+  );
+}
+
+// ─── TUTOR ────────────────────────────────────────────────────────────────
+function Tutor() {
+  const [thread, setThread] = useState([
+    { who: 'iris', text: "Sure! Before we start: do you remember what an indeterminate form looks like, or should we sketch that first?" },
+    { who: 'you', text: 'Sketch it' },
+    { who: 'iris', node: (
+      <>
+        <div>Easy. Take this limit:</div>
+        <div style={{ fontFamily: T.serif, fontSize: 36, margin: '14px 0', lineHeight: 1, letterSpacing: '-0.02em' }}>lim<sub style={{ fontSize: 14 }}>x→0</sub> sin(x) / x</div>
+        <div>Plug in 0 directly and you get <b>0/0</b> — useless. That's "indeterminate." L'Hôpital's rule is the cheat code: when you see 0/0 (or ∞/∞), differentiate top and bottom <i>separately</i>.</div>
+      </>
+    )},
+    { who: 'iris', node: (
+      <>
+        <div style={{ fontFamily: T.serif, fontSize: 28, margin: '0 0 10px', lineHeight: 1 }}>lim<sub style={{ fontSize: 12 }}>x→0</sub> cos(x) / 1 = 1</div>
+        <div>Quick check — try this one in your head: <b>lim<sub>x→0</sub> (e<sup>x</sup> − 1) / x</b></div>
+      </>
+    )},
+    { who: 'you', text: '1?' },
+    { who: 'iris', text: 'Right. Want to see why this fails for ∞ − ∞ and how we rescue it?' },
+  ]);
+  const [input, setInput] = useState('');
+  const send = () => {
+    if (!input.trim()) return;
+    setThread(t => [...t, { who: 'you', text: input }, { who: 'iris', text: 'Thinking through that — give me a moment to break it down.' }]);
+    setInput('');
+  };
+
+  return (
+    <main style={{ display: 'grid', gridTemplateColumns: '260px minmax(0,1fr) 320px', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+      <aside style={{ borderRight: `1px solid ${T.hair}`, padding: '28px 20px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontFamily: T.serif, fontSize: 22, marginBottom: 18 }}>Iris</div>
+        <button style={{ background: T.ink, color: T.paper, border: 'none', padding: '10px', fontSize: 13, marginBottom: 18, cursor: 'pointer', textAlign: 'left' }}>+ New session</button>
+        <Kicker style={{ marginTop: 10, marginBottom: 6 }}>TODAY</Kicker>
+        {["Walk me through L'Hôpital", 'Why does 7×8 trip me up?', 'Mental sqrt of 63'].map((c, i) => (
+          <div key={i} style={{ padding: '8px 10px', fontSize: 13, background: i === 0 ? T.ink : 'transparent', color: i === 0 ? T.paper : T.ink, cursor: 'pointer' }}>{c}</div>
+        ))}
+        <Kicker style={{ marginTop: 16, marginBottom: 6 }}>YESTERDAY</Kicker>
+        {['Quadratic formula derivation', 'Mental percent shortcuts', 'Sin/cos of common angles'].map((c, i) => (
+          <div key={i} style={{ padding: '8px 10px', fontSize: 13, opacity: 0.7, cursor: 'pointer' }}>{c}</div>
+        ))}
+      </aside>
+
+      <section style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minWidth: 0 }}>
+        <header style={{ padding: '20px 36px', borderBottom: `1px solid ${T.hair}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontFamily: T.serif, fontSize: 22 }}>Walk me through L'Hôpital</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>Calculus · Iris is in <b>encouraging</b> mode</div>
+          </div>
+          <div style={{ fontFamily: T.mono, fontSize: 11, opacity: 0.6 }}>{thread.length} turns</div>
+        </header>
+
+        <div className="no-scrollbar" style={{ overflowY: 'auto', padding: '28px 36px', display: 'flex', flexDirection: 'column', gap: 22 }}>
+          {thread.map((t, i) => <Bubble key={i} who={t.who} text={t.text}>{t.node}</Bubble>)}
+        </div>
+
+        <footer style={{ borderTop: `1px solid ${T.hair}`, padding: 20, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') send(); }}
+            placeholder="Ask Iris, or paste a problem…"
+            style={{ flex: 1, border: `1px solid ${T.hair}`, padding: '12px 16px', fontSize: 14, outline: 'none', background: T.paper }} />
+          <button style={{ width: 44, height: 44, border: `1px solid ${T.hair}`, background: 'transparent', cursor: 'pointer', fontSize: 18 }}>◉</button>
+          <button onClick={send} style={{ background: T.ink, color: T.paper, border: 'none', padding: '12px 20px', fontSize: 14, cursor: 'pointer' }}>Send ↵</button>
+        </footer>
+      </section>
+
+      <aside style={{ borderLeft: `1px solid ${T.hair}`, padding: '28px 24px', background: T.paper2 }}>
+        <Kicker style={{ marginBottom: 14 }}>WORKING PAD</Kicker>
+        <div style={{ fontFamily: T.serif, fontSize: 18, lineHeight: 1.6 }}>
+          <div>0/0 → diff top & bottom</div>
+          <div style={{ marginTop: 8, opacity: 0.7 }}>sin x → cos x</div>
+          <div style={{ opacity: 0.7 }}>x → 1</div>
+          <div style={{ marginTop: 8 }}>cos(0)/1 = <span style={{ color: T.accent }}>1</span></div>
+        </div>
+        <Kicker style={{ marginTop: 32, marginBottom: 12 }}>CONCEPTS TOUCHED</Kicker>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {['indeterminate forms', 'limits', 'derivatives', 'quotient rule'].map(c => (
+            <span key={c} style={{ padding: '4px 10px', border: `1px solid ${T.ink}40`, fontSize: 11, fontFamily: T.mono }}>{c}</span>
+          ))}
+        </div>
+        <Kicker style={{ marginTop: 32, marginBottom: 12 }}>QUICK ACTIONS</Kicker>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {['→ Drill 10 of these', '→ Add to lesson plan', '→ Save as flashcard'].map(c => (
+            <button key={c} style={{ textAlign: 'left', background: 'transparent', border: 'none', padding: '6px 0', fontSize: 13, cursor: 'pointer', borderBottom: `1px solid ${T.ink}20` }}>{c}</button>
+          ))}
+        </div>
+      </aside>
+    </main>
+  );
+}
+
+function Bubble({ who, text, children }) {
+  const isIris = who === 'iris';
+  return (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+      <div style={{ width: 32, height: 32, borderRadius: 16, flexShrink: 0, background: isIris ? T.accent : T.ink, color: isIris ? T.ink : T.paper, display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 600 }}>{isIris ? '◐' : 'K'}</div>
+      <div style={{ flex: 1, paddingTop: 4 }}>
+        <Kicker style={{ marginBottom: 6, letterSpacing: '0.15em' }}>{isIris ? 'IRIS' : 'YOU'}</Kicker>
+        <div style={{ fontSize: 15, lineHeight: 1.55, maxWidth: 600 }}>{children || text}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LIBRARY ──────────────────────────────────────────────────────────────
+function Library({ setRoute }) {
+  const tracks = [
+    { name: 'Mental arithmetic', items: 24, done: 18, tag: 'MENTAL', accent: T.accent, mode: 'pulse', domain: 'arithmetic' },
+    { name: 'Algebra fluency', items: 32, done: 11, tag: 'ALGEBRA', mode: 'stream', domain: 'algebra' },
+    { name: 'Geometry intuition', items: 18, done: 4, mode: 'layers', domain: 'algebra' },
+    { name: 'Trig flash', items: 22, done: 0, mode: 'pulse', domain: 'trig' },
+    { name: 'Calculus reflexes', items: 28, done: 7, tag: 'NEW', mode: 'stream', domain: 'calculus' },
+    { name: 'Probability tables', items: 16, done: 2, mode: 'pulse', domain: 'discrete' },
+    { name: 'Linear algebra primer', items: 14, done: 0, mode: 'layers', domain: 'algebra' },
+    { name: 'Number theory tricks', items: 12, done: 9, mode: 'pulse', domain: 'discrete' },
+  ];
+  const [filter, setFilter] = useState('All');
+  return (
+    <main style={{ padding: '40px 36px', maxWidth: 1440, margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 36, gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <Kicker>LIBRARY · 144 LESSONS · 8 TRACKS</Kicker>
+          <h1 style={{ fontFamily: T.serif, fontSize: 'clamp(40px, 5vw, 64px)', lineHeight: 0.96, letterSpacing: '-0.03em', fontWeight: 400, margin: '12px 0 0' }}>
+            Every shortcut, in your head.
+          </h1>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {['All', 'Mental', 'Adaptive', 'Saved'].map(f => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              padding: '8px 14px', border: `1px solid ${T.ink}`,
+              background: filter === f ? T.ink : 'transparent',
+              color: filter === f ? T.paper : T.ink,
+              fontSize: 12, fontFamily: T.mono, cursor: 'pointer',
+            }}>{f}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+        {tracks.map((t, i) => (
+          <button key={i} onClick={() => setRoute({ name: 'drill', mode: t.mode, domain: t.domain })} style={{
+            background: i === 0 ? T.ink : T.paper, color: i === 0 ? T.paper : T.ink,
+            border: i === 0 ? 'none' : `1px solid ${T.hair}`,
+            padding: 24, minHeight: 240, position: 'relative', cursor: 'pointer',
+            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+            textAlign: 'left', fontFamily: 'inherit', borderRadius: 0,
+          }}>
+            <div>
+              {t.tag && <div style={{ fontFamily: T.mono, fontSize: 10, letterSpacing: '0.2em', opacity: 0.7, color: t.accent }}>{t.tag}</div>}
+              <div style={{ fontFamily: T.serif, fontSize: 28, lineHeight: 1.05, marginTop: 8 }}>{t.name}</div>
+            </div>
+            <div>
+              <div style={{ height: 3, background: i === 0 ? '#ffffff20' : T.hair, position: 'relative', marginBottom: 8 }}>
+                <div style={{ position: 'absolute', inset: 0, width: `${(t.done / t.items) * 100}%`, background: i === 0 ? T.accent : T.ink }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, opacity: 0.7, fontFamily: T.mono }}>
+                <span>{t.done} / {t.items}</span>
+                <span>{Math.round((t.done / t.items) * 100)}%</span>
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+// ─── PROFILE ──────────────────────────────────────────────────────────────
+function Profile({ stats }) {
+  return (
+    <main style={{ padding: '40px 36px', display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 56, maxWidth: 1440, margin: '0 auto' }}>
+      <div>
+        <Kicker>MEMBER · 142 DAYS</Kicker>
+        <h1 style={{ fontFamily: T.serif, fontSize: 'clamp(56px, 7vw, 84px)', lineHeight: 0.92, letterSpacing: '-0.03em', fontWeight: 400, margin: '14px 0' }}>Karina<br/>Vélez</h1>
+        <div style={{ fontSize: 16, opacity: 0.7, maxWidth: 380, lineHeight: 1.4 }}>
+          Currently grinding mental calculus. Doing 4-step problems in <b>under 6 seconds</b> on average — top 4% globally.
+        </div>
+
+        <Kicker style={{ marginTop: 36, marginBottom: 14 }}>STREAK · {stats.streak} DAYS</Kicker>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(20, 1fr)', gap: 3, maxWidth: 380 }}>
+          {Array.from({ length: 100 }, (_, i) => {
+            const seed = (i * 37) % 100;
+            const v = seed > 35 ? seed > 70 ? 1 : 0.6 : seed > 12 ? 0.3 : 0;
+            return <div key={i} style={{ aspectRatio: '1', background: v === 0 ? T.hair : T.ink, opacity: v || 1 }} />;
+          })}
+        </div>
+      </div>
+
+      <div>
+        <Kicker style={{ marginBottom: 14 }}>BADGES · 23 / 60</Kicker>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 36 }}>
+          {[
+            ['◆','Half-second',1], ['▲','Prime hunter',1], ['●','100 streak',1],
+            ['◇','Calc reflex',0.4], ['☐','Mental √',1], ['✦','Geometry',0.4],
+            ['◑','Voice 30',1], ['◐','Polyglot',0.4], ['☆','First place',0.4], ['⬢','Hex master',0.2],
+          ].map(([g, l, op], i) => (
+            <div key={i} style={{ aspectRatio: '1', border: `1px solid ${T.hair}`, padding: 12, opacity: op, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 24 }}>{g}</div>
+              <div style={{ fontSize: 10, fontFamily: T.mono, letterSpacing: '0.05em' }}>{l}</div>
+            </div>
+          ))}
+        </div>
+
+        <Kicker style={{ marginBottom: 14 }}>RECORDS</Kicker>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+          {[
+            ['Fastest answer', '0.42s', '17 + 8'],
+            ['Longest streak', '184', 'Tuesday'],
+            ['Hardest solved', 'integ. e^x sin x', 'voice'],
+            ['Daily best', '127 problems', 'Mar 14'],
+            ['Total mental ops', '14,290', 'lifetime'],
+            ['Avg session', '6m 12s', '47 sessions/wk'],
+          ].map(([l, v, sub], i) => (
+            <div key={i} style={{ padding: '14px 0', borderTop: `1px solid ${T.hair}` }}>
+              <Kicker style={{ letterSpacing: '0.15em' }}>{l}</Kicker>
+              <div style={{ fontFamily: T.serif, fontSize: 28, marginTop: 4 }}>{v}</div>
+              <div style={{ fontSize: 11, opacity: 0.55 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ─── RESULTS ──────────────────────────────────────────────────────────────
+function Results({ result, setRoute }) {
+  const stumbled = [
+    { q: '17 × 13', y: '231', a: 221, why: 'Carrying error in 17×3 step' },
+    { q: 'd/dx (3x²)', y: '6', a: '6x', why: 'Forgot to keep the x' },
+    { q: 'sin(45°)', y: '0.5', a: '√2/2', why: 'Confused with cos(60°)' },
+  ];
+  return (
+    <main style={{ padding: '48px 56px', display: 'grid', gridTemplateRows: 'auto auto 1fr auto', gap: 32, maxWidth: 1440, margin: '0 auto', minHeight: 'calc(100vh - 60px)' }}>
+      <div>
+        <Kicker>SESSION 0142 · {result?.mode || 'Drill'} · {result?.durationSec || 0}s</Kicker>
+        <h1 style={{ fontFamily: T.serif, fontSize: 'clamp(56px, 7vw, 84px)', lineHeight: 0.95, letterSpacing: '-0.03em', fontWeight: 400, margin: '12px 0 0' }}>
+          Faster. Sharper. <span style={{ color: T.accent }}>+{Math.max(1, result?.solved || 0)} IQ</span>
+        </h1>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', borderTop: `1px solid ${T.ink}`, borderBottom: `1px solid ${T.ink}` }}>
+        <Stat l="Solved" v={String(result?.solved ?? 0)} sub="this session" />
+        <Stat l="Streak" v={String(result?.streak ?? 0)} sub="best run" border />
+        <Stat l="Mode" v={result?.mode || '—'} sub="drill type" border />
+        <Stat l="Time" v={`${result?.durationSec || 0}s`} sub="elapsed" border />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 36 }}>
+        <div>
+          <Kicker style={{ marginBottom: 14 }}>WHERE YOU STUMBLED</Kicker>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {stumbled.map((r, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: 'auto auto auto 1fr auto', gap: 18, padding: '14px 0', borderTop: `1px dashed ${T.hair}`, alignItems: 'baseline' }}>
+                <span style={{ fontFamily: T.serif, fontSize: 28 }}>{r.q}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 14, color: T.accent, textDecoration: 'line-through' }}>{r.y}</span>
+                <span style={{ fontFamily: T.mono, fontSize: 14 }}>→ {r.a}</span>
+                <span style={{ fontSize: 13, opacity: 0.7 }}>{r.why}</span>
+                <button onClick={() => setRoute({ name: 'tutor' })} style={{ background: 'transparent', border: `1px solid ${T.ink}`, padding: '6px 10px', fontSize: 11, fontFamily: T.mono, cursor: 'pointer' }}>Iris explain</button>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 32, padding: 24, background: T.ink, color: T.paper }}>
+            <Kicker color="rgba(244,239,230,0.6)">IRIS · YOUR PATTERN</Kicker>
+            <div style={{ fontFamily: T.serif, fontSize: 24, marginTop: 8, lineHeight: 1.3 }}>
+              Your slowdowns cluster at problems with prime factors above 11. Want me to build a 5-minute prime drill for tomorrow?
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <Kicker style={{ marginBottom: 14 }}>SPEED CURVE</Kicker>
+          <svg viewBox="0 0 320 120" style={{ width: '100%', height: 120 }}>
+            <line x1="0" y1="60" x2="320" y2="60" stroke={T.hair} strokeDasharray="2 4" />
+            <polyline points="0,90 30,80 60,72 90,68 120,55 150,50 180,42 210,40 240,35 270,30 300,28 320,26" fill="none" stroke={T.ink} strokeWidth="2" />
+            <text x="0" y="115" fontSize="9" fontFamily={T.mono} fill={T.muted}>start</text>
+            <text x="290" y="115" fontSize="9" fontFamily={T.mono} fill={T.muted}>end</text>
+          </svg>
+
+          <Kicker style={{ marginTop: 24, marginBottom: 14 }}>NEW BADGES</Kicker>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {['Half-second club', 'Prime hunter', `${result?.streak || 0}-streak`].map(b => (
+              <span key={b} style={{ padding: '6px 12px', border: `1px solid ${T.ink}`, fontSize: 12, fontFamily: T.mono }}>◆ {b}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+        <button onClick={() => setRoute({ name: 'tutor' })} style={{ background: 'transparent', color: T.ink, border: `1px solid ${T.ink}`, padding: '14px 22px', fontSize: 14, cursor: 'pointer' }}>Review wrong answers</button>
+        <button onClick={() => setRoute({ name: 'home' })} style={{ background: T.ink, color: T.paper, border: 'none', padding: '14px 26px', fontSize: 14, cursor: 'pointer' }}>Back to today →</button>
+      </div>
+    </main>
+  );
+}
+
+function Stat({ l, v, sub, border }) {
+  return (
+    <div style={{ padding: '20px 24px', borderLeft: border ? `1px solid ${T.hair}` : 'none' }}>
+      <Kicker>{l}</Kicker>
+      <div style={{ fontFamily: T.serif, fontSize: 56, lineHeight: 1, letterSpacing: '-0.03em', marginTop: 6 }}>{v}</div>
+      <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>{sub}</div>
+    </div>
+  );
+}
+
+// ─── ONBOARDING ──────────────────────────────────────────────────────────
+function Onboard({ onStart }) {
+  const [active, setActive] = useState(2);
+  const ladder = [
+    { l: 'Arithmetic', sub: 'Mental sums, products, fractions' },
+    { l: 'Pre-algebra', sub: 'Order of ops, ratios, exponents' },
+    { l: 'Algebra', sub: 'Linear, quadratic, factoring' },
+    { l: 'Geometry', sub: 'Areas, angles, proofs' },
+    { l: 'Trigonometry', sub: 'Identities, unit circle' },
+    { l: 'Calculus', sub: 'Derivatives, integrals, limits' },
+    { l: 'Linear Algebra', sub: 'Matrices, vectors' },
+    { l: 'Statistics', sub: 'Probability, distributions' },
+  ];
+  return (
+    <div style={{ minHeight: '100vh', background: T.paper, color: T.ink, display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+      <div style={{ padding: '64px 56px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div>
+          <Kicker>STEP 02 · CALIBRATE</Kicker>
+          <h1 style={{ fontFamily: T.serif, fontSize: 'clamp(48px, 6vw, 76px)', lineHeight: 0.95, letterSpacing: '-0.03em', fontWeight: 400, margin: '24px 0 16px' }}>
+            Where does your<br/>head live now?
+          </h1>
+          <p style={{ fontSize: 17, lineHeight: 1.5, opacity: 0.7, maxWidth: 480 }}>
+            Pick the level you're most comfortable doing without paper. We'll calibrate from there with a 90-second probe.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button onClick={onStart} style={{ background: T.ink, color: T.paper, border: 'none', padding: '14px 26px', fontSize: 15, cursor: 'pointer' }}>Begin probe →</button>
+          <button onClick={onStart} style={{ background: 'transparent', color: T.ink, border: 'none', padding: '14px 18px', fontSize: 15, opacity: 0.7, cursor: 'pointer' }}>Skip, I'll just play</button>
+        </div>
+      </div>
+      <div style={{ background: T.ink, color: T.paper, padding: '64px 48px', display: 'flex', flexDirection: 'column' }}>
+        <Kicker color="rgba(244,239,230,0.5)" style={{ marginBottom: 24 }}>SELECT YOUR FLOOR</Kicker>
+        {ladder.map((r, i) => (
+          <div key={i} onClick={() => setActive(i)} style={{
+            display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+            padding: '14px 0', borderBottom: '1px solid rgba(244,239,230,0.08)',
+            cursor: 'pointer', opacity: i === active ? 1 : 0.5,
+            paddingLeft: i === active ? 16 : 0, transition: 'all 150ms',
+          }}>
+            <div>
+              <div style={{ fontFamily: T.serif, fontSize: 28, lineHeight: 1 }}>
+                {i === active && <span style={{ color: T.accent, marginRight: 12 }}>●</span>}
+                {r.l}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>{r.sub}</div>
+            </div>
+            <div style={{ fontFamily: T.mono, fontSize: 11, opacity: 0.5 }}>L{String(i+1).padStart(2,'0')}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── APP SHELL ────────────────────────────────────────────────────────────
+function App() {
+  const [route, setRoute] = useState(() => {
+    const seen = typeof localStorage !== 'undefined' && localStorage.getItem('mathiq:onboard');
+    return { name: seen ? 'home' : 'onboard' };
+  });
+  const [stats, setStats] = useState({ streak: 47, solvedToday: 25 });
+  const [lastResult, setLastResult] = useState(null);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && (route.name === 'drill' || route.name === 'results')) {
+        setRoute({ name: route.name === 'results' ? 'home' : 'drills' });
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [route]);
+
+  const finishOnboard = () => {
+    try { localStorage.setItem('mathiq:onboard', '1'); } catch {}
+    setRoute({ name: 'home' });
+  };
+
+  const completeDrill = (result) => {
+    setStats(s => ({ ...s, solvedToday: s.solvedToday + (result.solved || 0) }));
+    setLastResult(result);
+    setRoute({ name: 'results' });
+  };
+
+  if (route.name === 'onboard') return <Onboard onStart={finishOnboard} />;
+
+  // Drills render full-bleed (their own headers); other routes get the top nav.
+  if (route.name === 'drill') {
+    const props = { setRoute, domain: route.domain || 'mixed', onComplete: completeDrill };
+    if (route.mode === 'pulse')  return <PulseDrill {...props} />;
+    if (route.mode === 'stream') return <StreamDrill {...props} />;
+    if (route.mode === 'voice')  return <VoiceDrill {...props} />;
+    if (route.mode === 'layers') return <LayersDrill {...props} />;
+    if (route.mode === 'arena')  return <ArenaDrill {...props} />;
+  }
+
+  return (
+    <>
+      <TopNav route={route} setRoute={setRoute} streak={stats.streak} />
+      {route.name === 'home' && <Dashboard setRoute={setRoute} stats={stats} />}
+      {route.name === 'drills' && <DrillPicker setRoute={setRoute} />}
+      {route.name === 'tutor' && <Tutor />}
+      {route.name === 'library' && <Library setRoute={setRoute} />}
+      {route.name === 'profile' && <Profile stats={stats} />}
+      {route.name === 'results' && <Results result={lastResult} setRoute={setRoute} />}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
