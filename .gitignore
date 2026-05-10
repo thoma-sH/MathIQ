@@ -54,6 +54,7 @@ lerna-debug.log*
 *.pem
 *.key
 secrets.json
+HACKMATHKEY
 
 # ─── Editors / IDEs ────────────────────────────────────────────────────
 .idea
@@ -85,5 +86,12 @@ $RECYCLE.BIN/
 
 # ─── Local tooling ─────────────────────────────────────────────────────
 .claude/
+.cursor/
+.aider*
+.continue/
+.codeium/
+CLAUDE.md
+AGENTS.md
+PLAN.local.md
 .tmp
 tmp

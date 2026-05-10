@@ -1,145 +1,160 @@
-/**
- * Settings — the tweaks panel, made into a real screen.
- *
- * Originally a designer's floating panel for re-skinning the prototypes
- * live; here it's a proper Settings page that adjusts the user's
- * preferences. Same controls, but they save and they ship.
- */
-import { T } from '../design/tokens';
-import { Kicker } from '../design/Kicker';
 import {
-  COLOR_THEMES,
-  FONT_STACKS,
-  DENSITIES,
-  AI_TONES,
-  DIFFICULTY_VIEWS,
-  useTweaks,
-  type ColorTheme,
-  type FontStack,
-  type Density,
-  type AiTone,
-  type DifficultyView,
-  type Tweaks,
-} from '../state/tweaks';
-
-interface RadioRowProps<V extends string> {
-  label: string;
-  value: V;
-  options: readonly V[];
-  onChange: (v: V) => void;
-}
-
-function RadioRow<V extends string>({ label, value, options, onChange }: RadioRowProps<V>) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderTop: `1px solid ${T.hair}` }}>
-      <div style={{ width: 160, fontSize: 14 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {options.map((opt) => (
-          <button
-            key={opt}
-            onClick={() => onChange(opt)}
-            style={{
-              padding: '6px 12px',
-              border: `1px solid ${value === opt ? T.ink : T.hair}`,
-              background: value === opt ? T.ink : 'transparent',
-              color: value === opt ? T.paper : T.ink,
-              fontSize: 12,
-              fontFamily: T.mono,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              cursor: 'pointer',
-            }}
-          >
-            {opt}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface SliderRowProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  unit?: string;
-  onChange: (v: number) => void;
-}
-
-function SliderRow({ label, value, min, max, step, unit, onChange }: SliderRowProps) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 0', borderTop: `1px solid ${T.hair}` }}>
-      <div style={{ width: 160, fontSize: 14 }}>{label}</div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        style={{ flex: 1, accentColor: T.ink }}
-      />
-      <div style={{ width: 60, textAlign: 'right', fontFamily: T.slab, fontSize: 16 }}>
-        {value}
-        {unit ?? ''}
-      </div>
-    </div>
-  );
-}
+  SignedIn,
+  SignedOut,
+  SignInButton,
+  SignOutButton,
+  useUser,
+} from '@clerk/clerk-react';
+import { T } from '../design/tokens';
 
 export function Settings() {
-  const { tweaks, setTweak, reset } = useTweaks();
-
-  // Tiny helper so we can pass the right type into setTweak in the same idiom.
-  const set = <K extends keyof Tweaks>(key: K) => (v: Tweaks[K]) => setTweak(key, v);
-
   return (
-    <main className="responsive-pad" style={{ padding: '40px 36px', maxWidth: 720, margin: '0 auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 36, gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <Kicker className="reveal reveal-1">SETTINGS · TWEAKS</Kicker>
-          <h1 className="reveal reveal-2" style={{ fontFamily: T.serif, fontSize: 'clamp(36px, 5vw, 64px)', lineHeight: 0.96, letterSpacing: '-0.03em', fontWeight: 400, margin: '12px 0 0' }}>
-            Make it yours.
-          </h1>
-        </div>
-        <button onClick={reset} className="btn-press reveal reveal-3" style={{
-          background: 'transparent',
-          border: `1px solid ${T.ink}`,
-          padding: '8px 14px',
-          fontSize: 12,
-          fontFamily: T.mono,
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          cursor: 'pointer',
-        }}>
-          Reset
-        </button>
-      </div>
+    <main
+      className="responsive-pad"
+      style={{
+        maxWidth: 720,
+        margin: '0 auto',
+        paddingTop: 32,
+        paddingBottom: 96,
+      }}
+    >
+      <h1
+        className="reveal reveal-1"
+        style={{
+          fontFamily: T.sans,
+          fontSize: 'clamp(32px, 7vw, 48px)',
+          fontWeight: 700,
+          lineHeight: 1.0,
+          letterSpacing: '-0.025em',
+          margin: '0 0 12px',
+        }}
+      >
+        Settings
+      </h1>
+      <p
+        className="reveal reveal-2"
+        style={{
+          fontSize: 16,
+          color: T.muted,
+          lineHeight: 1.55,
+          margin: '0 0 32px',
+          maxWidth: 540,
+        }}
+      >
+        Sign in to get 5 walkthroughs per day on the premium model.
+      </p>
 
-      <Kicker style={{ marginBottom: 8 }}>APPEARANCE</Kicker>
-      <RadioRow<ColorTheme>      label="Color theme"       value={tweaks.colorTheme}     options={COLOR_THEMES}     onChange={set('colorTheme')} />
-      <RadioRow<FontStack>       label="Typography"        value={tweaks.fontStack}      options={FONT_STACKS}      onChange={set('fontStack')} />
-      <RadioRow<Density>         label="Density"           value={tweaks.density}        options={DENSITIES}        onChange={set('density')} />
-
-      <div style={{ height: 36 }} />
-
-      <Kicker style={{ marginBottom: 8 }}>DRILL DEFAULTS</Kicker>
-      <SliderRow                 label="Drill timer"       value={tweaks.drillTimer}     min={5} max={120} step={5} unit="s" onChange={set('drillTimer')} />
-      <RadioRow<DifficultyView>  label="Difficulty shown"  value={tweaks.difficultyView} options={DIFFICULTY_VIEWS} onChange={set('difficultyView')} />
-
-      <div style={{ height: 36 }} />
-
-      <Kicker style={{ marginBottom: 8 }}>AI TUTOR</Kicker>
-      <RadioRow<AiTone>          label="Iris tone"         value={tweaks.aiTone}         options={AI_TONES}         onChange={set('aiTone')} />
-
-      <div style={{ marginTop: 48, padding: 18, background: T.paper2, fontSize: 13, lineHeight: 1.5 }}>
-        <Kicker style={{ marginBottom: 6 }}>SAVED LOCALLY</Kicker>
-        Settings persist to <code style={{ fontFamily: T.mono, background: T.paper, padding: '1px 6px' }}>localStorage</code>.
-        Color theme, font stack, and density apply via CSS variables on
-        <code style={{ fontFamily: T.mono, background: T.paper, padding: '1px 6px', marginLeft: 4 }}>&lt;html&gt;</code> — every screen restyles instantly.
-      </div>
+      <SignedIn>
+        <AccountCard />
+      </SignedIn>
+      <SignedOut>
+        <SignedOutCard />
+      </SignedOut>
     </main>
   );
+}
+
+function AccountCard() {
+  const { user } = useUser();
+  const email = user?.primaryEmailAddress?.emailAddress ?? '(no email on file)';
+
+  return (
+    <section
+      className="reveal reveal-3"
+      style={{
+        padding: '24px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginBottom: 14,
+      }}
+    >
+      <div style={kicker()}>SIGNED IN</div>
+      <div style={{ fontSize: 19, fontWeight: 500, lineHeight: 1.35, marginBottom: 4 }}>
+        {email}
+      </div>
+      <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
+        Free tier · 5 walkthroughs / day on Sonnet 4.6.
+      </div>
+      <SignOutButton>
+        <button
+          className="btn-press chamfer"
+          style={{
+            background: 'transparent',
+            color: T.ink,
+            border: `1px solid ${T.ink}`,
+            padding: '9px 17px',
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          Sign out
+        </button>
+      </SignOutButton>
+
+      <div
+        style={{
+          marginTop: 20,
+          paddingTop: 18,
+          borderTop: `1px solid ${T.hair}`,
+        }}
+      >
+        <div style={kicker()}>PRO UPGRADE</div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>
+          Coming soon — $7.99/mo for 50 walkthroughs/day on the premium model, unlimited saves, and exam-prep burst.
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function SignedOutCard() {
+  return (
+    <section
+      className="reveal reveal-3"
+      style={{
+        padding: '24px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginBottom: 14,
+      }}
+    >
+      <div style={kicker()}>NOT SIGNED IN</div>
+      <div style={{ fontSize: 19, fontWeight: 500, lineHeight: 1.35, marginBottom: 8 }}>
+        You get 1 free walkthrough per day.
+      </div>
+      <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5, marginBottom: 16 }}>
+        Sign in (email magic link, no password) to get 5 walkthroughs/day on the premium model.
+      </div>
+      <SignInButton mode="modal">
+        <button
+          className="btn-press chamfer"
+          style={{
+            background: T.accent,
+            color: T.paper,
+            border: 'none',
+            padding: '10px 18px',
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          Sign in
+        </button>
+      </SignInButton>
+    </section>
+  );
+}
+
+function kicker(): React.CSSProperties {
+  return {
+    fontFamily: T.mono,
+    fontSize: 11,
+    letterSpacing: '0.18em',
+    textTransform: 'uppercase',
+    color: T.muted,
+    marginBottom: 10,
+  };
 }

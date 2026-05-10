@@ -1,20 +1,11 @@
-import type { Domain } from './math/types';
-import type { DrillMode } from './drills/types';
-
 /**
- * Discriminated route union. Drill routes carry mode + domain so deep
- * links (and the gallery) can land directly on a configured drill.
+ * Four routes: home picker, course detail (topic grid), topic detail
+ * (walkthrough), and settings.
  */
 export type Route =
-  | { name: 'onboard' }
   | { name: 'home' }
-  | { name: 'drills' }
-  | { name: 'gallery' }
-  | { name: 'tutor' }
-  | { name: 'library' }
-  | { name: 'profile' }
-  | { name: 'settings' }
-  | { name: 'results' }
-  | { name: 'drill'; mode: DrillMode; domain: Domain };
+  | { name: 'walkthrough'; courseId: string }
+  | { name: 'topic'; courseId: string; topicId: string; problem?: string }
+  | { name: 'settings' };
 
 export type RouteName = Route['name'];
