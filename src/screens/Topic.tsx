@@ -113,6 +113,8 @@ export function TopicScreen({
   const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | Verdict>('idle');
   const [verifyReason, setVerifyReason] = useState<string | null>(null);
 
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
 
   // Auto-reveal the first segment as soon as it lands.
@@ -150,6 +152,7 @@ export function TopicScreen({
     verifyAbortRef.current?.abort();
     setVerifyState('idle');
     setVerifyReason(null);
+    setSaveState('idle');
     setBuffer('');
     setStreamDone(false);
     setRevealCount(0);
@@ -199,17 +202,21 @@ export function TopicScreen({
       if (/\*\*Answer:\*\*/i.test(accumulated)) {
         void runVerify(accumulated);
       }
-      // Fire-and-forget auto-save for signed-in users. Failure is non-fatal:
-      // history is a convenience, not part of the walkthrough flow.
+      // Auto-save to history for signed-in users. Surface the save state so
+      // the user can see it land (and notice if it ever fails silently).
       if (isSignedIn && accumulated.trim()) {
-        void saveHistoryRecord({
-          getToken,
-          courseId: course!.id,
-          topicId: topic!.id,
-          problem: opts?.practice ? null : problem ?? null,
-          walkthrough: accumulated,
-          modelUsed: rateInfo?.modelUsed ?? null,
-        });
+        setSaveState('saving');
+        void (async () => {
+          const result = await saveHistoryRecord({
+            getToken,
+            courseId: course!.id,
+            topicId: topic!.id,
+            problem: opts?.practice ? null : problem ?? null,
+            walkthrough: accumulated,
+            modelUsed: rateInfo?.modelUsed ?? null,
+          });
+          setSaveState(result ? 'saved' : 'failed');
+        })();
       }
     } catch (err) {
       if (controller.signal.aborted) return;
@@ -789,6 +796,32 @@ export function TopicScreen({
            verifyState === 'correct'   ? 'Answer verified' :
            verifyState === 'incorrect' ? (verifyReason ? `Possible issue: ${verifyReason}` : 'Possible issue — double-check this') :
            'Couldn’t verify automatically'}
+        </div>
+      )}
+
+      {saveState !== 'idle' && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 6,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: saveState === 'failed' ? T.ink : T.muted,
+            marginLeft: verifyState !== 'idle' ? 12 : 0,
+          }}
+        >
+          <span aria-hidden style={{ fontSize: 13 }}>
+            {saveState === 'saving' ? '·' : saveState === 'saved' ? '✓' : '!'}
+          </span>
+          {saveState === 'saving' ? 'Saving to history…' :
+           saveState === 'saved'  ? 'Saved to history' :
+           'History save failed'}
         </div>
       )}
 
