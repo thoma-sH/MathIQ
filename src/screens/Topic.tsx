@@ -13,6 +13,7 @@ import {
 import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { saveHistoryRecord } from '../walkthroughs/history';
+import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
@@ -103,6 +104,9 @@ export function TopicScreen({
   const walkthroughAbortRef = useRef<AbortController | null>(null);
   const whyHowAbortRef = useRef<AbortController | null>(null);
   const classifyAbortRef = useRef<AbortController | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
+  const [ocrMessage, setOcrMessage] = useState<string | null>(null);
 
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
 
@@ -258,6 +262,47 @@ export function TopicScreen({
     }
     setLimitStatus('error');
     setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
+  }
+
+  async function handleImageFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setOcrState('error');
+      setOcrMessage('Pick an image file (JPG, PNG, or WebP).');
+      return;
+    }
+    setOcrState('reading');
+    setOcrMessage(null);
+    try {
+      const text = await extractProblemFromImage({ getToken, file });
+      setCustomProblem(text);
+      setOcrState('idle');
+      setSubmitHint(null);
+    } catch (err) {
+      setOcrState('error');
+      if (err instanceof OcrError) setOcrMessage(err.message);
+      else setOcrMessage('Image processing failed — try again.');
+    }
+  }
+
+  function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) void handleImageFile(file);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  function onCustomTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          void handleImageFile(file);
+          return;
+        }
+      }
+    }
   }
 
   async function submitCustomProblem() {
@@ -672,6 +717,7 @@ export function TopicScreen({
             setCustomProblem(e.target.value);
             if (submitHint) setSubmitHint(null);
           }}
+          onPaste={onCustomTextareaPaste}
           placeholder={`Paste a ${topic.title.toLowerCase()} problem (or anything from ${course.title} — Iris will route).`}
           rows={3}
           style={{
@@ -704,10 +750,51 @@ export function TopicScreen({
           >
             {classifying ? 'Routing…' : 'Generate →'}
           </button>
+          <button
+            type="button"
+            onClick={() => imageInputRef.current?.click()}
+            disabled={ocrState === 'reading' || classifying || isStreamingAnything}
+            aria-label="Upload an image of a problem"
+            className="btn-press"
+            style={{
+              background: 'transparent',
+              border: `1px solid ${T.ink}`,
+              padding: '10px 14px',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: ocrState === 'reading' || classifying || isStreamingAnything ? 'not-allowed' : 'pointer',
+              fontFamily: T.mono,
+              letterSpacing: '0.08em',
+              color: T.ink,
+            }}
+          >
+            {ocrState === 'reading' ? 'Reading…' : 'Image'}
+          </button>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={onImageFileChange}
+          />
           <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>
             If your problem fits a different topic, Iris will route you there.
           </span>
         </div>
+        {ocrState === 'error' && ocrMessage && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: 12,
+              fontSize: 13,
+              color: T.muted,
+              fontFamily: T.mono,
+            }}
+          >
+            {ocrMessage}
+          </div>
+        )}
         {submitHint && (
           <div
             role="status"

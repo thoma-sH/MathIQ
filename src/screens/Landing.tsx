@@ -5,6 +5,7 @@ import { getDailyContent } from '../state/dailyScribe';
 import { useTypedString } from '../state/useTypedString';
 import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
+import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import type { Route } from '../router';
 
 interface LandingProps {
@@ -35,9 +36,12 @@ export function Landing({ onNavigate }: LandingProps) {
 
   const [searchState, setSearchState] = useState<SearchState>('idle');
   const [problem, setProblem] = useState('');
+  const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
+  const [ocrMessage, setOcrMessage] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scribeTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (searchState === 'expanded' || searchState === 'no_match') {
@@ -86,9 +90,54 @@ export function Landing({ onNavigate }: LandingProps) {
 
   function collapseToScribe() {
     setSearchState('idle');
+    setOcrState('idle');
+    setOcrMessage(null);
     // Return focus to the trigger so keyboard users land where they started.
     // Use rAF so the scribe is rendered + focusable before we focus it.
     requestAnimationFrame(() => scribeTriggerRef.current?.focus());
+  }
+
+  async function handleImageFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      setOcrState('error');
+      setOcrMessage('Pick an image file (JPG, PNG, or WebP).');
+      return;
+    }
+    setOcrState('reading');
+    setOcrMessage(null);
+    try {
+      const text = await extractProblemFromImage({ getToken, file });
+      setProblem(text);
+      setOcrState('idle');
+      setOcrMessage(null);
+      // Focus the textarea so the user can edit before submitting.
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    } catch (err) {
+      setOcrState('error');
+      if (err instanceof OcrError) setOcrMessage(err.message);
+      else setOcrMessage('Image processing failed — try again.');
+    }
+  }
+
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) void handleImageFile(file);
+    if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  function onTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          void handleImageFile(file);
+          return;
+        }
+      }
+    }
   }
 
   function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -205,7 +254,8 @@ export function Landing({ onNavigate }: LandingProps) {
             value={problem}
             onChange={(e) => setProblem(e.target.value)}
             onKeyDown={onTextareaKeyDown}
-            disabled={busy}
+            onPaste={onTextareaPaste}
+            disabled={busy || ocrState === 'reading'}
             aria-label="Math problem to walk through"
             placeholder="Paste or type a problem — anything from algebra to differential equations…"
             rows={3}
@@ -248,7 +298,50 @@ export function Landing({ onNavigate }: LandingProps) {
             >
               {busy ? 'Routing…' : 'Walk me through it →'}
             </button>
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              disabled={ocrState === 'reading' || busy}
+              aria-label="Upload an image of a problem"
+              className="btn-press"
+              style={{
+                background: 'transparent',
+                border: `1px solid ${T.ink}`,
+                padding: '11px 14px',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: ocrState === 'reading' || busy ? 'not-allowed' : 'pointer',
+                fontFamily: T.mono,
+                letterSpacing: '0.08em',
+                color: T.ink,
+                marginLeft: 10,
+              }}
+            >
+              {ocrState === 'reading' ? 'Reading…' : 'Image'}
+            </button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              style={{ display: 'none' }}
+              onChange={onFileChange}
+            />
           </div>
+
+          {ocrState === 'error' && ocrMessage && (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{
+                marginTop: 12,
+                fontSize: 13,
+                color: T.muted,
+                fontFamily: T.mono,
+              }}
+            >
+              {ocrMessage}
+            </div>
+          )}
 
           {searchState === 'no_match' && (
             <p

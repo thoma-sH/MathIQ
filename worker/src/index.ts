@@ -48,6 +48,7 @@ import {
   saveHistory,
   type HistoryRecord,
 } from './history';
+import { extractProblemFromImage } from './ocr';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -164,6 +165,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/history/delete') {
       return handleHistoryDelete(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/ocr') {
+      return handleOcr(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -797,6 +802,68 @@ async function handleHistoryDelete(
   if (!body.id) return json({ error: 'id required' }, 400, cors);
   await deleteHistory(env.USAGE, authState.userId, body.id);
   return json({ ok: true }, 200, cors);
+}
+
+// ─── OCR handler ──────────────────────────────────────────────────────
+
+const MAX_OCR_BASE64_CHARS = 8 * 1024 * 1024;       // ~6MB raw image
+const ALLOWED_OCR_MEDIA = new Set([
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif',
+]);
+
+interface OcrBody {
+  image?: string;
+  mediaType?: string;
+}
+
+async function handleOcr(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier: Tier = await resolveTier(authState, env);
+  if (tier !== 'plus' && tier !== 'pro') {
+    return json(
+      { error: 'upgrade_required', message: 'Image input is a MathIQ+ feature.' },
+      403,
+      cors,
+    );
+  }
+
+  let body: OcrBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.image || typeof body.image !== 'string') {
+    return json({ error: 'image required' }, 400, cors);
+  }
+  if (!body.mediaType || !ALLOWED_OCR_MEDIA.has(body.mediaType)) {
+    return json({ error: 'unsupported media type' }, 400, cors);
+  }
+  if (body.image.length > MAX_OCR_BASE64_CHARS) {
+    return json({ error: 'image too large', limit: MAX_OCR_BASE64_CHARS }, 413, cors);
+  }
+
+  const result = await extractProblemFromImage({
+    apiKey: env.ANTHROPIC_API_KEY,
+    imageBase64: body.image,
+    mediaType: body.mediaType,
+  });
+
+  if (!result.ok) {
+    console.error('ocr upstream failed', result.status, result.detail);
+    return json({ error: 'ocr_failed' }, 502, cors);
+  }
+  if (result.notAMathProblem) {
+    return json({ problem: null, notAMathProblem: true }, 200, cors);
+  }
+  return json({ problem: result.problem }, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {
