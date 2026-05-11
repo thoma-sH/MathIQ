@@ -4,21 +4,29 @@
  * Identifiers:
  *   'anonymous' — not signed in
  *   'free'      — signed in, no paid plan
- *   'plus'      — MathIQ+   ($7.99/mo): 20 Opus + 50 Sonnet daily
- *   'pro'       — MathIQ Pro ($29.99/mo): 70 Opus daily
+ *   'plus'      — MathIQ+   ($7.99/mo or $4.99/mo annual): 20 Opus + 50 Sonnet daily
+ *   'pro'       — MathIQ Pro ($29.99/mo or $19.99/mo annual): 70 Opus daily
  *
- * For C3 (this commit), MathIQ+ membership is a comma-separated env
- * whitelist (`PRO_USER_IDS`, retained for backward compatibility with
- * existing local config — semantically it now grants MathIQ+). MathIQ Pro
- * has no provisioning path yet; it lights up when Stripe lands (C4).
+ * Resolution order:
+ *   1. Anonymous if not signed in.
+ *   2. Env whitelist (PRO_USER_IDS / MAX_USER_IDS) — manual dev override.
+ *   3. Stripe-granted subscription state from KV (paying customers).
+ *   4. Free otherwise.
  */
+import { getSubscription, isEntitled, type SubscriptionState } from './subscription';
 
 export type Tier = 'anonymous' | 'free' | 'plus' | 'pro';
 
-export function resolveTier(
+interface ResolveTierEnv {
+  PRO_USER_IDS?: string;
+  MAX_USER_IDS?: string;
+  USAGE: KVNamespace;
+}
+
+export async function resolveTier(
   authState: { kind: 'user'; userId: string } | { kind: 'anonymous' },
-  env: { PRO_USER_IDS?: string; MAX_USER_IDS?: string },
-): Tier {
+  env: ResolveTierEnv,
+): Promise<Tier> {
   if (authState.kind === 'anonymous') return 'anonymous';
   const inList = (raw: string | undefined) =>
     (raw ?? '')
@@ -28,6 +36,10 @@ export function resolveTier(
       .includes(authState.userId);
   if (inList(env.MAX_USER_IDS)) return 'pro';
   if (inList(env.PRO_USER_IDS)) return 'plus';
+
+  const sub: SubscriptionState | null = await getSubscription(env.USAGE, authState.userId);
+  if (isEntitled(sub) && sub) return sub.tier;
+
   return 'free';
 }
 

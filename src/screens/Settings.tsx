@@ -1,13 +1,22 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   SignedIn,
   SignedOut,
   SignInButton,
   SignOutButton,
+  useAuth,
   useUser,
 } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { usePromptFlow, type PromptFlow } from '../state/promptFlow';
+import {
+  fetchSubscriptionState,
+  openCustomerPortal,
+  startCheckout,
+  type Interval,
+  type SubscriptionStateResponse,
+  type Tier as BillingTier,
+} from '../billing/client';
 
 export function Settings() {
   return (
@@ -313,18 +322,271 @@ function AccountCard() {
           borderTop: `1px solid ${T.hair}`,
         }}
       >
-        <div style={kicker()}>PAID PLANS</div>
-        <div style={{ fontSize: 14, lineHeight: 1.55, marginTop: 6 }}>
-          <strong>MathIQ+</strong> — $7.99/mo. 20 Opus 4.6 walkthroughs, then 50 Sonnet 4.6. Why & how on every step.
-        </div>
-        <div style={{ fontSize: 14, lineHeight: 1.55, marginTop: 10 }}>
-          <strong>MathIQ Pro</strong> — $29.99/mo. 70 Opus 4.6 walkthroughs daily, no degradation. Why & how on every step.
-        </div>
-        <div style={{ fontSize: 13, color: T.muted, marginTop: 10 }}>
-          Billing coming soon.
-        </div>
+        <BillingSection />
       </div>
     </section>
+  );
+}
+
+const PLAN_PRICES: Record<BillingTier, Record<Interval, { display: string; tagline: string }>> = {
+  plus: {
+    monthly: { display: '$7.99 / mo', tagline: '' },
+    annual: { display: '$4.99 / mo', tagline: 'billed $59.88 / year · save 37%' },
+  },
+  pro: {
+    monthly: { display: '$29.99 / mo', tagline: '' },
+    annual: { display: '$19.99 / mo', tagline: 'billed $239.88 / year · save 33%' },
+  },
+};
+
+const PLAN_BLURBS: Record<BillingTier, string> = {
+  plus: '20 Opus 4.6 walkthroughs, then 50 Sonnet 4.6. Why & how on every step.',
+  pro: '70 Opus 4.6 walkthroughs daily, no degradation. Why & how on every step.',
+};
+
+const PLAN_LABELS: Record<BillingTier, string> = {
+  plus: 'MathIQ+',
+  pro: 'MathIQ Pro',
+};
+
+function BillingSection() {
+  const { getToken } = useAuth();
+  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<SubscriptionStateResponse | null>(null);
+  const [interval, setInterval] = useState<Interval>('annual');
+  const [pending, setPending] = useState<BillingTier | 'portal' | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchSubscriptionState({ getToken });
+        if (!cancelled) {
+          setState(res);
+          setLoaded(true);
+        }
+      } catch {
+        if (!cancelled) setLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  async function upgrade(tier: BillingTier) {
+    setErr(null);
+    setPending(tier);
+    try {
+      await startCheckout({ tier, interval, getToken });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Checkout failed');
+      setPending(null);
+    }
+  }
+
+  async function manage() {
+    setErr(null);
+    setPending('portal');
+    try {
+      await openCustomerPortal({ getToken });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Portal failed');
+      setPending(null);
+    }
+  }
+
+  if (!loaded) {
+    return (
+      <>
+        <div style={kicker()}>PAID PLANS</div>
+        <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>Loading…</div>
+      </>
+    );
+  }
+
+  // Active subscription state
+  if (state?.tier && (state.status === 'active' || state.status === 'trialing')) {
+    const renew = state.currentPeriodEnd
+      ? new Date(state.currentPeriodEnd * 1000).toLocaleDateString(undefined, {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })
+      : null;
+    return (
+      <>
+        <div style={kicker()}>CURRENT PLAN</div>
+        <div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>
+          {PLAN_LABELS[state.tier]} ({state.interval ?? 'monthly'})
+        </div>
+        {renew && (
+          <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
+            Renews {renew}
+          </div>
+        )}
+        {state.manageable && (
+          <button
+            type="button"
+            onClick={() => void manage()}
+            disabled={pending === 'portal'}
+            className="btn-press chamfer"
+            style={{
+              marginTop: 14,
+              background: 'transparent',
+              color: T.ink,
+              border: `1px solid ${T.ink}`,
+              padding: '9px 17px',
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: pending === 'portal' ? 'not-allowed' : 'pointer',
+              fontFamily: T.sans,
+            }}
+          >
+            {pending === 'portal' ? 'Opening…' : 'Manage subscription'}
+          </button>
+        )}
+        {err && (
+          <div role="status" aria-live="polite" style={{ marginTop: 10, fontSize: 12, color: T.muted, fontFamily: T.mono }}>
+            {err}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Upgrade path
+  return (
+    <>
+      <div style={kicker()}>PAID PLANS</div>
+      <div style={{ display: 'flex', gap: 4, marginTop: 8, marginBottom: 18 }}>
+        <IntervalChip current={interval} value="annual" label="Annual" badge="−37%" onSelect={setInterval} />
+        <IntervalChip current={interval} value="monthly" label="Monthly" onSelect={setInterval} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <PlanCard
+          tier="plus"
+          interval={interval}
+          blurb={PLAN_BLURBS.plus}
+          pending={pending === 'plus'}
+          onUpgrade={() => void upgrade('plus')}
+        />
+        <PlanCard
+          tier="pro"
+          interval={interval}
+          blurb={PLAN_BLURBS.pro}
+          pending={pending === 'pro'}
+          onUpgrade={() => void upgrade('pro')}
+        />
+      </div>
+      {err && (
+        <div role="status" aria-live="polite" style={{ marginTop: 12, fontSize: 12, color: T.muted, fontFamily: T.mono }}>
+          {err}
+        </div>
+      )}
+    </>
+  );
+}
+
+function IntervalChip({
+  current,
+  value,
+  label,
+  badge,
+  onSelect,
+}: {
+  current: Interval;
+  value: Interval;
+  label: string;
+  badge?: string;
+  onSelect: (v: Interval) => void;
+}) {
+  const selected = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      className="btn-press"
+      style={{
+        background: selected ? T.ink : 'transparent',
+        color: selected ? T.paper : T.ink,
+        border: `1px solid ${T.ink}`,
+        padding: '6px 14px',
+        fontFamily: T.mono,
+        fontSize: 11,
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+        cursor: 'pointer',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+      }}
+    >
+      {label}
+      {badge && (
+        <span style={{ opacity: 0.85, fontSize: 10, fontWeight: 600 }}>{badge}</span>
+      )}
+    </button>
+  );
+}
+
+function PlanCard({
+  tier,
+  interval,
+  blurb,
+  pending,
+  onUpgrade,
+}: {
+  tier: BillingTier;
+  interval: Interval;
+  blurb: string;
+  pending: boolean;
+  onUpgrade: () => void;
+}) {
+  const price = PLAN_PRICES[tier][interval];
+  return (
+    <div
+      style={{
+        border: `1px solid ${T.ink}`,
+        background: T.paper,
+        padding: '16px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>
+          {PLAN_LABELS[tier]}
+        </div>
+        <div style={{ fontSize: 16, fontWeight: 600, fontFamily: T.mono }}>{price.display}</div>
+      </div>
+      {price.tagline && (
+        <div style={{ fontSize: 12, color: T.muted }}>{price.tagline}</div>
+      )}
+      <div style={{ fontSize: 14, color: T.ink, lineHeight: 1.5 }}>{blurb}</div>
+      <button
+        type="button"
+        onClick={onUpgrade}
+        disabled={pending}
+        className="btn-press chamfer"
+        style={{
+          marginTop: 4,
+          alignSelf: 'flex-start',
+          background: pending ? T.hair : T.accent,
+          color: pending ? T.muted : T.paper,
+          border: 'none',
+          padding: '10px 18px',
+          fontSize: 14,
+          fontWeight: 500,
+          cursor: pending ? 'not-allowed' : 'pointer',
+          fontFamily: T.sans,
+        }}
+      >
+        {pending ? 'Opening checkout…' : `Upgrade to ${PLAN_LABELS[tier]}`}
+      </button>
+    </div>
   );
 }
 

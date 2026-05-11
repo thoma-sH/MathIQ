@@ -19,6 +19,24 @@ import { decideTier, resolveTier, type Tier, type TierDecision } from './tier';
 import { callAnthropicStream } from './anthropic';
 import { callOpenRouterStream } from './openrouter';
 import { normalizeLatexDelimiters } from './normalize';
+import {
+  clearSubscription,
+  findUserByCustomer,
+  getSubscription,
+  isEntitled,
+  rememberCustomer,
+  setSubscription,
+  type SubscriptionInterval,
+  type SubscriptionTier,
+} from './subscription';
+import {
+  createCheckoutSession,
+  createPortalSession,
+  makeStripe,
+  subscriptionToState,
+  verifyWebhook,
+} from './stripe';
+import type Stripe from 'stripe';
 
 interface Env {
   ANTHROPIC_API_KEY: string;
@@ -29,6 +47,15 @@ interface Env {
   PRO_USER_IDS?: string;
   MAX_USER_IDS?: string;
   USAGE: KVNamespace;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_PRICE_PLUS_MONTHLY: string;
+  STRIPE_PRICE_PLUS_ANNUAL: string;
+  STRIPE_PRICE_PRO_MONTHLY: string;
+  STRIPE_PRICE_PRO_ANNUAL: string;
+  STRIPE_SUCCESS_URL: string;
+  STRIPE_CANCEL_URL: string;
+  STRIPE_PORTAL_RETURN_URL: string;
 }
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
@@ -79,6 +106,22 @@ export default {
       return handleClassify(request, env, cors);
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/billing/state') {
+      return handleBillingState(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
+      return handleBillingCheckout(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/billing/portal') {
+      return handleBillingPortal(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/stripe/webhook') {
+      return handleStripeWebhook(request, env);
+    }
+
     return json({ error: 'not found' }, 404, cors);
   },
 };
@@ -97,7 +140,7 @@ async function handleWalkthrough(
     );
   }
 
-  const tier: Tier = resolveTier(authState, env);
+  const tier: Tier = await resolveTier(authState, env);
 
   // Gate Why/How to paid tiers only.
   let parsedBody: WalkthroughBody | null = null;
@@ -382,4 +425,176 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
     status,
     headers: { ...cors, 'content-type': 'application/json; charset=utf-8' },
   });
+}
+
+// ─── Billing handlers ──────────────────────────────────────────────────
+
+async function handleBillingState(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const state = await getSubscription(env.USAGE, authState.userId);
+  const entitled = isEntitled(state);
+  return json(
+    {
+      tier: entitled && state ? state.tier : null,
+      interval: entitled && state ? state.interval : null,
+      status: state?.status ?? null,
+      currentPeriodEnd: state?.currentPeriodEnd ?? null,
+      manageable: !!state?.stripeCustomerId,
+    },
+    200,
+    cors,
+  );
+}
+
+interface CheckoutBody {
+  tier?: SubscriptionTier;
+  interval?: SubscriptionInterval;
+}
+
+async function handleBillingCheckout(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+
+  let body: CheckoutBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (body.tier !== 'plus' && body.tier !== 'pro') {
+    return json({ error: 'invalid tier' }, 400, cors);
+  }
+  if (body.interval !== 'monthly' && body.interval !== 'annual') {
+    return json({ error: 'invalid interval' }, 400, cors);
+  }
+
+  const stripe = makeStripe(env);
+  const existing = await getSubscription(env.USAGE, authState.userId);
+
+  // Pull email from Clerk if we don't already have a Stripe customer for this user.
+  let userEmail: string | undefined;
+  if (!existing?.stripeCustomerId) {
+    userEmail = await fetchClerkUserEmail(env, authState.userId);
+  }
+
+  const session = await createCheckoutSession(stripe, env, {
+    userId: authState.userId,
+    userEmail,
+    tier: body.tier,
+    interval: body.interval,
+    existingCustomerId: existing?.stripeCustomerId,
+  });
+
+  if (!session.url) {
+    return json({ error: 'checkout_failed' }, 500, cors);
+  }
+  return json({ url: session.url }, 200, cors);
+}
+
+async function handleBillingPortal(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const state = await getSubscription(env.USAGE, authState.userId);
+  if (!state?.stripeCustomerId) {
+    return json({ error: 'no_subscription' }, 404, cors);
+  }
+  const stripe = makeStripe(env);
+  const session = await createPortalSession(stripe, env, state.stripeCustomerId);
+  return json({ url: session.url }, 200, cors);
+}
+
+async function handleStripeWebhook(request: Request, env: Env): Promise<Response> {
+  const raw = await request.text();
+  const stripe = makeStripe(env);
+  const event = await verifyWebhook(stripe, env, raw, request.headers.get('stripe-signature'));
+  if (!event) {
+    return new Response('invalid signature', { status: 400 });
+  }
+
+  try {
+    await processStripeEvent(env, stripe, event);
+    return new Response('ok', { status: 200 });
+  } catch (err) {
+    console.error('stripe webhook error', err);
+    return new Response('handler error', { status: 500 });
+  }
+}
+
+async function processStripeEvent(
+  env: Env,
+  stripe: Stripe,
+  event: Stripe.Event,
+): Promise<void> {
+  switch (event.type) {
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      const userId = session.client_reference_id ?? session.metadata?.userId;
+      const customerId =
+        typeof session.customer === 'string' ? session.customer : session.customer?.id;
+      if (!userId || !customerId) return;
+      await rememberCustomer(env.USAGE, customerId, userId);
+      // Subscription details land via customer.subscription.created right after this.
+      return;
+    }
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
+      const sub = event.data.object as Stripe.Subscription;
+      const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
+      const userId =
+        sub.metadata?.userId ?? (await findUserByCustomer(env.USAGE, customerId));
+      if (!userId) return;
+      await rememberCustomer(env.USAGE, customerId, userId);
+      const state = subscriptionToState(env, sub);
+      if (state) await setSubscription(env.USAGE, userId, state);
+      return;
+    }
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object as Stripe.Subscription;
+      const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
+      const userId =
+        sub.metadata?.userId ?? (await findUserByCustomer(env.USAGE, customerId));
+      if (!userId) return;
+      await clearSubscription(env.USAGE, userId);
+      return;
+    }
+    default:
+      return;
+  }
+}
+
+async function fetchClerkUserEmail(env: Env, userId: string): Promise<string | undefined> {
+  try {
+    const resp = await fetch(`https://api.clerk.com/v1/users/${userId}`, {
+      headers: { Authorization: `Bearer ${env.CLERK_SECRET_KEY}` },
+    });
+    if (!resp.ok) return undefined;
+    const user = (await resp.json()) as {
+      email_addresses?: Array<{ id: string; email_address: string }>;
+      primary_email_address_id?: string | null;
+    };
+    if (!user.email_addresses?.length) return undefined;
+    const primary = user.email_addresses.find((e) => e.id === user.primary_email_address_id);
+    return (primary ?? user.email_addresses[0]).email_address;
+  } catch {
+    return undefined;
+  }
 }

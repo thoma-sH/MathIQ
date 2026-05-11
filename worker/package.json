@@ -13,6 +13,7 @@
     "wrangler": "^3.95.0"
   },
   "dependencies": {
-    "@clerk/backend": "^3.4.7"
+    "@clerk/backend": "^3.4.7",
+    "stripe": "^22.1.1"
   }
 }

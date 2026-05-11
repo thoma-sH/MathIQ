@@ -7,6 +7,8 @@ compatibility_flags = ["nodejs_compat"]
 #   ANTHROPIC_API_KEY
 #   CLERK_SECRET_KEY
 #   OPENROUTER_API_KEY
+#   STRIPE_SECRET_KEY
+#   STRIPE_WEBHOOK_SECRET
 
 # KV namespace for daily usage counters.
 # Create with: `wrangler kv namespace create USAGE`
@@ -23,7 +25,23 @@ ALLOWED_ORIGINS = "http://localhost:5173,http://localhost:5174,http://localhost:
 # After Clerk setup, paste your `pk_test_...` or `pk_live_...` here.
 CLERK_PUBLISHABLE_KEY = "pk_test_ZXF1YWwtbWFsYW11dGUtMzIuY2xlcmsuYWNjb3VudHMuZGV2JA"
 
-# Comma-separated Clerk user IDs (user_xxx...) granted Pro tier.
-# Temporary mechanism until Stripe integration (C4) replaces this with
-# D1-backed subscription state. Safe to commit (user IDs aren't secrets).
+# Comma-separated Clerk user IDs (user_xxx...) granted MathIQ+ tier manually
+# (dev override / comp accounts). Stripe-paid subs are stored in KV via webhook.
 PRO_USER_IDS = "user_3DYnEzyeFI36j2JWovhFyBEvRPe"
+
+# Comma-separated Clerk user IDs granted MathIQ Pro tier manually.
+# Set to empty string if no manual grants.
+MAX_USER_IDS = ""
+
+# Stripe price IDs — create products + prices in the Stripe Dashboard, then
+# paste the `price_...` IDs here. Test-mode IDs for dev, live-mode for prod.
+STRIPE_PRICE_PLUS_MONTHLY = "price_REPLACE_PLUS_MONTHLY"
+STRIPE_PRICE_PLUS_ANNUAL  = "price_REPLACE_PLUS_ANNUAL"
+STRIPE_PRICE_PRO_MONTHLY  = "price_REPLACE_PRO_MONTHLY"
+STRIPE_PRICE_PRO_ANNUAL   = "price_REPLACE_PRO_ANNUAL"
+
+# Where Stripe redirects after Checkout success/cancel and Portal exit.
+# Use your client origin + the Settings route.
+STRIPE_SUCCESS_URL       = "http://localhost:5173/?billing=success"
+STRIPE_CANCEL_URL        = "http://localhost:5173/?billing=cancelled"
+STRIPE_PORTAL_RETURN_URL = "http://localhost:5173/"
