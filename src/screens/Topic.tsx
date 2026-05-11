@@ -12,6 +12,7 @@ import {
 } from '../walkthroughs/generate';
 import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
+import { saveHistoryRecord } from '../walkthroughs/history';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
@@ -178,6 +179,18 @@ export function TopicScreen({
         // Reveal everything immediately.
         const { complete } = parseStream(accumulated, true);
         setRevealCount(complete.length);
+      }
+      // Fire-and-forget auto-save for signed-in users. Failure is non-fatal:
+      // history is a convenience, not part of the walkthrough flow.
+      if (isSignedIn && accumulated.trim()) {
+        void saveHistoryRecord({
+          getToken,
+          courseId: course!.id,
+          topicId: topic!.id,
+          problem: problem ?? null,
+          walkthrough: accumulated,
+          modelUsed: rateInfo?.modelUsed ?? null,
+        });
       }
     } catch (err) {
       if (controller.signal.aborted) return;

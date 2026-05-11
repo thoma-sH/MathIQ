@@ -10,12 +10,14 @@
  * Signals that suggest a real problem:
  *   - Any digit (almost every math problem has at least one number)
  *   - Equation / operator characters: = + − ÷ × * / ^ ( )
- *   - LaTeX commands (\frac, \int, etc.) or math markers ($ ^ _)
- *   - An imperative verb commonly paired with a problem
+ *   - LaTeX commands (\frac, \int, etc.) or math markers ($ ^ _ ?)
+ *   - A question / problem opener phrase ("how many", "what is", "find",
+ *     "compute", "count", etc.)
  *
  * If none of those fire, treat as topic search.
  */
-const IMPERATIVE_VERBS = /\b(find|solve|compute|evaluate|factor|integrate|differentiate|prove|show|simplify|expand|derive|graph|sketch)\b/i;
+const PROBLEM_PHRASES =
+  /\b(how many|how do(?:es)?|in how many|what(?:'?s| is| are)|how much|count|arrange|permute|choose|select|determine|find|solve|compute|evaluate|factor|integrate|differentiate|prove|show|simplify|expand|derive|graph|sketch|calculate|estimate)\b/i;
 
 export function looksLikeProblem(input: string): boolean {
   const t = input.trim();
@@ -23,7 +25,7 @@ export function looksLikeProblem(input: string): boolean {
   if (/\d/.test(t)) return true;
   if (/[=+\-*/^()×÷·]/.test(t)) return true;
   if (/\\[a-zA-Z]+/.test(t)) return true;
-  if (/[$^_]/.test(t)) return true;
-  if (IMPERATIVE_VERBS.test(t)) return true;
+  if (/[$^_?]/.test(t)) return true;
+  if (PROBLEM_PHRASES.test(t)) return true;
   return false;
 }

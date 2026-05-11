@@ -7,6 +7,7 @@ export type Route =
   | { name: 'lessons' }
   | { name: 'walkthrough'; courseId: string }
   | { name: 'topic'; courseId: string; topicId: string; problem?: string }
+  | { name: 'history' }
   | { name: 'settings' };
 
 export type RouteName = Route['name'];

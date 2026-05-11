@@ -4,6 +4,7 @@ import { Landing } from './screens/Landing';
 import { Lessons } from './screens/Lessons';
 import { WalkthroughCourse } from './screens/WalkthroughCourse';
 import { TopicScreen } from './screens/Topic';
+import { History } from './screens/History';
 import { Settings } from './screens/Settings';
 import type { Route } from './router';
 
@@ -26,6 +27,7 @@ function escapeTarget(route: Route): Route | null {
   if (route.name === 'topic') return { name: 'walkthrough', courseId: route.courseId };
   if (route.name === 'walkthrough') return { name: 'lessons' };
   if (route.name === 'lessons') return { name: 'home' };
+  if (route.name === 'history') return { name: 'settings' };
   if (route.name === 'settings') return { name: 'home' };
   return null;
 }
@@ -55,7 +57,8 @@ export default function App() {
         {route.name === 'lessons'     && <Lessons onNavigate={setRoute} />}
         {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={setRoute} />}
         {route.name === 'topic'       && <TopicScreen courseId={route.courseId} topicId={route.topicId} initialProblem={route.problem} onNavigate={setRoute} />}
-        {route.name === 'settings'    && <Settings />}
+        {route.name === 'history'     && <History onNavigate={setRoute} />}
+        {route.name === 'settings'    && <Settings onNavigate={setRoute} />}
       </Page>
     </>
   );

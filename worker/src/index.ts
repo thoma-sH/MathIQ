@@ -40,6 +40,14 @@ import {
   subscriptionToState,
   verifyWebhook,
 } from './stripe';
+import {
+  deleteHistory,
+  getHistory,
+  listHistory,
+  newHistoryId,
+  saveHistory,
+  type HistoryRecord,
+} from './history';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -140,6 +148,22 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/billing/portal') {
       return handleBillingPortal(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/history/list') {
+      return handleHistoryList(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/history/get') {
+      return handleHistoryGet(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/history/save') {
+      return handleHistorySave(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/history/delete') {
+      return handleHistoryDelete(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -661,6 +685,118 @@ async function processStripeEvent(
     default:
       return;
   }
+}
+
+// ─── History handlers ──────────────────────────────────────────────────
+
+const MAX_HISTORY_WALKTHROUGH_CHARS = 80000;
+
+interface HistorySaveBody {
+  courseId?: string;
+  topicId?: string;
+  problem?: string | null;
+  walkthrough?: string;
+  modelUsed?: string | null;
+}
+
+async function handleHistorySave(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  let body: HistorySaveBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.courseId || !body.topicId || typeof body.walkthrough !== 'string') {
+    return json({ error: 'courseId, topicId, walkthrough required' }, 400, cors);
+  }
+  if (body.walkthrough.length > MAX_HISTORY_WALKTHROUGH_CHARS) {
+    return json(
+      { error: 'walkthrough too long', limit: MAX_HISTORY_WALKTHROUGH_CHARS },
+      413,
+      cors,
+    );
+  }
+  const found = findTopic(body.courseId, body.topicId);
+  if (!found) {
+    return json({ error: 'unknown course or topic' }, 404, cors);
+  }
+  const record: HistoryRecord = {
+    id: newHistoryId(),
+    userId: authState.userId,
+    courseId: body.courseId,
+    topicId: body.topicId,
+    topicTitle: found.topic.title,
+    problem: body.problem ?? null,
+    walkthrough: body.walkthrough,
+    modelUsed: body.modelUsed ?? null,
+    createdAt: Date.now(),
+  };
+  await saveHistory(env.USAGE, record);
+  return json({ id: record.id }, 200, cors);
+}
+
+async function handleHistoryList(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const url = new URL(request.url);
+  const cursor = url.searchParams.get('cursor') ?? undefined;
+  const result = await listHistory(env.USAGE, authState.userId, cursor);
+  return json(result, 200, cors);
+}
+
+async function handleHistoryGet(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const url = new URL(request.url);
+  const id = url.searchParams.get('id');
+  if (!id) return json({ error: 'id required' }, 400, cors);
+  const record = await getHistory(env.USAGE, authState.userId, id);
+  if (!record) return json({ error: 'not_found' }, 404, cors);
+  return json(record, 200, cors);
+}
+
+interface HistoryDeleteBody {
+  id?: string;
+}
+
+async function handleHistoryDelete(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  let body: HistoryDeleteBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.id) return json({ error: 'id required' }, 400, cors);
+  await deleteHistory(env.USAGE, authState.userId, body.id);
+  return json({ ok: true }, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {

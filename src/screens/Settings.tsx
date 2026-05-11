@@ -17,8 +17,13 @@ import {
   type SubscriptionStateResponse,
   type Tier as BillingTier,
 } from '../billing/client';
+import type { Route } from '../router';
 
-export function Settings() {
+interface SettingsProps {
+  onNavigate: (route: Route) => void;
+}
+
+export function Settings({ onNavigate }: SettingsProps) {
   return (
     <main
       className="responsive-pad"
@@ -62,8 +67,56 @@ export function Settings() {
         <SignedOutCard />
       </SignedOut>
 
+      <SignedIn>
+        <NavCard onNavigate={onNavigate} />
+      </SignedIn>
+
       <PromptFlowCard />
     </main>
+  );
+}
+
+function NavCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
+  return (
+    <section
+      className="reveal reveal-3"
+      style={{
+        padding: '18px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginTop: 14,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => onNavigate({ name: 'history' })}
+        className="btn-press"
+        style={{
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          textAlign: 'left',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          color: T.ink,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <span>
+          <span style={{ fontSize: 15, fontWeight: 600, display: 'block', marginBottom: 2 }}>
+            Walkthrough history
+          </span>
+          <span style={{ fontSize: 13, color: T.muted }}>
+            Revisit anything you've solved in the last 90 days.
+          </span>
+        </span>
+        <span className="arrow-nudge" style={{ color: T.ink, fontSize: 18 }}>→</span>
+      </button>
+    </section>
   );
 }
 
