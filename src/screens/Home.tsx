@@ -40,20 +40,28 @@ const DAY_LABELS = [
   'SATURDAY',
 ];
 
-function ScribeMark() {
+const DAY_SCRIBES = [
+  '/scribe-sunday.png',
+  '/scribe-monday.png',
+  '/scribe-tuesday.png',
+  '/scribe-wednesday.png',
+  '/scribe-thursday.png',
+  '/scribe-friday.png',
+  '/scribe-saturday.png',
+];
+
+function ScribeMark({ src }: { src: string }) {
   return (
-    <div
+    <img
+      src={src}
+      alt=""
       aria-hidden
       style={{
-        width: 'clamp(180px, 26vw, 300px)',
-        aspectRatio: '1 / 1',
+        height: 'clamp(120px, 18vw, 180px)',
+        width: 'auto',
+        maxWidth: '100%',
+        display: 'block',
         flexShrink: 0,
-        backgroundImage: 'url(/scribe.png)',
-        backgroundColor: 'var(--paper)',
-        backgroundBlendMode: 'multiply',
-        backgroundSize: 'contain',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center',
       }}
     />
   );
@@ -113,11 +121,12 @@ function CourseCard({ title, blurb, onClick }: CourseCardProps) {
 }
 
 export function Home({ onNavigate }: HomeProps) {
-  const { dayLabel, tagline } = useMemo(() => {
+  const { dayLabel, tagline, scribeSrc } = useMemo(() => {
     const day = new Date().getDay();
     return {
       dayLabel: DAY_LABELS[day],
       tagline: DAY_TAGLINES[day],
+      scribeSrc: DAY_SCRIBES[day],
     };
   }, []);
 
@@ -140,7 +149,7 @@ export function Home({ onNavigate }: HomeProps) {
           justifyContent: 'space-between',
           gap: 'clamp(24px, 5vw, 56px)',
           flexWrap: 'wrap',
-          marginBottom: 48,
+          marginBottom: 64,
         }}
       >
         <div style={{ flex: '3 1 320px', minWidth: 0 }}>
@@ -173,7 +182,7 @@ export function Home({ onNavigate }: HomeProps) {
                 flex: 1,
                 height: 1,
                 background: T.ink,
-                maxWidth: 120,
+                maxWidth: 240,
               }}
             />
           </div>
@@ -217,7 +226,7 @@ export function Home({ onNavigate }: HomeProps) {
             paddingRight: 'clamp(0px, 3vw, 32px)',
           }}
         >
-          <ScribeMark />
+          <ScribeMark src={scribeSrc} />
         </div>
       </div>
 
