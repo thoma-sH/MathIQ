@@ -152,7 +152,7 @@ export function TopicScreen({
     setLimitDetail(null);
   }
 
-  async function runWalkthrough(problem?: string) {
+  async function runWalkthrough(problem?: string, opts?: { practice?: boolean }) {
     resetSession();
     const mode = getPromptFlow();
     setSessionMode(mode);
@@ -163,6 +163,7 @@ export function TopicScreen({
     walkthroughAbortRef.current = controller;
     setStreaming('walkthrough');
 
+    const action = opts?.practice ? 'practice' : 'walkthrough';
     let accumulated = '';
     try {
       for await (const chunk of streamWalkthrough({
@@ -172,7 +173,7 @@ export function TopicScreen({
         signal: controller.signal,
         getToken,
         onRateLimitInfo: setRateInfo,
-        action: 'walkthrough',
+        action,
       })) {
         accumulated += chunk;
         setBuffer(accumulated);
@@ -191,7 +192,7 @@ export function TopicScreen({
           getToken,
           courseId: course!.id,
           topicId: topic!.id,
-          problem: problem ?? null,
+          problem: opts?.practice ? null : problem ?? null,
           walkthrough: accumulated,
           modelUsed: rateInfo?.modelUsed ?? null,
         });
@@ -460,13 +461,32 @@ export function TopicScreen({
       </section>
 
       {!hasOutput && !limitStatus && !isStreamingAnything && (
-        <button
-          onClick={() => runWalkthrough()}
-          className="btn-press chamfer reveal reveal-4"
-          style={primaryCta()}
-        >
-          Walk me through it →
-        </button>
+        <div className="reveal reveal-4" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => runWalkthrough()}
+            className="btn-press chamfer"
+            style={primaryCta()}
+          >
+            Walk me through it →
+          </button>
+          <button
+            onClick={() => runWalkthrough(undefined, { practice: true })}
+            className="btn-press chamfer"
+            aria-label="Generate a new practice problem for this topic"
+            style={{
+              background: 'transparent',
+              color: T.ink,
+              border: `1px solid ${T.ink}`,
+              padding: '12px 20px',
+              fontSize: 15,
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: T.sans,
+            }}
+          >
+            Practice problem →
+          </button>
+        </div>
       )}
 
       {isStreamingAnything && (

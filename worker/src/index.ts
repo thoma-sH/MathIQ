@@ -85,7 +85,7 @@ interface WalkthroughBody {
   courseId?: string;
   topicId?: string;
   problem?: string;
-  action?: 'walkthrough' | 'why-how';
+  action?: 'walkthrough' | 'why-how' | 'practice';
   walkthroughSoFar?: string;
 }
 
@@ -275,8 +275,8 @@ async function handleWalkthrough(
       { ...cors, ...baseHeaders },
     );
   }
-  const walkAction: 'walkthrough' | 'why-how' =
-    action === 'why-how' ? 'why-how' : 'walkthrough';
+  const walkAction: 'walkthrough' | 'why-how' | 'practice' =
+    action === 'why-how' ? 'why-how' : action === 'practice' ? 'practice' : 'walkthrough';
   const walkthroughSoFarClean =
     typeof walkthroughSoFar === 'string' ? walkthroughSoFar : undefined;
   if (!courseId || !topicId) {

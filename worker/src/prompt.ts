@@ -5,6 +5,8 @@ import type { Course, Topic } from './courses';
 
 export const TUTORING_FOUNDATION = `[redacted — loaded from worker secret in HEAD]`;
 
+export const PRACTICE_INSTRUCTION = `[redacted — loaded from worker secret in HEAD]`;
+
 export const WHY_HOW_INSTRUCTION = `[redacted — loaded from worker secret in HEAD]`;
 
 function buildCourseTopicContext(course: Course, topic: Topic): string {

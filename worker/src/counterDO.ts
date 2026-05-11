@@ -5,6 +5,7 @@
  * id, so read-modify-write inside it is atomic — concurrent requests from
  * the same user can no longer both peek the same value and both commit,
  * bypassing the quota.
+ * Since each userId is a single-threaded per id = thread-safe & deadlock-free
  *
  * Endpoints (POST except peek):
  *   /peek  — returns { count }

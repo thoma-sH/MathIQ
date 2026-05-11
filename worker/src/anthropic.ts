@@ -3,11 +3,11 @@
  * returns a plain-text ReadableStream of the model's output.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPrompt, WHY_HOW_INSTRUCTION } from './prompt';
+import { buildSystemPrompt, PRACTICE_INSTRUCTION, WHY_HOW_INSTRUCTION } from './prompt';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
-export type WalkthroughAction = 'walkthrough' | 'why-how';
+export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
 
 export interface AnthropicCallParams {
   apiKey: string;
@@ -96,6 +96,9 @@ function buildConversation(
       { role: 'assistant', content: walkthroughSoFar.trim() },
       { role: 'user', content: WHY_HOW_INSTRUCTION },
     ];
+  }
+  if (action === 'practice') {
+    return [{ role: 'user', content: PRACTICE_INSTRUCTION }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

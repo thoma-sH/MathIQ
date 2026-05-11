@@ -40,7 +40,7 @@ export interface RateLimitInfo {
   premiumAllotment?: number;
 }
 
-export type WalkthroughAction = 'walkthrough' | 'why-how';
+export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
 
 export interface GenerateRequest {
   course: Course;

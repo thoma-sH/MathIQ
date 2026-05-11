@@ -3,11 +3,11 @@
  * Same plain-text output shape as the Anthropic helper.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPromptFlat, WHY_HOW_INSTRUCTION } from './prompt';
+import { buildSystemPromptFlat, PRACTICE_INSTRUCTION, WHY_HOW_INSTRUCTION } from './prompt';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export type WalkthroughAction = 'walkthrough' | 'why-how';
+export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
 
 export interface OpenRouterCallParams {
   apiKey: string;
@@ -105,6 +105,9 @@ function buildConversation(
       { role: 'assistant', content: walkthroughSoFar.trim() },
       { role: 'user', content: WHY_HOW_INSTRUCTION },
     ];
+  }
+  if (action === 'practice') {
+    return [{ role: 'user', content: PRACTICE_INSTRUCTION }];
   }
   return [{ role: 'user', content: initialUserText }];
 }
