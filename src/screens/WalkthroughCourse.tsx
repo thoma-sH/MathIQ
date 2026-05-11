@@ -112,7 +112,7 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
       }}
     >
       <button
-        onClick={() => onNavigate({ name: 'home' })}
+        onClick={() => onNavigate({ name: 'lessons' })}
         className="btn-press"
         style={{
           background: 'transparent',
@@ -127,7 +127,7 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
           marginBottom: 16,
         }}
       >
-        ← Home
+        ← Lessons
       </button>
 
       <h1

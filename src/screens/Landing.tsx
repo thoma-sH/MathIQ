@@ -1,0 +1,317 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth, useUser } from '@clerk/clerk-react';
+import { T } from '../design/tokens';
+import { getDailyContent } from '../state/dailyScribe';
+import { useTypedString } from '../state/useTypedString';
+import { classifyTopic } from '../walkthroughs/classify';
+import type { Route } from '../router';
+
+interface LandingProps {
+  onNavigate: (route: Route) => void;
+}
+
+type SearchState = 'idle' | 'expanded' | 'classifying' | 'no_match';
+
+function getTimeGreeting(hour: number): string {
+  if (hour < 5) return 'Up late';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  if (hour < 22) return 'Good evening';
+  return 'Good night';
+}
+
+export function Landing({ onNavigate }: LandingProps) {
+  const { getToken } = useAuth();
+  const { user } = useUser();
+  const { dayLabel, scribeSrc } = useMemo(() => getDailyContent(), []);
+  const typedLabel = useTypedString(dayLabel, 40, 220);
+
+  const personalGreeting = useMemo(() => {
+    const firstName = user?.firstName?.trim();
+    if (!firstName) return null;
+    return `${getTimeGreeting(new Date().getHours())}, ${firstName}.`;
+  }, [user?.firstName]);
+
+  const [searchState, setSearchState] = useState<SearchState>('idle');
+  const [problem, setProblem] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (searchState === 'expanded' || searchState === 'no_match') {
+      // Wait for the scribe-out / search-in cross-fade before focusing.
+      const t = window.setTimeout(() => textareaRef.current?.focus(), 240);
+      return () => window.clearTimeout(t);
+    }
+  }, [searchState]);
+
+  // Click outside the stage to collapse — only when textarea is empty.
+  useEffect(() => {
+    if (searchState !== 'expanded' && searchState !== 'no_match') return;
+    const onClick = (e: MouseEvent) => {
+      if (!stageRef.current) return;
+      if (stageRef.current.contains(e.target as Node)) return;
+      if (!problem.trim()) setSearchState('idle');
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [searchState, problem]);
+
+  async function submit() {
+    const trimmed = problem.trim();
+    if (!trimmed) return;
+    setSearchState('classifying');
+    try {
+      const match = await classifyTopic({ problem: trimmed, getToken });
+      if (match) {
+        onNavigate({
+          name: 'topic',
+          courseId: match.courseId,
+          topicId: match.topicId,
+          problem: trimmed,
+        });
+        return;
+      }
+      setSearchState('no_match');
+    } catch {
+      setSearchState('no_match');
+    }
+  }
+
+  function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      if (!problem.trim()) setSearchState('idle');
+      else textareaRef.current?.blur();
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void submit();
+    }
+  }
+
+  const expanded = searchState !== 'idle';
+  const busy = searchState === 'classifying';
+
+  return (
+    <main
+      className="responsive-pad"
+      style={{
+        maxWidth: 760,
+        margin: '0 auto',
+        paddingTop: 'clamp(56px, 12vh, 140px)',
+        paddingBottom: 96,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        textAlign: 'center',
+      }}
+    >
+      {/* Personal greeting — only for signed-in users with a first name */}
+      {personalGreeting && (
+        <p
+          className="reveal reveal-1"
+          style={{
+            fontFamily: T.sans,
+            fontSize: 'clamp(18px, 2.8vw, 22px)',
+            fontWeight: 500,
+            color: T.ink,
+            letterSpacing: '-0.01em',
+            margin: '0 0 14px',
+            opacity: 0.92,
+          }}
+        >
+          {personalGreeting}
+        </p>
+      )}
+
+      {/* Day kicker */}
+      <div
+        className={personalGreeting ? 'reveal reveal-2' : 'reveal reveal-1'}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          marginBottom: 'clamp(40px, 8vh, 72px)',
+        }}
+      >
+        <span aria-hidden style={{ width: 'clamp(40px, 8vw, 80px)', height: 1, background: T.ink }} />
+        <span
+          style={{
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: '0.24em',
+            color: T.ink,
+            textTransform: 'uppercase',
+            whiteSpace: 'pre',
+          }}
+          aria-label={dayLabel}
+        >
+          {typedLabel}
+          {typedLabel.length < dayLabel.length && <span className="type-caret" aria-hidden />}
+        </span>
+        <span aria-hidden style={{ width: 'clamp(40px, 8vw, 80px)', height: 1, background: T.ink }} />
+      </div>
+
+      {/* The stage — scribe and search occupy the same cell; one cross-fades into the other */}
+      <div
+        ref={stageRef}
+        className="hero-stage reveal reveal-2"
+        data-expanded={expanded}
+      >
+        {/* Scribe — the click target */}
+        <button
+          type="button"
+          onClick={() => setSearchState('expanded')}
+          className="scribe-trigger"
+          aria-label="Type a math problem"
+          data-active={!expanded}
+        >
+          <img
+            src={scribeSrc}
+            alt=""
+            aria-hidden
+            style={{
+              height: 'clamp(140px, 22vh, 220px)',
+              width: 'auto',
+              maxWidth: '100%',
+              display: 'block',
+            }}
+          />
+          <span className="scribe-hint">
+            Type a problem →
+          </span>
+        </button>
+
+        {/* Search form — emerges in place of the scribe */}
+        <div className="search-form" data-active={expanded} aria-hidden={!expanded}>
+          <textarea
+            ref={textareaRef}
+            value={problem}
+            onChange={(e) => setProblem(e.target.value)}
+            onKeyDown={onTextareaKeyDown}
+            disabled={busy}
+            placeholder="Paste or type a problem — anything from algebra to differential equations…"
+            rows={3}
+            style={{
+              width: '100%',
+              border: `1px solid ${T.ink}`,
+              background: T.paper,
+              padding: '16px 18px',
+              fontSize: 16,
+              fontFamily: T.mono,
+              resize: 'vertical',
+              color: T.ink,
+              outline: 'none',
+              lineHeight: 1.5,
+              marginBottom: 14,
+            }}
+          />
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!problem.trim() || busy}
+              className="btn-press chamfer"
+              style={{
+                background: !problem.trim() || busy ? T.hair : T.accent,
+                color: !problem.trim() || busy ? T.muted : T.paper,
+                border: 'none',
+                padding: '12px 22px',
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: !problem.trim() || busy ? 'not-allowed' : 'pointer',
+                fontFamily: T.sans,
+              }}
+            >
+              {busy ? 'Routing…' : 'Walk me through it →'}
+            </button>
+          </div>
+
+          {searchState === 'no_match' && (
+            <p
+              role="status"
+              aria-live="polite"
+              style={{
+                marginTop: 14,
+                fontSize: 13,
+                color: T.muted,
+                lineHeight: 1.5,
+              }}
+            >
+              Couldn't place that one — try rephrasing, or browse{' '}
+              <button
+                type="button"
+                onClick={() => onNavigate({ name: 'lessons' })}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  color: T.accent,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit',
+                }}
+              >
+                Lessons
+              </button>{' '}
+              instead.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Pitch + secondary CTA — fade back when the search has focus */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          opacity: expanded ? 0.35 : 1,
+          transition: 'opacity 240ms ease-out',
+        }}
+      >
+        <p
+          className="reveal reveal-4"
+          style={{
+            marginTop: 'clamp(40px, 8vh, 72px)',
+            fontSize: 17,
+            color: T.muted,
+            lineHeight: 1.55,
+            maxWidth: 520,
+          }}
+        >
+          Iris reads your problem, routes it to the right technique, and walks you through every move — not just the answer.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => onNavigate({ name: 'lessons' })}
+          className="reveal reveal-5 btn-press"
+          style={{
+            marginTop: 28,
+            background: 'transparent',
+            border: 'none',
+            padding: '4px 8px',
+            fontFamily: T.mono,
+            fontSize: 12,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: T.muted,
+            cursor: 'pointer',
+          }}
+        >
+          or browse Lessons →
+        </button>
+      </div>
+    </main>
+  );
+}

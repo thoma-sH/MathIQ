@@ -108,7 +108,7 @@ export function NotFound({ message, onNavigate }: NotFoundProps) {
           fontFamily: T.sans,
         }}
       >
-        ← Back home
+        ← Home
       </button>
     </main>
   );

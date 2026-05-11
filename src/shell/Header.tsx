@@ -78,7 +78,38 @@ export function Header({ route, onNavigate }: HeaderProps) {
           </SignInButton>
         </SignedOut>
         <SignedIn>
-          <UserButton afterSignOutUrl="/" />
+          <UserButton
+            appearance={{
+              variables: {
+                colorPrimary: T.ink,
+                colorBackground: T.paper,
+                colorText: T.ink,
+                colorTextOnPrimaryBackground: T.paper,
+                colorInputBackground: T.paper,
+                colorInputText: T.ink,
+                fontFamily: '"DM Sans", sans-serif',
+                borderRadius: '0',
+              },
+              elements: {
+                userButtonAvatarBox: {
+                  width: 36,
+                  height: 36,
+                  border: `1px solid ${T.ink}`,
+                  boxShadow: 'none',
+                },
+                userButtonPopoverCard: {
+                  background: T.paper,
+                  border: `1px solid ${T.ink}`,
+                  borderRadius: 0,
+                  boxShadow: '0 4px 16px rgba(26, 43, 26, 0.12)',
+                },
+                userButtonPopoverActionButton: { color: T.ink },
+                userButtonPopoverActionButtonText: { color: T.ink },
+                userButtonPopoverFooter: { background: T.paper, borderTop: `1px solid ${T.hair}` },
+                avatarImage: { borderRadius: '50%' },
+              },
+            }}
+          />
         </SignedIn>
       </div>
     </header>

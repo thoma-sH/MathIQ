@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { T } from '../design/tokens';
 import { COURSES } from '../walkthroughs/courses';
+import { getDailyContent } from '../state/dailyScribe';
+import { useTypedString } from '../state/useTypedString';
 import type { Route } from '../router';
 
-interface HomeProps {
+interface LessonsProps {
   onNavigate: (route: Route) => void;
 }
 
@@ -12,43 +14,6 @@ interface CourseCardProps {
   blurb: string;
   onClick: () => void;
 }
-
-const DAY_TAGLINES = [
-  // Sunday
-  'One walkthrough now beats five hours of cramming on Tuesday.',
-  // Monday
-  'Pick a course. Type a problem. Walk through it — the world is our oyster.',
-  // Tuesday
-  "Yesterday's confusion is today's intuition. Type the one that wobbled.",
-  // Wednesday
-  'Halfway through the week. Halfway through the proof. Both end the same way — clarity.',
-  // Thursday
-  'Every theorem was once a guess. Type one.',
-  // Friday
-  "Math doesn't take the weekend off — but Friday lets you pick the easy one first.",
-  // Saturday
-  'No syllabus. No clock. Just you, a problem, and a tutor who likes the dirty algebra.',
-];
-
-const DAY_LABELS = [
-  'SUNDAY',
-  'MONDAY',
-  'TUESDAY',
-  'WEDNESDAY',
-  'THURSDAY',
-  'FRIDAY',
-  'SATURDAY',
-];
-
-const DAY_SCRIBES = [
-  '/scribe-sunday.png',
-  '/scribe-monday.png',
-  '/scribe-tuesday.png',
-  '/scribe-wednesday.png',
-  '/scribe-thursday.png',
-  '/scribe-friday.png',
-  '/scribe-saturday.png',
-];
 
 function ScribeMark({ src }: { src: string }) {
   return (
@@ -120,16 +85,8 @@ function CourseCard({ title, blurb, onClick }: CourseCardProps) {
   );
 }
 
-export function Home({ onNavigate }: HomeProps) {
-  const { dayLabel, tagline, scribeSrc } = useMemo(() => {
-    const day = new Date().getDay();
-    return {
-      dayLabel: DAY_LABELS[day],
-      tagline: DAY_TAGLINES[day],
-      scribeSrc: DAY_SCRIBES[day],
-    };
-  }, []);
-
+export function Lessons({ onNavigate }: LessonsProps) {
+  const { dayLabel, tagline, scribeSrc } = useMemo(() => getDailyContent(), []);
   const typedLabel = useTypedString(dayLabel, 40, 180);
 
   return (
@@ -199,7 +156,7 @@ export function Home({ onNavigate }: HomeProps) {
               maxWidth: 16 * 38,
             }}
           >
-            What would you like to learn today?
+            Lessons.
           </h1>
 
           <p
@@ -249,41 +206,4 @@ export function Home({ onNavigate }: HomeProps) {
       </div>
     </main>
   );
-}
-
-/**
- * Types the target string one character at a time over `totalMs`, after an
- * initial `startDelayMs`. Honors prefers-reduced-motion by jumping to the full
- * string immediately.
- */
-function useTypedString(target: string, perCharMs: number, startDelayMs: number): string {
-  const [text, setText] = useState('');
-  useEffect(() => {
-    const reduceMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (reduceMotion) {
-      setText(target);
-      return;
-    }
-    setText('');
-    let cancelled = false;
-    let charTimer = 0;
-    const start = window.setTimeout(() => {
-      let i = 0;
-      const tick = () => {
-        if (cancelled) return;
-        i += 1;
-        setText(target.slice(0, i));
-        if (i < target.length) charTimer = window.setTimeout(tick, perCharMs);
-      };
-      charTimer = window.setTimeout(tick, perCharMs);
-    }, startDelayMs);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(start);
-      window.clearTimeout(charTimer);
-    };
-  }, [target, perCharMs, startDelayMs]);
-  return text;
 }

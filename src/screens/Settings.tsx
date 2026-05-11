@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import {
   SignedIn,
   SignedOut,
@@ -153,6 +154,42 @@ function FlowOption({
 function AccountCard() {
   const { user } = useUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? '(no email on file)';
+  const initial = (email[0] ?? '?').toUpperCase();
+  const hasImage = !!user?.hasImage && !!user.imageUrl;
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+
+  async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploading(true);
+    setUploadErr(null);
+    try {
+      await user.setProfileImage({ file });
+      await user.reload();
+    } catch (err) {
+      setUploadErr(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  async function clearPhoto() {
+    if (!user) return;
+    setUploading(true);
+    setUploadErr(null);
+    try {
+      await user.setProfileImage({ file: null });
+      await user.reload();
+    } catch (err) {
+      setUploadErr(err instanceof Error ? err.message : 'Remove failed');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   return (
     <section
@@ -165,12 +202,92 @@ function AccountCard() {
       }}
     >
       <div style={kicker()}>SIGNED IN</div>
-      <div style={{ fontSize: 19, fontWeight: 500, lineHeight: 1.35, marginBottom: 4 }}>
-        {email}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
+        <div
+          aria-label={hasImage ? 'Your profile picture' : `Initial ${initial}`}
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: '50%',
+            border: `1px solid ${T.ink}`,
+            background: hasImage ? T.paper : T.ink,
+            color: T.paper,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontFamily: T.sans,
+            fontSize: 26,
+            fontWeight: 700,
+            overflow: 'hidden',
+            flexShrink: 0,
+            backgroundImage: hasImage ? `url(${user!.imageUrl})` : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        >
+          {!hasImage && initial}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 500, lineHeight: 1.35, marginBottom: 2, wordBreak: 'break-word' }}>
+            {email}
+          </div>
+          <div style={{ fontSize: 13, color: T.muted, marginBottom: 10 }}>
+            Free tier · 5 walkthroughs / day.
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="btn-press chamfer"
+              style={{
+                background: 'transparent',
+                color: T.ink,
+                border: `1px solid ${T.ink}`,
+                padding: '7px 14px',
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: uploading ? 'not-allowed' : 'pointer',
+                fontFamily: T.sans,
+              }}
+            >
+              {uploading ? 'Uploading…' : hasImage ? 'Change photo' : 'Upload photo'}
+            </button>
+            {hasImage && !uploading && (
+              <button
+                type="button"
+                onClick={clearPhoto}
+                className="btn-press"
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  fontSize: 12,
+                  color: T.muted,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                remove
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={onFileSelected}
+          />
+          {uploadErr && (
+            <div role="status" aria-live="polite" style={{ marginTop: 8, fontSize: 12, color: T.muted, fontFamily: T.mono }}>
+              {uploadErr}
+            </div>
+          )}
+        </div>
       </div>
-      <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
-        Free tier · 5 walkthroughs / day.
-      </div>
+
       <SignOutButton>
         <button
           className="btn-press chamfer"
