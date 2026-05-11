@@ -27,6 +27,7 @@ interface Env {
   CLERK_PUBLISHABLE_KEY: string;
   ALLOWED_ORIGINS: string;
   PRO_USER_IDS?: string;
+  MAX_USER_IDS?: string;
   USAGE: KVNamespace;
 }
 
@@ -37,6 +38,8 @@ interface WalkthroughBody {
   courseId?: string;
   topicId?: string;
   problem?: string;
+  action?: 'walkthrough' | 'why-how';
+  walkthroughSoFar?: string;
 }
 
 interface ClassifyBody {
@@ -95,6 +98,28 @@ async function handleWalkthrough(
   }
 
   const tier: Tier = resolveTier(authState, env);
+
+  // Gate Why/How to paid tiers only.
+  let parsedBody: WalkthroughBody | null = null;
+  try {
+    parsedBody = (await request.clone().json()) as WalkthroughBody;
+  } catch {
+    // We'll re-parse below and surface the error there.
+  }
+  if (
+    parsedBody?.action === 'why-how' &&
+    tier !== 'plus' &&
+    tier !== 'pro'
+  ) {
+    return json(
+      {
+        error: 'upgrade_required',
+        message: 'Why & how is a MathIQ+ feature.',
+      },
+      403,
+      cors,
+    );
+  }
   const counter: CounterRef =
     authState.kind === 'user'
       ? userCounter(env.USAGE, authState.userId)
@@ -143,7 +168,11 @@ async function handleWalkthrough(
     return json({ error: 'invalid JSON body' }, 400, { ...cors, ...baseHeaders });
   }
 
-  const { courseId, topicId, problem } = body;
+  const { courseId, topicId, problem, action, walkthroughSoFar } = body;
+  const walkAction: 'walkthrough' | 'why-how' =
+    action === 'why-how' ? 'why-how' : 'walkthrough';
+  const walkthroughSoFarClean =
+    typeof walkthroughSoFar === 'string' ? walkthroughSoFar : undefined;
   if (!courseId || !topicId) {
     return json(
       { error: 'courseId and topicId required' },
@@ -172,6 +201,8 @@ async function handleWalkthrough(
           course,
           topic,
           problem,
+          action: walkAction,
+          walkthroughSoFar: walkthroughSoFarClean,
         })
       : await callOpenRouterStream({
           apiKey: env.OPENROUTER_API_KEY,
@@ -179,6 +210,8 @@ async function handleWalkthrough(
           course,
           topic,
           problem,
+          action: walkAction,
+          walkthroughSoFar: walkthroughSoFarClean,
         });
 
   if (!upstream.ok || !upstream.body) {
@@ -203,7 +236,11 @@ async function handleWalkthrough(
       'X-Model-Used': model.id,
       'X-Degraded': decision.degraded ? 'true' : 'false',
       'content-type': 'text/plain; charset=utf-8',
-      'cache-control': 'no-store',
+      // `no-transform` tells Cloudflare's edge not to gzip the response, which
+      // would otherwise buffer streamed tokens before flushing. We *need* the
+      // browser to see each chunk as it lands so the step parser can split.
+      'cache-control': 'no-store, no-transform',
+      'content-encoding': 'identity',
       'x-content-type-options': 'nosniff',
     },
   });

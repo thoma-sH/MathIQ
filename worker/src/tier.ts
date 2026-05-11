@@ -1,33 +1,36 @@
 /**
  * Tier resolution.
  *
- * For C3, Pro membership is a comma-separated env whitelist
- * (`PRO_USER_IDS`). C4 swaps this for D1-backed subscription state.
+ * Identifiers:
+ *   'anonymous' — not signed in
+ *   'free'      — signed in, no paid plan
+ *   'plus'      — MathIQ+   ($7.99/mo): 20 Opus + 50 Sonnet daily
+ *   'pro'       — MathIQ Pro ($29.99/mo): 70 Opus daily
+ *
+ * For C3 (this commit), MathIQ+ membership is a comma-separated env
+ * whitelist (`PRO_USER_IDS`, retained for backward compatibility with
+ * existing local config — semantically it now grants MathIQ+). MathIQ Pro
+ * has no provisioning path yet; it lights up when Stripe lands (C4).
  */
 
-export type Tier = 'anonymous' | 'free' | 'pro';
+export type Tier = 'anonymous' | 'free' | 'plus' | 'pro';
 
 export function resolveTier(
   authState: { kind: 'user'; userId: string } | { kind: 'anonymous' },
-  env: { PRO_USER_IDS?: string },
+  env: { PRO_USER_IDS?: string; MAX_USER_IDS?: string },
 ): Tier {
   if (authState.kind === 'anonymous') return 'anonymous';
-  const whitelist = (env.PRO_USER_IDS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (whitelist.includes(authState.userId)) return 'pro';
+  const inList = (raw: string | undefined) =>
+    (raw ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .includes(authState.userId);
+  if (inList(env.MAX_USER_IDS)) return 'pro';
+  if (inList(env.PRO_USER_IDS)) return 'plus';
   return 'free';
 }
 
-/**
- * Returns the model to use for the *current* request given the tier and how
- * many walkthroughs the user has already used today (counted *before* this
- * one is counted in).
- *
- * Pro tiering: first 20 → Opus 4.6, next 50 → Sonnet 4.6 (degraded),
- * after that → 429.
- */
 export type ModelKey =
   | { provider: 'anthropic'; id: 'claude-opus-4-6' | 'claude-sonnet-4-6' }
   | { provider: 'openrouter'; id: 'deepseek/deepseek-chat' };
@@ -38,17 +41,18 @@ export interface TierDecision {
   /** Model to use for *this* request. Null if the user is over the ceiling. */
   model: ModelKey | null;
   /** True when the user is on the fallback model because they exhausted
-   *  their premium allotment. Always false for non-Pro tiers. */
+   *  their premium allotment. Always false for non-paid tiers. */
   degraded: boolean;
-  /** For Pro: how many premium (non-degraded) walkthroughs they get
-   *  before degrading. Undefined for non-Pro. */
+  /** For paid tiers with a premium allotment: how many premium (non-degraded)
+   *  walkthroughs the user gets before degrading. Undefined for free tiers. */
   premiumAllotment?: number;
 }
 
-const FREE_LIMIT = 5;
 const ANONYMOUS_LIMIT = 1;
-const PRO_OPUS_LIMIT = 20;
-const PRO_TOTAL_LIMIT = 70;
+const FREE_LIMIT = 5;
+const PLUS_OPUS_LIMIT = 20;
+const PLUS_TOTAL_LIMIT = 70;
+const PRO_LIMIT = 70;
 
 const DEEPSEEK: ModelKey = { provider: 'openrouter', id: 'deepseek/deepseek-chat' };
 const OPUS: ModelKey = { provider: 'anthropic', id: 'claude-opus-4-6' };
@@ -69,27 +73,36 @@ export function decideTier(tier: Tier, alreadyUsedToday: number): TierDecision {
       degraded: false,
     };
   }
-  // Pro
-  if (alreadyUsedToday < PRO_OPUS_LIMIT) {
+  if (tier === 'pro') {
+    // MathIQ Pro: 70 Opus calls daily, no degradation.
     return {
-      ceiling: PRO_TOTAL_LIMIT,
-      model: OPUS,
+      ceiling: PRO_LIMIT,
+      model: alreadyUsedToday < PRO_LIMIT ? OPUS : null,
       degraded: false,
-      premiumAllotment: PRO_OPUS_LIMIT,
+      premiumAllotment: PRO_LIMIT,
     };
   }
-  if (alreadyUsedToday < PRO_TOTAL_LIMIT) {
+  // MathIQ+ ('plus'): 20 Opus then 50 Sonnet, total 70.
+  if (alreadyUsedToday < PLUS_OPUS_LIMIT) {
     return {
-      ceiling: PRO_TOTAL_LIMIT,
+      ceiling: PLUS_TOTAL_LIMIT,
+      model: OPUS,
+      degraded: false,
+      premiumAllotment: PLUS_OPUS_LIMIT,
+    };
+  }
+  if (alreadyUsedToday < PLUS_TOTAL_LIMIT) {
+    return {
+      ceiling: PLUS_TOTAL_LIMIT,
       model: SONNET,
       degraded: true,
-      premiumAllotment: PRO_OPUS_LIMIT,
+      premiumAllotment: PLUS_OPUS_LIMIT,
     };
   }
   return {
-    ceiling: PRO_TOTAL_LIMIT,
+    ceiling: PLUS_TOTAL_LIMIT,
     model: null,
     degraded: false,
-    premiumAllotment: PRO_OPUS_LIMIT,
+    premiumAllotment: PLUS_OPUS_LIMIT,
   };
 }

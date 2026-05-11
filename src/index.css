@@ -136,6 +136,39 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 .lift:hover .arrow-nudge,
 .btn-press:hover .arrow-nudge { transform: translateX(4px); }
 
+/* ─── Course card hover: accent stripe + title shift ──────────────── */
+.course-card { position: relative; overflow: hidden; }
+.course-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--accent);
+  transition: width 240ms var(--ease-out-expo);
+}
+.course-card:hover::before { width: 4px; }
+.course-card .card-title {
+  transition: transform 280ms var(--ease-out-expo);
+}
+.course-card:hover .card-title { transform: translateX(6px); }
+
+/* ─── Type-in caret for the day kicker ─────────────────────────── */
+.type-caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.85em;
+  margin-left: 2px;
+  vertical-align: -0.07em;
+  background: var(--ink);
+  animation: caret-blink 900ms steps(2, end) infinite;
+}
+@keyframes caret-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
 /* ─── Responsive padding utility ──────────────────────────────────── */
 .responsive-pad { padding: 24px 20px; }
 @media (min-width: 600px) { .responsive-pad { padding: 32px 32px; } }

@@ -29,8 +29,8 @@ export interface RateLimitInfo {
   remaining: number;
   /** 'anonymous' if the user is unauthenticated, 'user' if signed in. */
   scope: 'anonymous' | 'user';
-  /** 'anonymous' | 'free' | 'pro' */
-  tier: 'anonymous' | 'free' | 'pro';
+  /** 'anonymous' | 'free' | 'plus' | 'pro' */
+  tier: 'anonymous' | 'free' | 'plus' | 'pro';
   /** Which model the worker actually used for this response. */
   modelUsed?: string;
   /** True if the user is on the degraded (fallback) model because they
@@ -39,6 +39,8 @@ export interface RateLimitInfo {
   /** For Pro: how many premium walkthroughs they get before degrading. */
   premiumAllotment?: number;
 }
+
+export type WalkthroughAction = 'walkthrough' | 'why-how';
 
 export interface GenerateRequest {
   course: Course;
@@ -50,6 +52,10 @@ export interface GenerateRequest {
   getToken?: () => Promise<string | null>;
   /** Called once when the worker responds, with current usage info. */
   onRateLimitInfo?: (info: RateLimitInfo) => void;
+  /** 'walkthrough' = full one-shot walkthrough; 'why-how' = explain a specific step from the prior walkthrough. */
+  action?: WalkthroughAction;
+  /** For action='why-how': the walkthrough text up to and including the step being explained. */
+  walkthroughSoFar?: string;
 }
 
 export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<string> {
@@ -64,6 +70,8 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
       courseId: req.course.id,
       topicId: req.topic.id,
       problem: req.problem,
+      action: req.action ?? 'walkthrough',
+      walkthroughSoFar: req.walkthroughSoFar,
     }),
     signal: req.signal,
   });
@@ -131,8 +139,14 @@ function emitRateLimit(
   const scope: 'anonymous' | 'user' = scopeHeader === 'user' ? 'user' : 'anonymous';
 
   const tierHeader = resp.headers.get('X-Tier');
-  const tier: 'anonymous' | 'free' | 'pro' =
-    tierHeader === 'pro' ? 'pro' : tierHeader === 'free' ? 'free' : 'anonymous';
+  const tier: 'anonymous' | 'free' | 'plus' | 'pro' =
+    tierHeader === 'pro'
+      ? 'pro'
+      : tierHeader === 'plus'
+        ? 'plus'
+        : tierHeader === 'free'
+          ? 'free'
+          : 'anonymous';
 
   const modelUsed = resp.headers.get('X-Model-Used') ?? undefined;
   const degraded = resp.headers.get('X-Degraded') === 'true';

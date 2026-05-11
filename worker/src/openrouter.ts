@@ -3,9 +3,11 @@
  * Same plain-text output shape as the Anthropic helper.
  */
 import type { Course, Topic } from './courses';
-import { TUTORING_FOUNDATION } from './prompt';
+import { buildSystemPromptFlat, WHY_HOW_INSTRUCTION } from './prompt';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+export type WalkthroughAction = 'walkthrough' | 'why-how';
 
 export interface OpenRouterCallParams {
   apiKey: string;
@@ -18,6 +20,8 @@ export interface OpenRouterCallParams {
   /** Optional — for OpenRouter analytics. */
   appUrl?: string;
   appName?: string;
+  action?: WalkthroughAction;
+  walkthroughSoFar?: string;
 }
 
 export interface OpenRouterCallResult {
@@ -36,31 +40,21 @@ export async function callOpenRouterStream(
     course,
     topic,
     problem,
-    maxTokens = 4096,
+    maxTokens = 8192,
     appUrl,
     appName = 'MathIQ',
+    action = 'walkthrough',
+    walkthroughSoFar,
   } = params;
 
-  // OpenAI-compatible API doesn't have the same cache_control concept as
-  // Anthropic; concat the foundation + per-topic context into a single
-  // system message. OpenRouter does its own prefix caching automatically
-  // when the same system message recurs.
-  const systemPrompt =
-    `${TUTORING_FOUNDATION}\n\n---\n\nCURRENT SESSION\n\n` +
-    `You are tutoring a student in **${course.title}**.\n\n` +
-    `The current topic is **${topic.title}**.\n\n` +
-    `Topic blurb: ${topic.blurb}\n\n` +
-    `Strategic anchor for this topic (use this as your guiding ` +
-    `heuristic, but explain it inline as you do — don't dump it as a ` +
-    `preamble):\n${topic.strategicAnchor}\n\n` +
-    `The student may ask about the canonical example problem for this ` +
-    `topic, or paste their own problem. Either way, walk them through ` +
-    `it one line at a time, following all the principles above.`;
+  const systemPrompt = buildSystemPromptFlat(course, topic);
 
   const problemText = problem?.trim() || topic.exampleProblem;
-  const userText = problem
+  const initialUserText = problem
     ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
     : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
+
+  const conversation = buildConversation(initialUserText, action, walkthroughSoFar);
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
@@ -78,7 +72,7 @@ export async function callOpenRouterStream(
       stream: true,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userText },
+        ...conversation,
       ],
     }),
   });
@@ -98,6 +92,21 @@ export async function callOpenRouterStream(
     status: resp.status,
     body: transformOpenAiSse(resp.body),
   };
+}
+
+function buildConversation(
+  initialUserText: string,
+  action: WalkthroughAction,
+  walkthroughSoFar: string | undefined,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  if (action === 'why-how' && walkthroughSoFar?.trim()) {
+    return [
+      { role: 'user', content: initialUserText },
+      { role: 'assistant', content: walkthroughSoFar.trim() },
+      { role: 'user', content: WHY_HOW_INSTRUCTION },
+    ];
+  }
+  return [{ role: 'user', content: initialUserText }];
 }
 
 /**

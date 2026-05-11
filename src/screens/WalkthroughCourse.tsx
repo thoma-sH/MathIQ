@@ -3,6 +3,7 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
+import { NotFound } from './NotFound';
 import type { Topic } from '../walkthroughs/types';
 import type { Route } from '../router';
 
@@ -93,26 +94,10 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
 
   if (!course) {
     return (
-      <main className="responsive-pad" style={{ maxWidth: 720, margin: '0 auto', paddingTop: 32 }}>
-        <p style={{ fontSize: 14, color: T.muted, marginBottom: 16 }}>
-          That course doesn't exist.
-        </p>
-        <button
-          onClick={() => onNavigate({ name: 'home' })}
-          className="btn-press chamfer"
-          style={{
-            background: T.ink,
-            color: T.paper,
-            border: 'none',
-            padding: '10px 18px',
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-        >
-          ← Back home
-        </button>
-      </main>
+      <NotFound
+        message="That course doesn't exist — it may have been renamed or removed."
+        onNavigate={onNavigate}
+      />
     );
   }
 

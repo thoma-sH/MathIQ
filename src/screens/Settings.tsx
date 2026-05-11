@@ -6,6 +6,7 @@ import {
   useUser,
 } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
+import { usePromptFlow, type PromptFlow } from '../state/promptFlow';
 
 export function Settings() {
   return (
@@ -41,7 +42,7 @@ export function Settings() {
           maxWidth: 540,
         }}
       >
-        Sign in to get 5 walkthroughs per day on the premium model.
+        Sign in for 5 walkthroughs per day. Paid plans add deeper models and the Why & how reflection on every step.
       </p>
 
       <SignedIn>
@@ -50,7 +51,102 @@ export function Settings() {
       <SignedOut>
         <SignedOutCard />
       </SignedOut>
+
+      <PromptFlowCard />
     </main>
+  );
+}
+
+function PromptFlowCard() {
+  const [flow, setFlow] = usePromptFlow();
+  return (
+    <section
+      className="reveal reveal-4"
+      style={{
+        padding: '24px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginTop: 14,
+      }}
+    >
+      <div style={kicker()}>WALKTHROUGH PACE</div>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          marginTop: 6,
+        }}
+      >
+        <FlowOption
+          value="step"
+          label="Step by step"
+          description="Iris emits one step at a time. You decide when to advance."
+          current={flow}
+          onSelect={setFlow}
+        />
+        <FlowOption
+          value="all"
+          label="All at once"
+          description="The full walkthrough streams end-to-end in one go."
+          current={flow}
+          onSelect={setFlow}
+        />
+      </div>
+    </section>
+  );
+}
+
+function FlowOption({
+  value,
+  label,
+  description,
+  current,
+  onSelect,
+}: {
+  value: PromptFlow;
+  label: string;
+  description: string;
+  current: PromptFlow;
+  onSelect: (v: PromptFlow) => void;
+}) {
+  const selected = current === value;
+  return (
+    <button
+      onClick={() => onSelect(value)}
+      className="btn-press"
+      style={{
+        background: selected ? T.paper : 'transparent',
+        border: `1px solid ${selected ? T.ink : T.hair}`,
+        padding: '12px 14px',
+        textAlign: 'left',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        color: T.ink,
+        display: 'flex',
+        gap: 12,
+        alignItems: 'flex-start',
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          display: 'inline-block',
+          width: 16,
+          height: 16,
+          flexShrink: 0,
+          marginTop: 2,
+          border: `1px solid ${T.ink}`,
+          borderRadius: '50%',
+          background: selected ? T.ink : 'transparent',
+          boxShadow: selected ? `inset 0 0 0 3px ${T.paper}` : 'none',
+        }}
+      />
+      <span>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{label}</div>
+        <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>{description}</div>
+      </span>
+    </button>
   );
 }
 
@@ -73,7 +169,7 @@ function AccountCard() {
         {email}
       </div>
       <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
-        Free tier · 5 walkthroughs / day on Sonnet 4.6.
+        Free tier · 5 walkthroughs / day.
       </div>
       <SignOutButton>
         <button
@@ -100,9 +196,15 @@ function AccountCard() {
           borderTop: `1px solid ${T.hair}`,
         }}
       >
-        <div style={kicker()}>PRO UPGRADE</div>
-        <div style={{ fontSize: 14, lineHeight: 1.5, marginTop: 6 }}>
-          Coming soon — $7.99/mo for 50 walkthroughs/day on the premium model, unlimited saves, and exam-prep burst.
+        <div style={kicker()}>PAID PLANS</div>
+        <div style={{ fontSize: 14, lineHeight: 1.55, marginTop: 6 }}>
+          <strong>MathIQ+</strong> — $7.99/mo. 20 Opus 4.6 walkthroughs, then 50 Sonnet 4.6. Why & how on every step.
+        </div>
+        <div style={{ fontSize: 14, lineHeight: 1.55, marginTop: 10 }}>
+          <strong>MathIQ Pro</strong> — $29.99/mo. 70 Opus 4.6 walkthroughs daily, no degradation. Why & how on every step.
+        </div>
+        <div style={{ fontSize: 13, color: T.muted, marginTop: 10 }}>
+          Billing coming soon.
         </div>
       </div>
     </section>
@@ -125,7 +227,7 @@ function SignedOutCard() {
         You get 1 free walkthrough per day.
       </div>
       <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5, marginBottom: 16 }}>
-        Sign in (email magic link, no password) to get 5 walkthroughs/day on the premium model.
+        Sign in (email magic link, no password) for 5 walkthroughs/day.
       </div>
       <SignInButton mode="modal">
         <button

@@ -3,9 +3,11 @@
  * returns a plain-text ReadableStream of the model's output.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPrompt } from './prompt';
+import { buildSystemPrompt, WHY_HOW_INSTRUCTION } from './prompt';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+
+export type WalkthroughAction = 'walkthrough' | 'why-how';
 
 export interface AnthropicCallParams {
   apiKey: string;
@@ -14,6 +16,10 @@ export interface AnthropicCallParams {
   topic: Topic;
   problem?: string;
   maxTokens?: number;
+  action?: WalkthroughAction;
+  /** For action='why-how': the walkthrough text shown to the student so far,
+   *  ending with the step we want explained. */
+  walkthroughSoFar?: string;
 }
 
 export interface AnthropicCallResult {
@@ -28,12 +34,23 @@ export interface AnthropicCallResult {
 export async function callAnthropicStream(
   params: AnthropicCallParams,
 ): Promise<AnthropicCallResult> {
-  const { apiKey, model, course, topic, problem, maxTokens = 4096 } = params;
+  const {
+    apiKey,
+    model,
+    course,
+    topic,
+    problem,
+    maxTokens = 8192,
+    action = 'walkthrough',
+    walkthroughSoFar,
+  } = params;
 
   const problemText = problem?.trim() || topic.exampleProblem;
-  const userText = problem
+  const initialUserText = problem
     ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
     : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
+
+  const messages = buildConversation(initialUserText, action, walkthroughSoFar);
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -46,7 +63,7 @@ export async function callAnthropicStream(
       model,
       max_tokens: maxTokens,
       system: buildSystemPrompt(course, topic),
-      messages: [{ role: 'user', content: userText }],
+      messages,
       stream: true,
     }),
   });
@@ -66,6 +83,21 @@ export async function callAnthropicStream(
     status: resp.status,
     body: transformAnthropicSse(resp.body),
   };
+}
+
+function buildConversation(
+  initialUserText: string,
+  action: WalkthroughAction,
+  walkthroughSoFar: string | undefined,
+): Array<{ role: 'user' | 'assistant'; content: string }> {
+  if (action === 'why-how' && walkthroughSoFar?.trim()) {
+    return [
+      { role: 'user', content: initialUserText },
+      { role: 'assistant', content: walkthroughSoFar.trim() },
+      { role: 'user', content: WHY_HOW_INSTRUCTION },
+    ];
+  }
+  return [{ role: 'user', content: initialUserText }];
 }
 
 function transformAnthropicSse(

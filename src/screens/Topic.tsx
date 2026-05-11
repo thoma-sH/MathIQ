@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SignInButton, useAuth } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -11,6 +11,8 @@ import {
   type RateLimitInfo,
 } from '../walkthroughs/generate';
 import { classifyTopic } from '../walkthroughs/classify';
+import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
+import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
 interface TopicScreenProps {
@@ -20,17 +22,52 @@ interface TopicScreenProps {
   onNavigate: (route: Route) => void;
 }
 
-type Status =
-  | 'idle'
-  | 'streaming'
-  | 'done'
-  | 'error'
-  | 'sign-in-required'
-  | 'rate-limited';
+type LimitStatus = 'sign-in-required' | 'rate-limited' | 'error' | null;
 
 interface RateLimitDisplay {
   message: string;
   resetAt?: string;
+}
+
+type StreamTarget =
+  | null
+  | 'walkthrough'
+  | { kind: 'why-how'; index: number };
+
+// Accept any `**Step N...` regardless of terminator. Some models drift from
+// `**Step 1.**` to `**Step 1:**` or `**Step 1**` after the first marker.
+const STEP_MARKER = /\*\*Step\s+\d+/gi;
+
+interface ParsedStream {
+  /** Segments where the *next* marker has arrived, or stream is done. */
+  complete: string[];
+  /** Currently-arriving last segment, while streaming. Null when done or no markers seen. */
+  streamingTail: string | null;
+}
+
+function parseStream(buffer: string, done: boolean): ParsedStream {
+  if (!buffer.trim()) {
+    return { complete: [], streamingTail: null };
+  }
+  const positions: number[] = [];
+  STEP_MARKER.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = STEP_MARKER.exec(buffer)) !== null) positions.push(m.index);
+  if (positions.length === 0) {
+    return done
+      ? { complete: [buffer.trim()], streamingTail: null }
+      : { complete: [], streamingTail: buffer.trim() || null };
+  }
+  const complete: string[] = [];
+  for (let i = 0; i < positions.length - 1; i++) {
+    complete.push(buffer.slice(positions[i], positions[i + 1]).trim());
+  }
+  const tail = buffer.slice(positions[positions.length - 1]).trim();
+  if (done) {
+    complete.push(tail);
+    return { complete, streamingTail: null };
+  }
+  return { complete, streamingTail: tail };
 }
 
 export function TopicScreen({
@@ -43,53 +80,81 @@ export function TopicScreen({
   const topic = course?.topics.find((t) => t.id === topicId);
   const { getToken, isSignedIn } = useAuth();
 
-  const [output, setOutput] = useState('');
-  const [status, setStatus] = useState<Status>('idle');
+  const [buffer, setBuffer] = useState('');
+  const [streamDone, setStreamDone] = useState(false);
+  const [sessionMode, setSessionMode] = useState<PromptFlow>('step');
+  const [revealCount, setRevealCount] = useState(0);
+  const [problemForSession, setProblemForSession] = useState<string | undefined>();
+  const [streaming, setStreaming] = useState<StreamTarget>(null);
+
+  const [whyHow, setWhyHow] = useState<Record<number, string>>({});
+  const [whyHowStream, setWhyHowStream] = useState<{ index: number; text: string } | null>(null);
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  const [limitStatus, setLimitStatus] = useState<LimitStatus>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [rateInfo, setRateInfo] = useState<RateLimitInfo | null>(null);
   const [limitDetail, setLimitDetail] = useState<RateLimitDisplay | null>(null);
   const [customProblem, setCustomProblem] = useState(initialProblem ?? '');
   const [classifying, setClassifying] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const walkthroughAbortRef = useRef<AbortController | null>(null);
+  const whyHowAbortRef = useRef<AbortController | null>(null);
+
+  const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
+
+  // Auto-reveal the first segment as soon as it lands.
+  useEffect(() => {
+    if (revealCount === 0 && parsed.complete.length > 0) {
+      setRevealCount(1);
+    }
+  }, [parsed.complete.length, revealCount]);
 
   useEffect(() => {
     if (initialProblem && course && topic) {
       void runWalkthrough(initialProblem);
     }
-    return () => abortRef.current?.abort();
+    return () => {
+      walkthroughAbortRef.current?.abort();
+      whyHowAbortRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProblem, courseId, topicId]);
 
   if (!course || !topic) {
     return (
-      <main
-        className="responsive-pad"
-        style={{ maxWidth: 720, margin: '0 auto', paddingTop: 32 }}
-      >
-        <p style={{ fontSize: 14, color: T.muted, marginBottom: 16 }}>
-          That topic doesn't exist.
-        </p>
-        <button
-          onClick={() => onNavigate({ name: 'home' })}
-          className="btn-press chamfer"
-          style={cta()}
-        >
-          ← Back home
-        </button>
-      </main>
+      <NotFound
+        message="That topic doesn't exist — it may have been renamed or removed."
+        onNavigate={onNavigate}
+      />
     );
   }
 
-  async function runWalkthrough(problem?: string) {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setStatus('streaming');
-    setOutput('');
+  function resetSession() {
+    walkthroughAbortRef.current?.abort();
+    whyHowAbortRef.current?.abort();
+    setBuffer('');
+    setStreamDone(false);
+    setRevealCount(0);
+    setWhyHow({});
+    setWhyHowStream(null);
+    setExpanded({});
+    setLimitStatus(null);
     setErrorMsg(null);
     setLimitDetail(null);
+  }
 
+  async function runWalkthrough(problem?: string) {
+    resetSession();
+    const mode = getPromptFlow();
+    setSessionMode(mode);
+    setProblemForSession(problem);
+
+    walkthroughAbortRef.current?.abort();
+    const controller = new AbortController();
+    walkthroughAbortRef.current = controller;
+    setStreaming('walkthrough');
+
+    let accumulated = '';
     try {
       for await (const chunk of streamWalkthrough({
         course: course!,
@@ -98,30 +163,84 @@ export function TopicScreen({
         signal: controller.signal,
         getToken,
         onRateLimitInfo: setRateInfo,
+        action: 'walkthrough',
       })) {
-        setOutput((prev) => prev + chunk);
+        accumulated += chunk;
+        setBuffer(accumulated);
       }
-      setStatus('done');
+      setStreamDone(true);
+      setStreaming((s) => (s === 'walkthrough' ? null : s));
+      if (mode === 'all') {
+        // Reveal everything immediately.
+        const { complete } = parseStream(accumulated, true);
+        setRevealCount(complete.length);
+      }
     } catch (err) {
       if (controller.signal.aborted) return;
-      if (err instanceof WalkthroughError) {
-        if (err.kind === 'sign_in_required') {
-          setStatus('sign-in-required');
-          setLimitDetail({ message: err.message });
-          return;
-        }
-        if (err.kind === 'rate_limit') {
-          setStatus('rate-limited');
-          setLimitDetail({
-            message: err.message,
-            resetAt: err.data?.resetAt,
-          });
-          return;
-        }
-      }
-      setStatus('error');
-      setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
+      setStreaming((s) => (s === 'walkthrough' ? null : s));
+      handleStreamError(err);
     }
+  }
+
+  async function requestWhyHow(index: number) {
+    setExpanded((p) => ({ ...p, [index]: true }));
+    if (whyHow[index] !== undefined) return;
+
+    // Abort only any prior why-how stream — leave the walkthrough alone.
+    whyHowAbortRef.current?.abort();
+    const controller = new AbortController();
+    whyHowAbortRef.current = controller;
+    setStreaming({ kind: 'why-how', index });
+    setWhyHowStream({ index, text: '' });
+
+    // Send the walkthrough text up to and including the target step.
+    const cumulative = parsed.complete.slice(0, index + 1).join('\n\n');
+
+    let accumulated = '';
+    try {
+      for await (const chunk of streamWalkthrough({
+        course: course!,
+        topic: topic!,
+        problem: problemForSession,
+        signal: controller.signal,
+        getToken,
+        onRateLimitInfo: setRateInfo,
+        action: 'why-how',
+        walkthroughSoFar: cumulative,
+      })) {
+        accumulated += chunk;
+        setWhyHowStream({ index, text: accumulated });
+      }
+      setWhyHow((p) => ({ ...p, [index]: accumulated }));
+      setWhyHowStream(null);
+      setStreaming((s) =>
+        s && typeof s === 'object' && s.kind === 'why-how' && s.index === index ? null : s,
+      );
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setWhyHowStream(null);
+      setStreaming((s) =>
+        s && typeof s === 'object' && s.kind === 'why-how' && s.index === index ? null : s,
+      );
+      handleStreamError(err);
+    }
+  }
+
+  function handleStreamError(err: unknown) {
+    if (err instanceof WalkthroughError) {
+      if (err.kind === 'sign_in_required') {
+        setLimitStatus('sign-in-required');
+        setLimitDetail({ message: err.message });
+        return;
+      }
+      if (err.kind === 'rate_limit') {
+        setLimitStatus('rate-limited');
+        setLimitDetail({ message: err.message, resetAt: err.data?.resetAt });
+        return;
+      }
+    }
+    setLimitStatus('error');
+    setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
   }
 
   async function submitCustomProblem() {
@@ -130,10 +249,7 @@ export function TopicScreen({
 
     setClassifying(true);
     try {
-      const match = await classifyTopic({
-        problem: trimmed,
-        getToken,
-      });
+      const match = await classifyTopic({ problem: trimmed, getToken });
       if (
         match &&
         (match.courseId !== course!.id || match.topicId !== topic!.id)
@@ -155,6 +271,33 @@ export function TopicScreen({
   }
 
   const otherTopics = course.topics.filter((t) => t.id !== topic.id).slice(0, 4);
+  const hasOutput = parsed.complete.length > 0 || parsed.streamingTail !== null;
+  const isStreamingWalkthrough = streaming === 'walkthrough';
+  const isStreamingAnything = streaming !== null;
+
+  // In step mode, only show segments up to revealCount.
+  const visibleSteps =
+    sessionMode === 'all'
+      ? parsed.complete
+      : parsed.complete.slice(0, revealCount);
+
+  const isPaid = rateInfo?.tier === 'plus' || rateInfo?.tier === 'pro';
+
+  const finalAnswered = useMemo(
+    () => streamDone && /\*\*Answer:\*\*/i.test(buffer),
+    [streamDone, buffer],
+  );
+
+  const canRevealMore =
+    sessionMode === 'step' && revealCount < parsed.complete.length;
+  const moreIncoming =
+    sessionMode === 'step' &&
+    revealCount === parsed.complete.length &&
+    !streamDone &&
+    isStreamingWalkthrough;
+  const walkthroughFinished =
+    streamDone &&
+    (sessionMode === 'all' || revealCount >= parsed.complete.length);
 
   return (
     <main
@@ -198,10 +341,7 @@ export function TopicScreen({
         }}
       >
         <div style={kicker()}>STRATEGIC ANCHOR</div>
-        <div
-          className="markdown-body"
-          style={{ fontSize: 15, lineHeight: 1.55 }}
-        >
+        <div className="markdown-body" style={{ fontSize: 15, lineHeight: 1.55 }}>
           <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
             {topic.strategicAnchor}
           </ReactMarkdown>
@@ -227,7 +367,7 @@ export function TopicScreen({
         </div>
       </section>
 
-      {status === 'idle' && (
+      {!hasOutput && !limitStatus && !isStreamingAnything && (
         <button
           onClick={() => runWalkthrough()}
           className="btn-press chamfer reveal reveal-4"
@@ -237,7 +377,7 @@ export function TopicScreen({
         </button>
       )}
 
-      {status === 'streaming' && (
+      {isStreamingAnything && (
         <div
           style={{
             marginBottom: 12,
@@ -247,11 +387,15 @@ export function TopicScreen({
             flexWrap: 'wrap',
           }}
         >
-          <span style={kicker(0)}>IRIS IS STREAMING…</span>
+          <span style={kicker(0)}>
+            {isStreamingWalkthrough ? 'IRIS IS STREAMING…' : 'WHY & HOW STREAMING…'}
+          </span>
           <button
             onClick={() => {
-              abortRef.current?.abort();
-              setStatus('done');
+              walkthroughAbortRef.current?.abort();
+              whyHowAbortRef.current?.abort();
+              setStreaming(null);
+              setWhyHowStream(null);
             }}
             className="btn-press"
             style={{
@@ -269,7 +413,7 @@ export function TopicScreen({
         </div>
       )}
 
-      {rateInfo && (status === 'streaming' || status === 'done') && (
+      {rateInfo && (hasOutput || isStreamingAnything) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
           <UsagePill rate={rateInfo} signedIn={!!isSignedIn} />
           {rateInfo.modelUsed && (
@@ -288,7 +432,7 @@ export function TopicScreen({
         </div>
       )}
 
-      {rateInfo?.degraded && rateInfo.tier === 'pro' && (status === 'streaming' || status === 'done') && (
+      {rateInfo?.degraded && rateInfo.tier === 'plus' && (hasOutput || isStreamingAnything) && (
         <div
           style={{
             border: `1px solid ${T.ink}`,
@@ -304,7 +448,7 @@ export function TopicScreen({
         </div>
       )}
 
-      {status === 'sign-in-required' && (
+      {limitStatus === 'sign-in-required' && (
         <div style={errorBox()}>
           <div style={kicker()}>FREE WALKTHROUGH USED</div>
           <p style={{ margin: '6px 0 12px', fontSize: 14, lineHeight: 1.5 }}>
@@ -319,7 +463,7 @@ export function TopicScreen({
         </div>
       )}
 
-      {status === 'rate-limited' && (
+      {limitStatus === 'rate-limited' && (
         <div style={errorBox()}>
           <div style={kicker()}>DAILY LIMIT REACHED</div>
           <p style={{ margin: '6px 0 12px', fontSize: 14, lineHeight: 1.5 }}>
@@ -336,7 +480,7 @@ export function TopicScreen({
         </div>
       )}
 
-      {status === 'error' && errorMsg && (
+      {limitStatus === 'error' && errorMsg && (
         <div style={errorBox()}>
           <div style={kicker()}>SOMETHING WENT WRONG</div>
           <p
@@ -350,7 +494,7 @@ export function TopicScreen({
             {errorMsg}
           </p>
           <button
-            onClick={() => runWalkthrough()}
+            onClick={() => runWalkthrough(problemForSession)}
             className="btn-press chamfer"
             style={cta()}
           >
@@ -359,7 +503,28 @@ export function TopicScreen({
         </div>
       )}
 
-      {output && (
+      {visibleSteps.map((stepText, i) => (
+        <StepCard
+          key={i}
+          index={i}
+          text={stepText}
+          showWhyHow={isPaid}
+          whyHowText={whyHow[i]}
+          whyHowExpanded={!!expanded[i]}
+          whyHowStreaming={whyHowStream?.index === i ? whyHowStream.text : null}
+          onToggleWhyHow={() => {
+            if (whyHow[i] !== undefined) {
+              setExpanded((p) => ({ ...p, [i]: !p[i] }));
+              return;
+            }
+            void requestWhyHow(i);
+          }}
+          disabledWhyHow={isStreamingAnything}
+        />
+      ))}
+
+      {/* In 'all' mode, show the streaming tail inline as it arrives. */}
+      {sessionMode === 'all' && parsed.streamingTail && (
         <article
           className="markdown-body"
           style={{
@@ -372,9 +537,68 @@ export function TopicScreen({
           }}
         >
           <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {output}
+            {parsed.streamingTail}
           </ReactMarkdown>
         </article>
+      )}
+
+      {canRevealMore && (
+        <button
+          onClick={() => setRevealCount((n) => n + 1)}
+          className="btn-press chamfer"
+          style={{ ...primaryCta(), marginTop: 16 }}
+        >
+          Next step →
+        </button>
+      )}
+
+      {moreIncoming && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: T.muted,
+            fontFamily: T.mono,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+          }}
+        >
+          … preparing next step
+        </div>
+      )}
+
+      {isStreamingWalkthrough && !streamDone && !moreIncoming && visibleSteps.length > 0 && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 13,
+            color: T.muted,
+            fontFamily: T.mono,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+          }}
+        >
+          … iris is still writing
+        </div>
+      )}
+
+      {walkthroughFinished && (
+        <div
+          style={{
+            marginTop: 16,
+            fontSize: 12,
+            color: T.muted,
+            fontFamily: T.mono,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {finalAnswered
+            ? 'Walkthrough complete'
+            : parsed.complete.length === 1
+              ? 'No further steps were generated'
+              : 'Walkthrough finished'}
+        </div>
       )}
 
       <hr
@@ -414,10 +638,10 @@ export function TopicScreen({
         >
           <button
             onClick={submitCustomProblem}
-            disabled={!customProblem.trim() || classifying || status === 'streaming'}
+            disabled={!customProblem.trim() || classifying || isStreamingAnything}
             className="btn-press chamfer"
             style={primaryCta(
-              !customProblem.trim() || classifying || status === 'streaming',
+              !customProblem.trim() || classifying || isStreamingAnything,
             )}
           >
             {classifying ? 'Routing…' : 'Generate →'}
@@ -452,10 +676,24 @@ export function TopicScreen({
                   color: T.ink,
                 }}
               >
-                <span>
+                <span style={{ minWidth: 0 }}>
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{t.title}</span>
-                  <span style={{ fontSize: 13, color: T.muted, marginLeft: 8 }}>
-                    {t.blurb}
+                  <span
+                    className="markdown-body"
+                    style={{
+                      fontSize: 13,
+                      color: T.muted,
+                      marginLeft: 8,
+                      display: 'inline',
+                    }}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{ p: ({ children }) => <>{children}</> }}
+                    >
+                      {t.blurb}
+                    </ReactMarkdown>
                   </span>
                 </span>
                 <span className="arrow-nudge" style={{ color: T.muted }}>
@@ -467,6 +705,107 @@ export function TopicScreen({
         </section>
       )}
     </main>
+  );
+}
+
+function StepCard({
+  index,
+  text,
+  showWhyHow,
+  whyHowText,
+  whyHowExpanded,
+  whyHowStreaming,
+  onToggleWhyHow,
+  disabledWhyHow,
+}: {
+  index: number;
+  text: string;
+  showWhyHow: boolean;
+  whyHowText: string | undefined;
+  whyHowExpanded: boolean;
+  whyHowStreaming: string | null;
+  onToggleWhyHow: () => void;
+  disabledWhyHow: boolean;
+}) {
+  const liveStreaming = whyHowStreaming !== null;
+  const showWhyHowBlock =
+    liveStreaming || (whyHowExpanded && whyHowText !== undefined);
+  return (
+    <article
+      style={{
+        marginTop: 16,
+        border: `1px solid ${T.ink}`,
+        background: T.paper,
+      }}
+    >
+      <div
+        className="markdown-body"
+        style={{
+          padding: '20px 22px',
+          fontSize: 15,
+          lineHeight: 1.6,
+        }}
+      >
+        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+          {text}
+        </ReactMarkdown>
+      </div>
+      {showWhyHow && (
+        <div
+          style={{
+            borderTop: `1px solid ${T.hair}`,
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <button
+            onClick={onToggleWhyHow}
+            disabled={disabledWhyHow && !liveStreaming}
+            className="btn-press"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              fontSize: 12,
+              fontFamily: T.mono,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: disabledWhyHow && !liveStreaming ? T.hairStrong : T.accent,
+              cursor: disabledWhyHow && !liveStreaming ? 'not-allowed' : 'pointer',
+              textDecoration: 'underline',
+            }}
+            aria-expanded={showWhyHowBlock}
+            aria-controls={`why-how-${index}`}
+          >
+            {whyHowText !== undefined
+              ? whyHowExpanded
+                ? 'Hide why & how'
+                : 'Show why & how'
+              : 'Why & how?'}
+          </button>
+        </div>
+      )}
+      {showWhyHowBlock && (
+        <div
+          id={`why-how-${index}`}
+          className="markdown-body"
+          style={{
+            borderTop: `1px solid ${T.hair}`,
+            padding: '16px 22px',
+            background: T.paper2,
+            fontSize: 14,
+            lineHeight: 1.55,
+          }}
+        >
+          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {liveStreaming ? whyHowStreaming! : whyHowText!}
+          </ReactMarkdown>
+        </div>
+      )}
+    </article>
   );
 }
 
