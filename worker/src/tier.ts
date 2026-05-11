@@ -30,8 +30,7 @@ export async function resolveTier(
   if (authState.kind === 'anonymous') return 'anonymous';
   const inList = (raw: string | undefined) =>
     (raw ?? '')
-      .split(',')
-      .map((s) => s.trim())
+      .split(/[,\s]+/)
       .filter(Boolean)
       .includes(authState.userId);
   if (inList(env.MAX_USER_IDS)) return 'pro';

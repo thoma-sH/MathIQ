@@ -36,6 +36,7 @@ function CourseCard({ title, blurb, onClick }: CourseCardProps) {
   return (
     <button
       onClick={onClick}
+      aria-label={`Open ${title}`}
       className="lift btn-press course-card"
       style={{
         background: 'transparent',

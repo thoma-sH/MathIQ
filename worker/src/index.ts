@@ -9,12 +9,14 @@ import { COURSES, COURSES_BY_ID, findTopic } from './courses';
 import { authenticate, type AuthState } from './auth';
 import {
   anonymousCounter,
-  commit,
+  decrement,
+  increment,
   nextMidnightUtc,
   peek,
   userCounter,
   type CounterRef,
 } from './rateLimit';
+export { UsageCounter } from './counterDO';
 import { decideTier, resolveTier, type Tier, type TierDecision } from './tier';
 import { callAnthropicStream } from './anthropic';
 import { callOpenRouterStream } from './openrouter';
@@ -24,6 +26,8 @@ import {
   findUserByCustomer,
   getSubscription,
   isEntitled,
+  isEventProcessed,
+  markEventProcessed,
   rememberCustomer,
   setSubscription,
   type SubscriptionInterval,
@@ -47,6 +51,7 @@ interface Env {
   PRO_USER_IDS?: string;
   MAX_USER_IDS?: string;
   USAGE: KVNamespace;
+  USAGE_DO: DurableObjectNamespace;
   STRIPE_SECRET_KEY: string;
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_PRICE_PLUS_MONTHLY: string;
@@ -60,6 +65,12 @@ interface Env {
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
+
+// Size guardrails. Anything over these is rejected with 413 so a single
+// abusive request can't burn upstream tokens or hang a worker.
+const MAX_PROBLEM_CHARS = 8000;       // a generous math problem
+const MAX_HISTORY_CHARS = 60000;      // walkthrough-so-far for why/how
+const MAX_CLASSIFY_CHARS = 2000;      // classifier input
 
 interface WalkthroughBody {
   courseId?: string;
@@ -75,24 +86,37 @@ interface ClassifyBody {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const origin = request.headers.get('Origin') ?? '';
-    const allowed = env.ALLOWED_ORIGINS.split(',').map((o) => o.trim());
-    const corsOrigin = allowed.includes(origin) ? origin : allowed[0];
+    const url = new URL(request.url);
 
-    const cors: Record<string, string> = {
-      'Access-Control-Allow-Origin': corsOrigin,
-      'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
-      'Access-Control-Allow-Headers': 'content-type, authorization',
-      'Access-Control-Expose-Headers':
-        'X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Scope, X-Tier, X-Model-Used, X-Degraded, X-Premium-Allotment',
-      Vary: 'Origin',
-    };
+    // Webhook from Stripe is server-to-server; no Origin, no CORS.
+    if (request.method === 'POST' && url.pathname === '/api/stripe/webhook') {
+      return handleStripeWebhook(request, env);
+    }
+
+    const origin = request.headers.get('Origin') ?? '';
+    const allowed = env.ALLOWED_ORIGINS.split(',')
+      .map((o) => o.trim())
+      .filter(Boolean);
+    const originAllowed = !!origin && allowed.includes(origin);
+    // Health check doesn't need CORS; everything else requires a known Origin.
+    if (!originAllowed && url.pathname !== '/api/health') {
+      return new Response('forbidden origin', { status: 403 });
+    }
+
+    const cors: Record<string, string> = originAllowed
+      ? {
+          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
+          'Access-Control-Allow-Headers': 'content-type, authorization',
+          'Access-Control-Expose-Headers':
+            'X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Scope, X-Tier, X-Model-Used, X-Degraded, X-Premium-Allotment',
+          Vary: 'Origin',
+        }
+      : { Vary: 'Origin' };
 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: cors });
     }
-
-    const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/api/health') {
       return json({ ok: true }, 200, cors);
@@ -116,10 +140,6 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/billing/portal') {
       return handleBillingPortal(request, env, cors);
-    }
-
-    if (request.method === 'POST' && url.pathname === '/api/stripe/webhook') {
-      return handleStripeWebhook(request, env);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -165,9 +185,9 @@ async function handleWalkthrough(
   }
   const counter: CounterRef =
     authState.kind === 'user'
-      ? userCounter(env.USAGE, authState.userId)
+      ? userCounter(env.USAGE_DO, authState.userId)
       : anonymousCounter(
-          env.USAGE,
+          env.USAGE_DO,
           request.headers.get('CF-Connecting-IP') ?? 'unknown',
         );
 
@@ -212,6 +232,20 @@ async function handleWalkthrough(
   }
 
   const { courseId, topicId, problem, action, walkthroughSoFar } = body;
+  if (typeof problem === 'string' && problem.length > MAX_PROBLEM_CHARS) {
+    return json(
+      { error: 'problem too long', limit: MAX_PROBLEM_CHARS },
+      413,
+      { ...cors, ...baseHeaders },
+    );
+  }
+  if (typeof walkthroughSoFar === 'string' && walkthroughSoFar.length > MAX_HISTORY_CHARS) {
+    return json(
+      { error: 'context too long', limit: MAX_HISTORY_CHARS },
+      413,
+      { ...cors, ...baseHeaders },
+    );
+  }
   const walkAction: 'walkthrough' | 'why-how' =
     action === 'why-how' ? 'why-how' : 'walkthrough';
   const walkthroughSoFarClean =
@@ -234,8 +268,32 @@ async function handleWalkthrough(
   }
   const { course, topic } = found;
 
+  // Atomic increment — claims this slot in the user's daily quota.
+  // The DO is single-threaded per id, so concurrent requests can't both
+  // commit the same value.
+  const newCount = await increment(counter);
+  const usedBefore = newCount - 1;
+  const finalDecision: TierDecision = decideTier(tier, usedBefore);
+
+  // Race-lost case: another request from this user landed first and pushed us
+  // over the ceiling. Refund the increment and 429.
+  if (finalDecision.model === null) {
+    await decrement(counter);
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've used all ${finalDecision.ceiling} walkthroughs today.`,
+        limit: finalDecision.ceiling,
+        used: newCount,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      { ...cors, ...buildRateLimitHeaders(tier, newCount, finalDecision) },
+    );
+  }
+
   // Provider dispatch
-  const model = decision.model;
+  const model = finalDecision.model;
   const upstream =
     model.provider === 'anthropic'
       ? await callAnthropicStream({
@@ -258,18 +316,18 @@ async function handleWalkthrough(
         });
 
   if (!upstream.ok || !upstream.body) {
+    if (upstream.detail) console.error('upstream walkthrough failed', upstream.status, upstream.detail);
+    // Upstream failed — refund the slot so the user isn't charged for it.
+    await decrement(counter);
     return json(
-      { error: `upstream ${upstream.status}`, detail: upstream.detail ?? '' },
-      upstream.status === 401 || upstream.status === 403 ? 502 : upstream.status,
+      { error: 'upstream_error', message: 'The walkthrough service is having trouble — try again in a moment.' },
+      502,
       { ...cors, ...baseHeaders },
     );
   }
 
-  // Increment counter only on successful upstream call dispatch.
-  await commit(counter, usedToday + 1);
-
-  // Re-build rate-limit headers reflecting the post-commit count.
-  const postHeaders = buildRateLimitHeaders(tier, usedToday + 1, decision);
+  // Re-build rate-limit headers reflecting the post-increment count.
+  const postHeaders = buildRateLimitHeaders(tier, newCount, finalDecision);
 
   return new Response(upstream.body.pipeThrough(normalizeLatexDelimiters()), {
     status: 200,
@@ -277,7 +335,7 @@ async function handleWalkthrough(
       ...cors,
       ...postHeaders,
       'X-Model-Used': model.id,
-      'X-Degraded': decision.degraded ? 'true' : 'false',
+      'X-Degraded': finalDecision.degraded ? 'true' : 'false',
       'content-type': 'text/plain; charset=utf-8',
       // `no-transform` tells Cloudflare's edge not to gzip the response, which
       // would otherwise buffer streamed tokens before flushing. We *need* the
@@ -314,6 +372,9 @@ async function handleClassify(
   if (!problem?.trim()) {
     return json({ error: 'problem required' }, 400, cors);
   }
+  if (problem.length > MAX_CLASSIFY_CHARS) {
+    return json({ error: 'problem too long', limit: MAX_CLASSIFY_CHARS }, 413, cors);
+  }
 
   const upstream = await fetch(ANTHROPIC_MESSAGES_URL, {
     method: 'POST',
@@ -339,9 +400,10 @@ async function handleClassify(
   });
 
   if (!upstream.ok) {
+    console.error('classify upstream failed', upstream.status);
     return json(
-      { error: `anthropic ${upstream.status}` },
-      upstream.status === 401 || upstream.status === 403 ? 502 : upstream.status,
+      { error: 'classify_failed' },
+      502,
       cors,
     );
   }
@@ -481,6 +543,15 @@ async function handleBillingCheckout(
     return json({ error: 'invalid interval' }, 400, cors);
   }
 
+  // Refuse to start a Checkout session if the corresponding price id is a
+  // placeholder. Better to fail loudly here than to send the user to Stripe
+  // and have them see an invalid-price page.
+  const priceConfigErr = validatePriceConfig(env);
+  if (priceConfigErr) {
+    console.error('billing misconfigured:', priceConfigErr);
+    return json({ error: 'billing_unavailable' }, 503, cors);
+  }
+
   const stripe = makeStripe(env);
   const existing = await getSubscription(env.USAGE, authState.userId);
 
@@ -530,11 +601,20 @@ async function handleStripeWebhook(request: Request, env: Env): Promise<Response
     return new Response('invalid signature', { status: 400 });
   }
 
+  // Idempotency: Stripe retries deliver the same event id; skip if we've
+  // already processed it within the dedup window.
+  if (await isEventProcessed(env.USAGE, event.id)) {
+    return new Response('ok (duplicate)', { status: 200 });
+  }
+
   try {
     await processStripeEvent(env, stripe, event);
+    await markEventProcessed(env.USAGE, event.id);
     return new Response('ok', { status: 200 });
   } catch (err) {
-    console.error('stripe webhook error', err);
+    // Log only the event id + type, never the payload or the raw error.
+    console.error('stripe webhook handler error', event.id, event.type);
+    void err;
     return new Response('handler error', { status: 500 });
   }
 }
@@ -547,17 +627,18 @@ async function processStripeEvent(
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (!session.id) return;
       const userId = session.client_reference_id ?? session.metadata?.userId;
       const customerId =
         typeof session.customer === 'string' ? session.customer : session.customer?.id;
       if (!userId || !customerId) return;
       await rememberCustomer(env.USAGE, customerId, userId);
-      // Subscription details land via customer.subscription.created right after this.
       return;
     }
     case 'customer.subscription.created':
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription;
+      if (!sub.id || !sub.customer) return;
       const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
       const userId =
         sub.metadata?.userId ?? (await findUserByCustomer(env.USAGE, customerId));
@@ -569,6 +650,7 @@ async function processStripeEvent(
     }
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
+      if (!sub.id || !sub.customer) return;
       const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id;
       const userId =
         sub.metadata?.userId ?? (await findUserByCustomer(env.USAGE, customerId));
@@ -579,6 +661,24 @@ async function processStripeEvent(
     default:
       return;
   }
+}
+
+function validatePriceConfig(env: Env): string | null {
+  const ids = [
+    env.STRIPE_PRICE_PLUS_MONTHLY,
+    env.STRIPE_PRICE_PLUS_ANNUAL,
+    env.STRIPE_PRICE_PRO_MONTHLY,
+    env.STRIPE_PRICE_PRO_ANNUAL,
+  ];
+  for (const id of ids) {
+    if (!id || !id.startsWith('price_') || id.includes('REPLACE')) {
+      return 'stripe price ids are not configured';
+    }
+  }
+  if (!env.STRIPE_SECRET_KEY || !env.STRIPE_SECRET_KEY.startsWith('sk_')) {
+    return 'stripe secret key not configured';
+  }
+  return null;
 }
 
 async function fetchClerkUserEmail(env: Env, userId: string): Promise<string | undefined> {

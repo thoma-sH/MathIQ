@@ -11,6 +11,7 @@ import {
   type RateLimitInfo,
 } from '../walkthroughs/generate';
 import { classifyTopic } from '../walkthroughs/classify';
+import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
@@ -97,8 +98,10 @@ export function TopicScreen({
   const [limitDetail, setLimitDetail] = useState<RateLimitDisplay | null>(null);
   const [customProblem, setCustomProblem] = useState(initialProblem ?? '');
   const [classifying, setClassifying] = useState(false);
+  const [submitHint, setSubmitHint] = useState<string | null>(null);
   const walkthroughAbortRef = useRef<AbortController | null>(null);
   const whyHowAbortRef = useRef<AbortController | null>(null);
+  const classifyAbortRef = useRef<AbortController | null>(null);
 
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
 
@@ -116,6 +119,7 @@ export function TopicScreen({
     return () => {
       walkthroughAbortRef.current?.abort();
       whyHowAbortRef.current?.abort();
+      classifyAbortRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProblem, courseId, topicId]);
@@ -246,28 +250,58 @@ export function TopicScreen({
   async function submitCustomProblem() {
     const trimmed = customProblem.trim();
     if (!trimmed) return;
+    // Already classifying — bail to avoid duplicate in-flight requests.
+    if (classifying) return;
+
+    const isProblem = looksLikeProblem(trimmed);
+    setSubmitHint(null);
+
+    // Abort any previous classify in case it's still pending.
+    classifyAbortRef.current?.abort();
+    const controller = new AbortController();
+    classifyAbortRef.current = controller;
 
     setClassifying(true);
+    let match: Awaited<ReturnType<typeof classifyTopic>> = null;
     try {
-      const match = await classifyTopic({ problem: trimmed, getToken });
-      if (
-        match &&
-        (match.courseId !== course!.id || match.topicId !== topic!.id)
-      ) {
-        onNavigate({
-          name: 'topic',
-          courseId: match.courseId,
-          topicId: match.topicId,
-          problem: trimmed,
-        });
-        return;
-      }
-    } catch {
-      // Classification failure is non-fatal
+      match = await classifyTopic({ problem: trimmed, getToken, signal: controller.signal });
+    } catch (err) {
+      // Aborted: a newer submit superseded this one; drop the result silently.
+      if (err instanceof Error && err.name === 'AbortError') return;
+      // Other failures non-fatal; treat as no-match.
     } finally {
+      // Only the controller that actually finished should clear the ref.
+      if (classifyAbortRef.current === controller) classifyAbortRef.current = null;
       setClassifying(false);
     }
-    void runWalkthrough(trimmed);
+
+    // Cross-course / cross-topic match → navigate.
+    if (
+      match &&
+      (match.courseId !== course!.id || match.topicId !== topic!.id)
+    ) {
+      onNavigate({
+        name: 'topic',
+        courseId: match.courseId,
+        topicId: match.topicId,
+        problem: isProblem ? trimmed : undefined,
+      });
+      return;
+    }
+
+    // No usable match (or matched this same topic).
+    // If the input looks like a real problem and matched this topic, run it.
+    if (isProblem && match) {
+      void runWalkthrough(trimmed);
+      return;
+    }
+
+    // Couldn't place the input — surface a message instead of silently clearing.
+    setSubmitHint(
+      isProblem
+        ? "Couldn't quite place that one — try adding more context, or open one of the topics below."
+        : "Couldn't quite place that one — be more specific. Try a full problem like “factor x² + 5x + 6” or “find dy/dx for y = sin(x²)”.",
+    );
   }
 
   const otherTopics = course.topics.filter((t) => t.id !== topic.id).slice(0, 4);
@@ -379,6 +413,8 @@ export function TopicScreen({
 
       {isStreamingAnything && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginBottom: 12,
             display: 'flex',
@@ -554,6 +590,8 @@ export function TopicScreen({
 
       {moreIncoming && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginTop: 16,
             fontSize: 13,
@@ -569,6 +607,8 @@ export function TopicScreen({
 
       {isStreamingWalkthrough && !streamDone && !moreIncoming && visibleSteps.length > 0 && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginTop: 16,
             fontSize: 13,
@@ -584,6 +624,8 @@ export function TopicScreen({
 
       {walkthroughFinished && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             marginTop: 16,
             fontSize: 12,
@@ -613,7 +655,10 @@ export function TopicScreen({
         <div style={kicker(8)}>TRY YOUR OWN PROBLEM</div>
         <textarea
           value={customProblem}
-          onChange={(e) => setCustomProblem(e.target.value)}
+          onChange={(e) => {
+            setCustomProblem(e.target.value);
+            if (submitHint) setSubmitHint(null);
+          }}
           placeholder={`Paste a ${topic.title.toLowerCase()} problem (or anything from ${course.title} — Iris will route).`}
           rows={3}
           style={{
@@ -650,6 +695,23 @@ export function TopicScreen({
             If your problem fits a different topic, Iris will route you there.
           </span>
         </div>
+        {submitHint && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: 12,
+              padding: '10px 14px',
+              border: `1px solid ${T.ink}`,
+              background: T.paper2,
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: T.ink,
+            }}
+          >
+            {submitHint}
+          </div>
+        )}
       </section>
 
       {otherTopics.length > 0 && (
@@ -659,6 +721,7 @@ export function TopicScreen({
             {otherTopics.map((t) => (
               <button
                 key={t.id}
+                aria-label={`Open ${t.title}`}
                 onClick={() =>
                   onNavigate({ name: 'topic', courseId: course.id, topicId: t.id })
                 }

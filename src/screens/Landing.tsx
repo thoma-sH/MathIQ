@@ -4,6 +4,7 @@ import { T } from '../design/tokens';
 import { getDailyContent } from '../state/dailyScribe';
 import { useTypedString } from '../state/useTypedString';
 import { classifyTopic } from '../walkthroughs/classify';
+import { looksLikeProblem } from '../walkthroughs/isProblem';
 import type { Route } from '../router';
 
 interface LandingProps {
@@ -36,6 +37,7 @@ export function Landing({ onNavigate }: LandingProps) {
   const [problem, setProblem] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const scribeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (searchState === 'expanded' || searchState === 'no_match') {
@@ -51,7 +53,7 @@ export function Landing({ onNavigate }: LandingProps) {
     const onClick = (e: MouseEvent) => {
       if (!stageRef.current) return;
       if (stageRef.current.contains(e.target as Node)) return;
-      if (!problem.trim()) setSearchState('idle');
+      if (!problem.trim()) collapseToScribe();
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -64,11 +66,15 @@ export function Landing({ onNavigate }: LandingProps) {
     try {
       const match = await classifyTopic({ problem: trimmed, getToken });
       if (match) {
+        // If the input is just a topic name (no math signals), land on the
+        // topic page without a problem so the user can use the example
+        // intentionally. Otherwise auto-fire the walkthrough on arrival.
+        const problem = looksLikeProblem(trimmed) ? trimmed : undefined;
         onNavigate({
           name: 'topic',
           courseId: match.courseId,
           topicId: match.topicId,
-          problem: trimmed,
+          problem,
         });
         return;
       }
@@ -78,10 +84,17 @@ export function Landing({ onNavigate }: LandingProps) {
     }
   }
 
+  function collapseToScribe() {
+    setSearchState('idle');
+    // Return focus to the trigger so keyboard users land where they started.
+    // Use rAF so the scribe is rendered + focusable before we focus it.
+    requestAnimationFrame(() => scribeTriggerRef.current?.focus());
+  }
+
   function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      if (!problem.trim()) setSearchState('idle');
+      if (!problem.trim()) collapseToScribe();
       else textareaRef.current?.blur();
       return;
     }
@@ -162,10 +175,11 @@ export function Landing({ onNavigate }: LandingProps) {
       >
         {/* Scribe — the click target */}
         <button
+          ref={scribeTriggerRef}
           type="button"
           onClick={() => setSearchState('expanded')}
           className="scribe-trigger"
-          aria-label="Type a math problem"
+          aria-label="Open the problem input"
           data-active={!expanded}
         >
           <img
@@ -192,6 +206,7 @@ export function Landing({ onNavigate }: LandingProps) {
             onChange={(e) => setProblem(e.target.value)}
             onKeyDown={onTextareaKeyDown}
             disabled={busy}
+            aria-label="Math problem to walk through"
             placeholder="Paste or type a problem — anything from algebra to differential equations…"
             rows={3}
             style={{

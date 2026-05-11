@@ -164,11 +164,18 @@ function AccountCard() {
   const { user } = useUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? '(no email on file)';
   const initial = (email[0] ?? '?').toUpperCase();
-  const hasImage = !!user?.hasImage && !!user.imageUrl;
+  const hasImageData = !!user?.hasImage && !!user.imageUrl;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [imageBroken, setImageBroken] = useState(false);
+  // If the imageUrl changes (after upload), reset the broken flag.
+  useEffect(() => {
+    setImageBroken(false);
+  }, [user?.imageUrl]);
+
+  const showImage = hasImageData && !imageBroken;
 
   async function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -214,13 +221,13 @@ function AccountCard() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
         <div
-          aria-label={hasImage ? 'Your profile picture' : `Initial ${initial}`}
+          aria-label={showImage ? 'Your profile picture' : `Initial ${initial}`}
           style={{
             width: 64,
             height: 64,
             borderRadius: '50%',
             border: `1px solid ${T.ink}`,
-            background: hasImage ? T.paper : T.ink,
+            background: T.ink,
             color: T.paper,
             display: 'flex',
             alignItems: 'center',
@@ -230,12 +237,24 @@ function AccountCard() {
             fontWeight: 700,
             overflow: 'hidden',
             flexShrink: 0,
-            backgroundImage: hasImage ? `url(${user!.imageUrl})` : undefined,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            position: 'relative',
           }}
         >
-          {!hasImage && initial}
+          {showImage ? (
+            <img
+              src={user!.imageUrl}
+              alt=""
+              onError={() => setImageBroken(true)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+              }}
+            />
+          ) : (
+            initial
+          )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 500, lineHeight: 1.35, marginBottom: 2, wordBreak: 'break-word' }}>
@@ -261,9 +280,9 @@ function AccountCard() {
                 fontFamily: T.sans,
               }}
             >
-              {uploading ? 'Uploading…' : hasImage ? 'Change photo' : 'Upload photo'}
+              {uploading ? 'Uploading…' : hasImageData ? 'Change photo' : 'Upload photo'}
             </button>
-            {hasImage && !uploading && (
+            {hasImageData && !uploading && (
               <button
                 type="button"
                 onClick={clearPhoto}

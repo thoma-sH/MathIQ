@@ -25,7 +25,11 @@ export interface SubscriptionState {
   stripeSubscriptionId: string;
 }
 
-const TTL_SECONDS = 60 * 60 * 24 * 400;
+// Minimum TTL allowed by Cloudflare KV is 60s.
+const MIN_TTL_SECONDS = 60;
+// Grace period beyond currentPeriodEnd before KV entry auto-expires. Buys us
+// a window for the renewal webhook to land if it's slightly delayed.
+const GRACE_SECONDS = 60 * 60 * 24 * 7;
 
 function key(userId: string): string {
   return `subscription:user:${userId}`;
@@ -49,9 +53,15 @@ export async function setSubscription(
   userId: string,
   state: SubscriptionState,
 ): Promise<void> {
-  await kv.put(key(userId), JSON.stringify(state), {
-    expirationTtl: TTL_SECONDS,
-  });
+  // TTL tracks the actual subscription period plus a 7-day grace window.
+  // If Stripe drops the renewal webhook, the entry expires shortly after the
+  // period ends instead of lingering for months.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const ttl = Math.max(
+    MIN_TTL_SECONDS,
+    state.currentPeriodEnd - nowSec + GRACE_SECONDS,
+  );
+  await kv.put(key(userId), JSON.stringify(state), { expirationTtl: ttl });
 }
 
 export async function clearSubscription(
@@ -90,4 +100,26 @@ export async function findUserByCustomer(
   customerId: string,
 ): Promise<string | null> {
   return kv.get(customerKey(customerId));
+}
+
+/**
+ * Webhook event idempotency. Stripe retries on 5xx and occasional drops, so
+ * the same event id can arrive multiple times. We mark each processed event
+ * with a 24h TTL — long enough to absorb Stripe's retry window, short enough
+ * to keep KV small.
+ */
+const PROCESSED_EVENT_TTL = 60 * 60 * 24;
+
+export async function isEventProcessed(
+  kv: KVNamespace,
+  eventId: string,
+): Promise<boolean> {
+  return !!(await kv.get(`stripe-event:${eventId}`));
+}
+
+export async function markEventProcessed(
+  kv: KVNamespace,
+  eventId: string,
+): Promise<void> {
+  await kv.put(`stripe-event:${eventId}`, '1', { expirationTtl: PROCESSED_EVENT_TTL });
 }

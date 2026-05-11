@@ -10,12 +10,22 @@ compatibility_flags = ["nodejs_compat"]
 #   STRIPE_SECRET_KEY
 #   STRIPE_WEBHOOK_SECRET
 
-# KV namespace for daily usage counters.
+# KV namespace for subscription state + webhook idempotency.
 # Create with: `wrangler kv namespace create USAGE`
 # Then paste the returned `id` below.
 [[kv_namespaces]]
 binding = "USAGE"
 id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Durable Object for atomic daily rate-limit counters. Each user/IP gets a
+# single-threaded actor so concurrent requests can't both bypass the ceiling.
+[[durable_objects.bindings]]
+name = "USAGE_DO"
+class_name = "UsageCounter"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UsageCounter"]
 
 [vars]
 # Allowed origins for CORS. Comma-separated.

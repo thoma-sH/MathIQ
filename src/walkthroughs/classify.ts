@@ -13,19 +13,20 @@ export interface ClassifyResult {
 export async function classifyTopic(args: {
   problem: string;
   getToken?: () => Promise<string | null>;
+  signal?: AbortSignal;
 }): Promise<ClassifyResult | null> {
   const token = await args.getToken?.();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const resp = await fetch(`${WORKER_URL}/api/classify`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ problem: args.problem }),
-  });
-
-  if (!resp.ok) return null;
   try {
+    const resp = await fetch(`${WORKER_URL}/api/classify`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ problem: args.problem }),
+      signal: args.signal,
+    });
+    if (!resp.ok) return null;
     const body = (await resp.json()) as {
       courseId: string | null;
       topicId: string | null;
@@ -34,7 +35,9 @@ export async function classifyTopic(args: {
       return { courseId: body.courseId, topicId: body.topicId };
     }
     return null;
-  } catch {
+  } catch (err) {
+    // Bubble aborts so callers can ignore stale results; swallow everything else.
+    if (err instanceof Error && err.name === 'AbortError') throw err;
     return null;
   }
 }

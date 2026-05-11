@@ -22,6 +22,7 @@ function TopicCard({
   return (
     <button
       onClick={onOpen}
+      aria-label={`Open ${topic.title}`}
       className="lift btn-press"
       style={{
         background: 'transparent',
