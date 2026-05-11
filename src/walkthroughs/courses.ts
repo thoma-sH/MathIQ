@@ -11,7 +11,7 @@ export const COURSES: Course[] = [
         title: 'Real Numbers & Exponents',
         blurb: 'Order of operations, integer and rational exponents, radical rules.',
         strategicAnchor:
-          'PEMDAS for arithmetic, then exponent rules to combine powers: $x^a x^b = x^{a+b}$, $(x^a)^b = x^{ab}$, $x^{-n} = 1/x^n$. Fractional exponents are radicals: $x^{m/n} = \\sqrt[n]{x^m}$.',
+          'Same base: add exponents ($x^a x^b = x^{a+b}$). Power of a power: multiply ($(x^a)^b = x^{ab}$). Negative flips ($x^{-n}=1/x^n$). Fractional is a radical: $x^{m/n}=\\sqrt[n]{x^m}$.',
         exampleProblem: 'Simplify: $\\left(\\dfrac{4 x^{3} y^{-2}}{8 x^{-1} y^{3}}\\right)^{-2}$',
       },
       {
@@ -19,7 +19,7 @@ export const COURSES: Course[] = [
         title: 'Linear Equations',
         blurb: 'Solve $ax + b = c$ by isolating the variable.',
         strategicAnchor:
-          'Distribute, collect like terms, then undo operations in reverse order. Multiply through by the LCD to clear fractions before doing anything else.',
+          'Clear fractions by multiplying through by the LCD, distribute, collect like terms, then undo operations in reverse order.',
         exampleProblem: 'Solve: $\\dfrac{3x - 5}{2} - \\dfrac{x + 1}{3} = 4$',
       },
       {
@@ -27,7 +27,7 @@ export const COURSES: Course[] = [
         title: 'Inequalities & Absolute Value',
         blurb: 'Linear inequalities and $|ax + b|$ equations.',
         strategicAnchor:
-          'Linear inequalities follow equation rules, except you flip the sign when multiplying or dividing by a negative. For $|E| < c$: rewrite as $-c < E < c$. For $|E| > c$: rewrite as $E < -c$ OR $E > c$. The split is what matters.',
+          '$|E|<c \\Rightarrow -c<E<c$ (sandwich). $|E|>c \\Rightarrow E<-c$ or $E>c$ (split). Flip the sign whenever you multiply or divide by a negative.',
         exampleProblem: 'Solve $|2x - 5| \\ge 7$ and express the solution in interval notation.',
       },
       {
@@ -35,7 +35,7 @@ export const COURSES: Course[] = [
         title: 'Systems of Linear Equations',
         blurb: 'Two equations, two unknowns — substitute or eliminate.',
         strategicAnchor:
-          "Pick the method by what's easy. Substitution: when one equation already isolates a variable. Elimination: when coefficients line up to cancel (or you can multiply through to make them).",
+          'One variable already isolated? Substitute. Coefficients line up to cancel? Eliminate. Pick whichever is less work.',
         exampleProblem:
           'Solve the system: $$\\begin{cases} 2x + 3y = 12 \\\\ x - y = 1 \\end{cases}$$',
       },
@@ -44,7 +44,7 @@ export const COURSES: Course[] = [
         title: 'Polynomial Factoring',
         blurb: 'GCF, grouping, and special-product patterns.',
         strategicAnchor:
-          'Three-step recipe: (1) factor out the GCF first — always; (2) count terms: 2 terms suggests difference of squares $a^2 - b^2$ or cubes; 4 terms suggests grouping; (3) trinomials use sum-product factoring (next topic).',
+          'GCF first, always. Then count terms: 2 → difference of squares or cubes; 3 → trinomial; 4 → grouping.',
         exampleProblem: 'Factor completely: $3x^4 - 24x$',
       },
       {
@@ -52,7 +52,7 @@ export const COURSES: Course[] = [
         title: 'Factoring x² + bx + c',
         blurb: 'Two numbers that add to $b$ and multiply to $c$.',
         strategicAnchor:
-          "List integer factor pairs of c, then pick the pair whose sum equals b. Sign rules: same-sign pair when c > 0 (both match b's sign); opposite-sign pair when c < 0, with the larger-magnitude one matching b's sign.",
+          'Find two integers that multiply to $c$ and add to $b$. If $c>0$ they share $b$\'s sign; if $c<0$ they split signs.',
         exampleProblem: 'Factor: $x^2 + 11x + 30$',
       },
       {
@@ -60,7 +60,7 @@ export const COURSES: Course[] = [
         title: 'Rational Expressions',
         blurb: 'Simplify, multiply, divide, and combine fractions of polynomials.',
         strategicAnchor:
-          'Factor every numerator and denominator first — then cancel common factors. For addition/subtraction: find the LCD (highest power of each distinct factor). Note any values that make denominators zero — they are excluded from the domain.',
+          'Factor every numerator and denominator first, then cancel. For $\\pm$: build the LCD from the highest power of each distinct factor.',
         exampleProblem:
           'Simplify: $\\dfrac{x^2 - 4}{x^2 - x - 6} \\div \\dfrac{x + 2}{x - 3}$',
       },
@@ -69,7 +69,7 @@ export const COURSES: Course[] = [
         title: 'Rational Equations',
         blurb: 'Equations with variables in denominators.',
         strategicAnchor:
-          'Multiply both sides by the LCD to clear denominators. Always check for extraneous roots — any solution that makes an original denominator zero must be discarded.',
+          'Multiply through by the LCD to clear denominators, solve, then discard any root that zeroes an original denominator.',
         exampleProblem: 'Solve: $\\dfrac{2}{x-1} + \\dfrac{1}{x+1} = \\dfrac{4}{x^2 - 1}$',
       },
       {
@@ -77,7 +77,7 @@ export const COURSES: Course[] = [
         title: 'Completing the Square',
         blurb: 'Manufacture a perfect-square trinomial by adding the right constant.',
         strategicAnchor:
-          'Add and subtract $(b/2)^2$ to convert $ax^2 + bx + c$ into $a(x + h)^2 + k$. Useful for solving quadratics, rewriting in vertex form, and (later) Gaussian-style integrals.',
+          'Add and subtract $(b/2)^2$ to turn $x^2+bx$ into $(x+b/2)^2$. Then read off vertex form or solve.',
         exampleProblem: 'Solve by completing the square: $x^2 + 6x + 5 = 0$',
       },
       {
@@ -85,7 +85,7 @@ export const COURSES: Course[] = [
         title: 'The Quadratic Formula',
         blurb: 'When factoring fails, plug into $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$.',
         strategicAnchor:
-          'Read the discriminant $b^2 - 4ac$ before plugging in: positive → two real roots; zero → one repeated real root; negative → two complex roots. The discriminant tells you what kind of answer to expect, before any arithmetic.',
+          'Check the discriminant $b^2-4ac$ first: positive → two real, zero → one repeated, negative → two complex. Then plug into the formula.',
         exampleProblem: 'Solve: $2x^2 - 5x + 1 = 0$',
       },
       {
@@ -93,7 +93,7 @@ export const COURSES: Course[] = [
         title: 'Quadratic Inequalities',
         blurb: 'Find where a quadratic is positive or negative on the number line.',
         strategicAnchor:
-          'Find the roots (factor or quadratic formula). Test signs in each interval between roots. Flip the inequality only when you multiply or divide by a negative.',
+          'Find the roots, then test signs in each interval between them. Flip only when multiplying or dividing by a negative.',
         exampleProblem: 'Solve: $x^2 - 3x - 4 > 0$',
       },
       {
@@ -101,7 +101,7 @@ export const COURSES: Course[] = [
         title: 'Functions & Inverses',
         blurb: 'Domain, composition $(f \\circ g)(x)$, and inverse $f^{-1}(x)$.',
         strategicAnchor:
-          'Domain: rule out denominators that are zero, even-root arguments that are negative, log arguments that are non-positive. Composition $(f \\circ g)(x) = f(g(x))$ inherits the inner function\'s restrictions. To invert: swap $x$ and $y$, solve for $y$, then verify $f(f^{-1}(x)) = x$ to catch sign-flip mistakes.',
+          'Domain bans: zero denominators, negatives under even roots, non-positive log arguments. To invert: swap $x$ and $y$, solve for $y$, restrict if needed.',
         exampleProblem:
           'Given $f(x) = \\dfrac{2x + 3}{x - 1}$, find $f^{-1}(x)$ and state its domain.',
       },
@@ -117,7 +117,7 @@ export const COURSES: Course[] = [
         title: 'Function Transformations',
         blurb: 'Shifts, stretches, reflections — building graphs from parents.',
         strategicAnchor:
-          'Read transformations from the formula in the right order. Inside the parentheses (affects $x$): $f(x - h)$ shifts right by $h$, $f(bx)$ horizontally compresses by $b$, $f(-x)$ reflects across the $y$-axis. Outside (affects $y$): $a f(x)$ stretches vertically by $a$, $f(x) + k$ shifts up by $k$, $-f(x)$ reflects across the $x$-axis. Horizontal changes feel "backwards" — that\'s normal.',
+          'Outside $f$ behaves as written (affects $y$). Inside $f$ behaves backwards (affects $x$): $f(x-h)$ shifts right by $h$, $f(bx)$ compresses horizontally by $b$.',
         exampleProblem:
           'Describe the graph of $g(x) = -2 \\cdot f(3(x - 1)) + 4$ as a sequence of transformations of $f(x)$.',
       },
@@ -126,7 +126,7 @@ export const COURSES: Course[] = [
         title: 'Polynomial & Rational Functions',
         blurb: 'End behavior, asymptotes, and sketching graphs.',
         strategicAnchor:
-          'For polynomials: leading term controls end behavior; each real root is an $x$-intercept (with multiplicity giving the shape there — odd = crosses, even = touches). For rationals: vertical asymptotes at non-canceling zeros of the denominator; horizontal asymptote determined by comparing degrees of numerator and denominator; slant asymptote when numerator degree is exactly one more than denominator.',
+          'Polynomials: leading term sets end behavior; root multiplicity sets shape (odd crosses, even touches). Rationals: non-canceling zero of denominator → vertical asymptote; degree comparison → horizontal.',
         exampleProblem:
           'Sketch $f(x) = \\dfrac{x^2 - 4}{x^2 - x - 2}$: find all intercepts, asymptotes, and the holes (if any).',
       },
@@ -135,7 +135,7 @@ export const COURSES: Course[] = [
         title: 'Conic Sections',
         blurb: 'Recognize circles, ellipses, parabolas, hyperbolas from the equation.',
         strategicAnchor:
-          'Look at the squared terms. Same coefficient → circle. Positive different coefficients → ellipse. Only one squared term → parabola. Opposite signs → hyperbola. Complete the square in $x$ and $y$ to get standard form.',
+          'Look at the squared-term coefficients. Same → circle; different positive → ellipse; only one squared term → parabola; opposite signs → hyperbola.',
         exampleProblem:
           'Identify the conic and rewrite in standard form: $x^2 + 4y^2 - 6x + 16y + 9 = 0$',
       },
@@ -144,7 +144,7 @@ export const COURSES: Course[] = [
         title: 'Exponential Equations',
         blurb: 'Variable in the exponent — bring it down with a log.',
         strategicAnchor:
-          'Take a log of both sides (usually $\\ln$). The variable comes down via $\\log(a^x) = x \\log a$. Use change of base if both sides have different bases.',
+          'Variable in the exponent? Take $\\ln$ of both sides. $\\ln(a^x)=x\\ln a$ brings it down.',
         exampleProblem: 'Solve: $5^{x+1} = 12$',
       },
       {
@@ -152,7 +152,7 @@ export const COURSES: Course[] = [
         title: 'Logarithm Rules',
         blurb: 'Convert products, quotients, and powers via the log laws.',
         strategicAnchor:
-          'Three core moves: $\\log(ab) = \\log a + \\log b$; $\\log(a/b) = \\log a - \\log b$; $\\log(a^n) = n \\log a$. Always check the domain after manipulation — log requires positive arguments.',
+          '$\\log(ab)=\\log a+\\log b$, $\\log(a/b)=\\log a-\\log b$, $\\log(a^n)=n\\log a$. After solving, check every argument stayed positive.',
         exampleProblem: 'Solve: $\\log_2(x) + \\log_2(x - 2) = 3$',
       },
       {
@@ -160,7 +160,7 @@ export const COURSES: Course[] = [
         title: 'Trig on the Unit Circle',
         blurb: 'Sine, cosine, and tangent from $(x, y)$ on the unit circle.',
         strategicAnchor:
-          'On the unit circle, $\\cos\\theta$ is the $x$-coordinate and $\\sin\\theta$ is the $y$-coordinate. Memorize the special angles $0, \\pi/6, \\pi/4, \\pi/3, \\pi/2$ and their reference angles in the other quadrants. Signs of trig functions in each quadrant follow ASTC ("All Students Take Calculus") — All positive in Q1, Sin in Q2, Tan in Q3, Cos in Q4.',
+          'On the unit circle, $\\cos\\theta$ is $x$ and $\\sin\\theta$ is $y$. Quadrant signs by ASTC: All, Sin, Tan, Cos positive in Q1–Q4.',
         exampleProblem:
           'Without a calculator, find $\\sin\\left(\\dfrac{5\\pi}{6}\\right)$, $\\cos\\left(\\dfrac{4\\pi}{3}\\right)$, and $\\tan\\left(\\dfrac{7\\pi}{4}\\right)$.',
       },
@@ -169,7 +169,7 @@ export const COURSES: Course[] = [
         title: 'Pythagorean Identities',
         blurb: 'sin²x + cos²x = 1, and its two cousins.',
         strategicAnchor:
-          "Three forms: $\\sin^2 + \\cos^2 = 1$; $\\tan^2 + 1 = \\sec^2$; $1 + \\cot^2 = \\csc^2$. Pick the form whose 'shape' matches what you're trying to simplify or substitute for.",
+          '$\\sin^2+\\cos^2=1$. Divide by $\\cos^2$ → $\\tan^2+1=\\sec^2$. Divide by $\\sin^2$ → $1+\\cot^2=\\csc^2$. Pick the form that matches what you see.',
         exampleProblem: 'Simplify: $\\dfrac{\\sin^2 x}{1 - \\cos x}$',
       },
       {
@@ -177,7 +177,7 @@ export const COURSES: Course[] = [
         title: 'Sum, Difference & Double-Angle Identities',
         blurb: '$\\sin(A \\pm B)$, $\\cos(A \\pm B)$, $\\sin(2A)$, $\\cos(2A)$.',
         strategicAnchor:
-          'Memorize the four base identities: $\\sin(A \\pm B) = \\sin A \\cos B \\pm \\cos A \\sin B$ and $\\cos(A \\pm B) = \\cos A \\cos B \\mp \\sin A \\sin B$. Double-angle formulas follow by setting $B = A$: $\\sin(2A) = 2 \\sin A \\cos A$; $\\cos(2A) = \\cos^2 A - \\sin^2 A = 2\\cos^2 A - 1 = 1 - 2\\sin^2 A$ (pick the form whose half-angle you need next).',
+          '$\\sin(A\\pm B)=\\sin A\\cos B \\pm \\cos A\\sin B$ (sign matches). $\\cos(A\\pm B)=\\cos A\\cos B \\mp \\sin A\\sin B$ (sign flips). Double-angle is the same with $B=A$.',
         exampleProblem:
           'Find the exact value of $\\sin\\left(\\dfrac{7\\pi}{12}\\right)$ using a sum identity.',
       },
@@ -186,7 +186,7 @@ export const COURSES: Course[] = [
         title: 'Solving Trig Equations',
         blurb: 'Find all $x$ with $\\sin x = a$, etc., over an interval or all reals.',
         strategicAnchor:
-          'Find a reference angle, then use periodicity to list all solutions. Sin and cos give two solution families per period; tan gives one per period.',
+          'Find one reference angle, then add the period. Sin and cos give two solution families per cycle; tan gives one.',
         exampleProblem: 'Solve $2\\sin x - 1 = 0$ on $[0, 2\\pi)$.',
       },
       {
@@ -194,7 +194,7 @@ export const COURSES: Course[] = [
         title: 'Polar Coordinates & Complex Numbers',
         blurb: 'Convert between $(r, \\theta)$ and $(x, y)$; $a + bi$ in polar form.',
         strategicAnchor:
-          'Conversions: $x = r\\cos\\theta$, $y = r\\sin\\theta$; $r^2 = x^2 + y^2$, $\\tan\\theta = y/x$. A complex number $a + bi$ has polar form $r(\\cos\\theta + i\\sin\\theta) = r e^{i\\theta}$ with $r = |a + bi| = \\sqrt{a^2 + b^2}$. Multiplication in polar is geometrically clean: multiply moduli, add angles.',
+          '$x=r\\cos\\theta$, $y=r\\sin\\theta$, $r^2=x^2+y^2$. In polar, multiplication is clean: multiply moduli, add angles ($re^{i\\theta}$).',
         exampleProblem:
           'Find $(1 + i)^{10}$ by converting to polar form and applying De Moivre\'s theorem.',
       },
@@ -203,7 +203,7 @@ export const COURSES: Course[] = [
         title: 'Arithmetic & Geometric Sequences',
         blurb: 'Closed-form formulas and partial sums.',
         strategicAnchor:
-          'Check consecutive terms: constant difference → arithmetic, $a_n = a_1 + (n-1)d$. Constant ratio → geometric, $a_n = a_1 r^{n-1}$. Sum formulas follow from telescoping or the geometric trick.',
+          'Constant difference → arithmetic: $a_n=a_1+(n-1)d$. Constant ratio → geometric: $a_n=a_1 r^{n-1}$.',
         exampleProblem: 'Find the sum of the first 20 terms of $3, 7, 11, 15, \\ldots$',
       },
       {
@@ -211,7 +211,7 @@ export const COURSES: Course[] = [
         title: 'Series & Sigma Notation',
         blurb: 'Read $\\sum$ notation and compute finite + infinite geometric sums.',
         strategicAnchor:
-          'A series is the sum of a sequence. Geometric series with ratio $r$: finite partial sum $S_n = a_1 \\dfrac{1 - r^n}{1 - r}$; infinite sum (only when $|r| < 1$) $S = \\dfrac{a_1}{1 - r}$. Telescoping series: write each term as a difference and watch most terms cancel. These two patterns are the entire toolkit at the precalc level.',
+          'Geometric: $S_n=a_1\\dfrac{1-r^n}{1-r}$; infinite if $|r|<1$ → $\\dfrac{a_1}{1-r}$. Otherwise look for telescoping.',
         exampleProblem:
           'Evaluate: $\\displaystyle\\sum_{n=1}^{\\infty} \\dfrac{3}{4^n}$',
       },
@@ -227,7 +227,7 @@ export const COURSES: Course[] = [
         title: 'Computing Limits',
         blurb: 'Direct sub first, then factor/cancel for indeterminate forms.',
         strategicAnchor:
-          "Always try direct substitution first. If you get 0/0 or ∞/∞, try factoring, conjugate multiplication, or L'Hôpital. Check one-sided limits when expressions change sign or are undefined at the point.",
+          'Plug in first. If you get $0/0$ or $\\infty/\\infty$: factor, conjugate, or L\'Hôpital. Check one-sided when behavior splits.',
         exampleProblem: 'Compute: $\\displaystyle\\lim_{x \\to 2} \\dfrac{x^2 - 4}{x - 2}$',
       },
       {
@@ -235,7 +235,7 @@ export const COURSES: Course[] = [
         title: 'Continuity & the IVT',
         blurb: 'A function is continuous when its limit equals its value.',
         strategicAnchor:
-          'Continuity at $a$ requires three things: $f(a)$ exists, $\\lim_{x \\to a} f(x)$ exists, and they are equal. The Intermediate Value Theorem says: if $f$ is continuous on $[a,b]$ and $N$ is between $f(a)$ and $f(b)$, some $c \\in [a,b]$ satisfies $f(c) = N$. The IVT is your existence tool — proves a root or value exists without finding it.',
+          'Continuous = limit equals value. IVT: continuous on $[a,b]$ and $N$ between $f(a),f(b)$ → some $c$ in between hits $N$. Use it to prove a root exists without finding it.',
         exampleProblem:
           'Show that $f(x) = x^3 + x - 1$ has a root in $(0, 1)$.',
       },
@@ -244,7 +244,7 @@ export const COURSES: Course[] = [
         title: 'Derivative as a Limit',
         blurb: '$f\'(x) = \\lim_{h \\to 0} \\dfrac{f(x+h) - f(x)}{h}$.',
         strategicAnchor:
-          'The derivative is the slope of the tangent line at $x$. Computing it from the limit definition is mostly an exercise in algebra: expand $f(x+h)$, subtract $f(x)$, factor $h$ from the numerator, then cancel before letting $h \\to 0$. Use this when asked to "use the definition" — otherwise switch to the differentiation rules (next topic).',
+          '$f\'(x)=\\lim_{h\\to 0}\\dfrac{f(x+h)-f(x)}{h}$. Expand the top, factor an $h$ out, cancel, then send $h\\to 0$.',
         exampleProblem:
           "Use the limit definition to find $f'(x)$ for $f(x) = \\dfrac{1}{x + 2}$.",
       },
@@ -253,7 +253,7 @@ export const COURSES: Course[] = [
         title: 'Differentiation Rules',
         blurb: 'Power, product, quotient, chain — knowing which to apply first.',
         strategicAnchor:
-          'Look at the outermost structure. Sum/difference → split. Product → product rule. Quotient → quotient rule. Composition → chain rule. Often you nest several. Use the chain rule whenever you differentiate a function-of-a-function.',
+          'Read the outermost structure: sum → split; product → product rule; quotient → quotient rule; composition → chain rule. Chain rule whenever there\'s an inside function.',
         exampleProblem: 'Differentiate: $f(x) = \\dfrac{x^2 \\sin(3x)}{e^x}$',
       },
       {
@@ -261,7 +261,7 @@ export const COURSES: Course[] = [
         title: 'Derivatives of Trig, Exp & Log',
         blurb: 'Special forms: $\\sin$, $\\cos$, $\\tan$, $e^x$, $\\ln x$.',
         strategicAnchor:
-          'Core list: $(\\sin x)\' = \\cos x$, $(\\cos x)\' = -\\sin x$, $(\\tan x)\' = \\sec^2 x$, $(e^x)\' = e^x$, $(\\ln x)\' = 1/x$. For $a^x$: $(a^x)\' = a^x \\ln a$ (the $\\ln a$ shows up because $e$ is special). The chain rule wraps around all of these — never forget the "times the derivative of the inside".',
+          '$\\sin\\to\\cos$, $\\cos\\to-\\sin$, $\\tan\\to\\sec^2$, $e^x\\to e^x$, $\\ln x\\to 1/x$. Always multiply by the derivative of the inside.',
         exampleProblem:
           "Differentiate: $f(x) = e^{x^2} \\tan(\\ln x)$.",
       },
@@ -270,7 +270,7 @@ export const COURSES: Course[] = [
         title: 'Implicit Differentiation',
         blurb: 'When $y$ is tangled with $x$ — differentiate both sides treating $y$ as $y(x)$.',
         strategicAnchor:
-          'Apply $d/dx$ to every term. Each $y$ picks up a $dy/dx$ via the chain rule. Then solve algebraically for $dy/dx$.',
+          'Differentiate every term in $x$. Each $y$ picks up a $dy/dx$ tag (chain rule). Then solve algebraically for $dy/dx$.',
         exampleProblem: 'Find $\\dfrac{dy}{dx}$ for $x^2 + xy + y^2 = 7$.',
       },
       {
@@ -278,7 +278,7 @@ export const COURSES: Course[] = [
         title: 'Curve Sketching',
         blurb: 'Use $f\'$ and $f\'\'$ to find shape, extrema, and inflection points.',
         strategicAnchor:
-          'Four-step recipe: (1) domain + intercepts + asymptotes; (2) $f\'(x) = 0$ for critical points; sign of $f\'$ tells intervals of increase/decrease; (3) $f\'\'(x) = 0$ for inflection candidates; sign of $f\'\'$ tells concavity; (4) the second-derivative test confirms each critical point as max ($f\'\' < 0$), min ($f\'\' > 0$), or inconclusive.',
+          '$f\'=0$ → critical points; sign of $f\'$ → increase/decrease. $f\'\'=0$ → inflection candidates; sign of $f\'\'$ → concavity. Second-derivative test classifies extrema.',
         exampleProblem:
           'Sketch $f(x) = x^3 - 6x^2 + 9x + 1$: find all extrema and inflection points.',
       },
@@ -287,7 +287,7 @@ export const COURSES: Course[] = [
         title: 'Related Rates',
         blurb: 'Two changing quantities tied by an equation; given one rate, find the other.',
         strategicAnchor:
-          'Set up the relating equation first (geometry/physics). Differentiate both sides with respect to time $t$. Substitute known values at the END, never before — substituting first locks variables that should still be moving.',
+          'Write the relating equation, differentiate w.r.t. $t$, substitute numbers LAST. Substituting early freezes a variable that should still be moving.',
         exampleProblem:
           'A 10-ft ladder slides down a wall. The bottom moves at 2 ft/s away from the wall. How fast is the top falling when the bottom is 6 ft from the wall?',
       },
@@ -296,7 +296,7 @@ export const COURSES: Course[] = [
         title: 'Mean Value Theorem',
         blurb: 'Continuous + differentiable → average rate is achieved as an instantaneous rate somewhere.',
         strategicAnchor:
-          'MVT says: if $f$ is continuous on $[a,b]$ and differentiable on $(a,b)$, then some $c \\in (a,b)$ has $f\'(c) = \\dfrac{f(b) - f(a)}{b - a}$. Rolle\'s theorem is the special case where $f(a) = f(b)$, forcing $f\'(c) = 0$. Use MVT to prove bounds — e.g., "show $|f(x) - f(y)| \\le M|x - y|$ by applying MVT and bounding $f\'$".',
+          'Continuous on $[a,b]$ + differentiable on $(a,b)$ → some $c$ has $f\'(c)=\\dfrac{f(b)-f(a)}{b-a}$. Rolle is the special case with $f(a)=f(b)$, forcing $f\'(c)=0$.',
         exampleProblem:
           'Verify the MVT for $f(x) = x^3 - x$ on $[0, 2]$ and find the value(s) of $c$.',
       },
@@ -305,7 +305,7 @@ export const COURSES: Course[] = [
         title: 'Optimization',
         blurb: 'Maximize or minimize a quantity subject to a constraint.',
         strategicAnchor:
-          'Write the objective as a function of one variable (use the constraint to eliminate the other). Set the derivative to zero for critical points. Check second derivative or endpoints to confirm max vs. min vs. saddle.',
+          'Use the constraint to write the objective in one variable. Set its derivative to zero. Check endpoints too.',
         exampleProblem:
           'Find the dimensions of the rectangle of maximum area inscribed in a semicircle of radius 5.',
       },
@@ -314,7 +314,7 @@ export const COURSES: Course[] = [
         title: "L'Hôpital's Rule",
         blurb: 'Differentiate top and bottom to crack indeterminate limits.',
         strategicAnchor:
-          'Verify the form is 0/0 or ∞/∞ FIRST. Differentiate numerator and denominator separately (not as a quotient). Sometimes you apply it more than once. For other indeterminate forms (0·∞, 1^∞, ∞ − ∞), rewrite into 0/0 or ∞/∞ first.',
+          'Confirm $0/0$ or $\\infty/\\infty$ first. Differentiate top and bottom separately (not as a quotient). Repeat as needed; convert other indeterminate forms to one of these.',
         exampleProblem: 'Compute: $\\displaystyle\\lim_{x \\to 0} \\dfrac{\\sin x - x}{x^3}$',
       },
       {
@@ -322,7 +322,7 @@ export const COURSES: Course[] = [
         title: 'Antiderivatives & the FTC',
         blurb: 'Integration as inverse of differentiation; FTC connects them.',
         strategicAnchor:
-          'Reverse the differentiation rules: $\\int x^n \\, dx = \\dfrac{x^{n+1}}{n+1} + C$ for $n \\ne -1$; $\\int e^x \\, dx = e^x + C$; $\\int 1/x \\, dx = \\ln|x| + C$. The Fundamental Theorem of Calculus, Part 1: $\\dfrac{d}{dx} \\int_a^x f(t) \\, dt = f(x)$. Part 2: $\\int_a^b f(x) \\, dx = F(b) - F(a)$ where $F\' = f$. The $+ C$ exists because antiderivatives differ by constants.',
+          'Reverse the power rule: $\\int x^n dx=\\dfrac{x^{n+1}}{n+1}+C$ (the $n=-1$ case is $\\ln|x|$). FTC: $\\int_a^b f\\,dx=F(b)-F(a)$ when $F\'=f$.',
         exampleProblem:
           'Compute: $\\displaystyle\\int_0^{\\pi/2} (3\\sin x + 2x) \\, dx$',
       },
@@ -338,7 +338,7 @@ export const COURSES: Course[] = [
         title: 'Riemann Sums & Definite Integrals',
         blurb: 'Build the integral as a limit of rectangle sums.',
         strategicAnchor:
-          'Partition $[a, b]$ into $n$ pieces of width $\\Delta x = (b - a)/n$. The Riemann sum is $\\sum_{i=1}^n f(x_i^*) \\Delta x$ where $x_i^*$ is a sample point in piece $i$ (left, right, or midpoint). As $n \\to \\infty$, the sum becomes $\\int_a^b f(x) \\, dx$. This is the foundation — most of Calc 2 is built on recognizing or producing Riemann sums.',
+          '$\\sum f(x_i^*)\\Delta x \\to \\int_a^b f\\,dx$ as $n\\to\\infty$. Recognize a Riemann-sum limit by spotting the $\\Delta x$ and a sample point $x_i^*$.',
         exampleProblem:
           'Express $\\displaystyle\\lim_{n \\to \\infty} \\sum_{i=1}^{n} \\dfrac{2i^2}{n^3}$ as a definite integral and evaluate it.',
       },
@@ -347,7 +347,7 @@ export const COURSES: Course[] = [
         title: 'u-Substitution',
         blurb: 'Reverse the chain rule by spotting an inner function and its derivative.',
         strategicAnchor:
-          "Look for $f(g(x)) \\cdot g'(x)$ inside the integral. Set $u = g(x)$; $du = g'(x) \\, dx$. The integral becomes $\\int f(u) \\, du$, ideally a basic form. Don't forget to back-substitute (or change bounds for definite integrals).",
+          'Spot an inner function and its derivative. Let $u=g(x)$, $du=g\'(x)\\,dx$; the integral becomes $\\int f(u)\\,du$. Change bounds for definite integrals.',
         exampleProblem: 'Compute: $\\displaystyle\\int x \\cos(x^2) \\, dx$',
       },
       {
@@ -355,7 +355,7 @@ export const COURSES: Course[] = [
         title: 'Integration by Parts',
         blurb: 'Reverse the product rule. Pick $u$ via LIATE.',
         strategicAnchor:
-          '$\\int u \\, dv = uv - \\int v \\, du$. Pick $u$ to be whichever appears first in LIATE: Logarithmic, Inverse trig, Algebraic, Trigonometric, Exponential. The $u$ you picked simplifies on differentiation; what is left becomes $dv$.',
+          '$\\int u\\,dv=uv-\\int v\\,du$. Pick $u$ by LIATE (Log, Inverse-trig, Algebraic, Trig, Exp — leftmost wins). For polynomial × $e^x$ or $\\sin/\\cos$: use the tabular (DI) trick — differentiate the polynomial down one column to 0, integrate the other down the next, multiply across the diagonals with alternating signs. Kills $\\int x^3 e^x\\,dx$ in one diagram, no recursion.',
         exampleProblem: 'Compute: $\\displaystyle\\int x^2 \\ln x \\, dx$',
       },
       {
@@ -363,7 +363,7 @@ export const COURSES: Course[] = [
         title: 'Trigonometric Substitution',
         blurb: 'When you see $\\sqrt{a^2 \\pm x^2}$ or $\\sqrt{x^2 - a^2}$, trade $x$ for a sin/tan/sec.',
         strategicAnchor:
-          'Three patterns: $\\sqrt{a^2 - x^2}$ → $x = a \\sin\\theta$; $\\sqrt{a^2 + x^2}$ → $x = a \\tan\\theta$; $\\sqrt{x^2 - a^2}$ → $x = a \\sec\\theta$. Each one Pythagoreans the radical away. Always sketch a reference triangle to back-substitute.',
+          '$\\sqrt{a^2-x^2}\\Rightarrow x=a\\sin\\theta$; $\\sqrt{a^2+x^2}\\Rightarrow a\\tan\\theta$; $\\sqrt{x^2-a^2}\\Rightarrow a\\sec\\theta$. Each kills the radical via Pythagoras.',
         exampleProblem: 'Compute: $\\displaystyle\\int \\dfrac{1}{\\sqrt{9 - x^2}} \\, dx$',
       },
       {
@@ -371,7 +371,7 @@ export const COURSES: Course[] = [
         title: 'Partial Fraction Decomposition',
         blurb: 'Split a rational function into pieces you can integrate separately.',
         strategicAnchor:
-          'Factor the denominator first. Each linear $(x - r)$ gets $A/(x - r)$; each repeated $(x - r)^2$ adds $B/(x - r)^2$; each irreducible quadratic gets $(Cx + D)/(\\text{quadratic})$. Solve for the constants by matching coefficients or plugging in roots.',
+          'Factor the denominator. Linear $(x-r)\\to A/(x-r)$; repeated → also add $B/(x-r)^2$; irreducible quadratic → $(Cx+D)/Q$. Heaviside cover-up for distinct linear factors: to find $A$, *cover* $(x-r)$ in the original and plug $x=r$ into what remains. No system of equations.',
         exampleProblem: 'Compute: $\\displaystyle\\int \\dfrac{3x + 5}{(x - 1)(x + 2)} \\, dx$',
       },
       {
@@ -379,7 +379,7 @@ export const COURSES: Course[] = [
         title: 'Improper Integrals',
         blurb: 'Integrals over infinite intervals or with vertical asymptotes.',
         strategicAnchor:
-          'Rewrite as a limit: $\\int_a^{\\infty} f \\, dx = \\lim_{b \\to \\infty} \\int_a^b f \\, dx$. If the limit is finite, the integral converges to that value; otherwise it diverges. For a discontinuity at $c \\in (a, b)$: split into $\\int_a^c + \\int_c^b$ and take a one-sided limit at each piece — both must converge separately.',
+          'Replace the bad endpoint with a parameter and take the limit. Finite limit → converges; otherwise diverges. Split at any interior singularity.',
         exampleProblem:
           'Does $\\displaystyle\\int_0^1 \\dfrac{1}{\\sqrt{x}} \\, dx$ converge? If so, evaluate it.',
       },
@@ -388,7 +388,7 @@ export const COURSES: Course[] = [
         title: 'Sequences',
         blurb: 'Limits of $a_n$, monotonicity, and bounded sequences.',
         strategicAnchor:
-          'A sequence $\\{a_n\\}$ is just a function from $\\mathbb{N}$ to $\\mathbb{R}$. To find $\\lim_{n \\to \\infty} a_n$, treat $n$ as a continuous variable and apply L\'Hôpital, ratio tricks, or the squeeze theorem. Monotone + bounded → converges (this is the Monotone Convergence Theorem, and it\'s the safest existence argument when you can\'t compute the limit directly).',
+          'Treat $n$ as continuous and apply L\'Hôpital, ratio tricks, or squeeze. Monotone + bounded → converges (safest existence argument).',
         exampleProblem:
           'Determine whether $a_n = \\dfrac{n^2 + 3n}{2n^2 - 1}$ converges, and find its limit if so.',
       },
@@ -397,7 +397,7 @@ export const COURSES: Course[] = [
         title: 'Series Convergence Tests',
         blurb: 'Choose the right test based on the summand\'s shape.',
         strategicAnchor:
-          'Decision tree: alternating sign? alternating series test. $p$-form $1/n^p$? $p$-test ($p > 1$ converges). Factorial or $r^n$? ratio test (limit $< 1$ converges). Looks like a known series? comparison or limit comparison. Has a clean continuous antiderivative? integral test. Always check the $n$th-term test for divergence FIRST: if $a_n \\not\\to 0$, it diverges with no further work.',
+          'Always check $a_n\\to 0$ first — if not, it diverges immediately. Then route by shape: alternating sign → AST; $1/n^p$ → $p$-test ($p>1$); factorial or $r^n$ → ratio; resembles a known series → comparison.',
         exampleProblem:
           'Does $\\displaystyle\\sum_{n=2}^{\\infty} \\dfrac{1}{n \\ln n}$ converge?',
       },
@@ -406,7 +406,7 @@ export const COURSES: Course[] = [
         title: 'Power Series & Radius of Convergence',
         blurb: 'Series in powers of $(x - c)$, and where they converge.',
         strategicAnchor:
-          'A power series $\\sum a_n (x - c)^n$ converges on an interval centered at $c$ with radius $R$. Find $R$ using the ratio test: $\\lim_{n \\to \\infty} \\left|\\dfrac{a_{n+1}(x - c)^{n+1}}{a_n (x - c)^n}\\right| < 1$ gives $|x - c| < R$. Check the endpoints $c \\pm R$ separately — at those points the ratio test is inconclusive, and behavior can differ on each end.',
+          'Ratio test on $|a_{n+1}/a_n|<1$ gives the radius $R$. Endpoints $c\\pm R$ need separate hand-checks — ratio test is inconclusive there.',
         exampleProblem:
           'Find the interval of convergence of $\\displaystyle\\sum_{n=1}^{\\infty} \\dfrac{(x - 2)^n}{n \\cdot 3^n}$.',
       },
@@ -415,7 +415,7 @@ export const COURSES: Course[] = [
         title: 'Taylor & Maclaurin Series',
         blurb: 'Approximate a function as a polynomial near a point.',
         strategicAnchor:
-          'Maclaurin = Taylor at $x = 0$: $f(x) = \\sum f^{(n)}(0)/n! \\cdot x^n$. Memorize the big four ($e^x, \\sin x, \\cos x, 1/(1-x)$) and derive others by substitution, differentiation, or integration of those.',
+          '$\\sum f^{(n)}(0)\\,x^n/n!$ (Maclaurin). Memorize the big four — $e^x$, $\\sin x$, $\\cos x$, $1/(1-x)$ — and derive others by substitution, differentiation, or integration.',
         exampleProblem:
           'Find the Maclaurin series for $f(x) = x \\sin(x^2)$ up to $x^7$.',
       },
@@ -424,7 +424,7 @@ export const COURSES: Course[] = [
         title: 'Parametric Equations & Arc Length',
         blurb: 'Curves $(x(t), y(t))$ and the length of an arc.',
         strategicAnchor:
-          'Parametric form $x = x(t)$, $y = y(t)$ traces a curve as $t$ varies. Slope of the tangent: $\\dfrac{dy}{dx} = \\dfrac{dy/dt}{dx/dt}$. Arc length: $L = \\int_a^b \\sqrt{(dx/dt)^2 + (dy/dt)^2} \\, dt$ — the integrand is the speed. For $y = f(x)$, use $L = \\int_a^b \\sqrt{1 + (f\'(x))^2} \\, dx$ (same formula with $t = x$).',
+          '$\\dfrac{dy}{dx}=\\dfrac{dy/dt}{dx/dt}$. Arc length $L=\\int\\sqrt{(dx/dt)^2+(dy/dt)^2}\\,dt$ — the integrand is speed.',
         exampleProblem:
           'Find the arc length of $x = t^2$, $y = \\dfrac{2}{3} t^3$ from $t = 0$ to $t = 1$.',
       },
@@ -433,7 +433,7 @@ export const COURSES: Course[] = [
         title: 'Polar Coordinates & Polar Area',
         blurb: 'Curves $r = f(\\theta)$ and the area they enclose.',
         strategicAnchor:
-          'Convert: $x = r \\cos\\theta$, $y = r \\sin\\theta$, $r = \\sqrt{x^2 + y^2}$. Area inside $r = f(\\theta)$ from $\\theta = \\alpha$ to $\\theta = \\beta$: $A = \\dfrac{1}{2} \\int_{\\alpha}^{\\beta} [f(\\theta)]^2 \\, d\\theta$. Common gotcha: find where $r = 0$ to identify the correct $\\theta$-bounds (the curve passes through the origin there).',
+          '$A=\\dfrac{1}{2}\\int_\\alpha^\\beta r^2\\,d\\theta$. Find where $r=0$ to set the right $\\theta$-bounds.',
         exampleProblem:
           'Find the area inside one petal of the rose $r = 2 \\sin(3\\theta)$.',
       },
@@ -449,7 +449,7 @@ export const COURSES: Course[] = [
         title: 'Vectors in 2D and 3D',
         blurb: 'Components, magnitude, unit vectors, and basic operations.',
         strategicAnchor:
-          'A vector has components: $\\vec{v} = \\langle a, b, c \\rangle$. Magnitude $|\\vec{v}| = \\sqrt{a^2 + b^2 + c^2}$. Unit vector $\\hat{v} = \\vec{v}/|\\vec{v}|$. Addition and scalar multiplication are componentwise. The standard basis is $\\hat{i}, \\hat{j}, \\hat{k}$ for the $x, y, z$ axes.',
+          'Componentwise add and scale. $|\\vec v|=\\sqrt{a^2+b^2+c^2}$. Unit vector: $\\hat v=\\vec v/|\\vec v|$.',
         exampleProblem:
           'Given $\\vec{u} = \\langle 1, -2, 3 \\rangle$ and $\\vec{v} = \\langle 4, 0, -1 \\rangle$, find a unit vector in the direction of $2\\vec{u} - 3\\vec{v}$.',
       },
@@ -458,7 +458,7 @@ export const COURSES: Course[] = [
         title: 'Dot & Cross Products',
         blurb: '$\\vec{u} \\cdot \\vec{v}$ is a scalar; $\\vec{u} \\times \\vec{v}$ is a vector.',
         strategicAnchor:
-          'Dot product: $\\vec{u} \\cdot \\vec{v} = u_1 v_1 + u_2 v_2 + u_3 v_3 = |\\vec{u}||\\vec{v}|\\cos\\theta$. Zero iff perpendicular. Cross product: $\\vec{u} \\times \\vec{v}$ is a vector perpendicular to both, magnitude $|\\vec{u}||\\vec{v}|\\sin\\theta$ (the parallelogram area). Direction by right-hand rule. Cross is zero iff parallel. Compute cross via the $3\\times 3$ determinant with $\\hat{i}, \\hat{j}, \\hat{k}$ in the top row.',
+          'Dot: $\\vec u\\cdot\\vec v=|\\vec u||\\vec v|\\cos\\theta$, zero iff perpendicular. Cross: vector perpendicular to both, magnitude $|\\vec u||\\vec v|\\sin\\theta$ (parallelogram area), zero iff parallel.',
         exampleProblem:
           'Find the area of the triangle with vertices $A = (1, 0, 0)$, $B = (0, 2, 0)$, $C = (0, 0, 3)$.',
       },
@@ -467,7 +467,7 @@ export const COURSES: Course[] = [
         title: 'Lines, Planes & Surfaces',
         blurb: 'Vector and parametric forms for lines; normal-vector form for planes.',
         strategicAnchor:
-          'Line through $P_0$ with direction $\\vec{v}$: $\\vec{r}(t) = P_0 + t\\vec{v}$. Plane through $P_0$ with normal $\\vec{n}$: $\\vec{n} \\cdot (\\vec{r} - P_0) = 0$, which expands to $a(x - x_0) + b(y - y_0) + c(z - z_0) = 0$. To find a plane through 3 points: take two edge vectors, cross them for $\\vec{n}$.',
+          'Line: $\\vec r(t)=P_0+t\\vec v$. Plane: $\\vec n\\cdot(\\vec r-P_0)=0$. For a plane through three points, cross two edge vectors to get $\\vec n$.',
         exampleProblem:
           'Find the equation of the plane through $(1, 2, 3)$, $(2, 0, -1)$, and $(0, 1, 4)$.',
       },
@@ -476,7 +476,7 @@ export const COURSES: Course[] = [
         title: 'Partial Derivatives',
         blurb: 'Differentiate w.r.t. one variable, treating the others as constants.',
         strategicAnchor:
-          'Hold all variables but one constant; differentiate normally w.r.t. the active variable. Notation: $\\partial f/\\partial x$ or $f_x$. The others literally do not move.',
+          'Differentiate w.r.t. one variable; freeze the others as constants. Notation: $\\partial f/\\partial x$ or $f_x$.',
         exampleProblem:
           'Find $\\dfrac{\\partial f}{\\partial x}$ and $\\dfrac{\\partial f}{\\partial y}$ for $f(x, y) = x^3 y^2 + e^{xy}$.',
       },
@@ -485,7 +485,7 @@ export const COURSES: Course[] = [
         title: 'Gradient & Directional Derivatives',
         blurb: '$\\nabla f$ points in the direction of steepest ascent.',
         strategicAnchor:
-          '$\\nabla f = \\langle \\partial f/\\partial x, \\partial f/\\partial y, \\partial f/\\partial z \\rangle$. Directional derivative in direction $\\vec{u}$ (a unit vector) is $\\nabla f \\cdot \\vec{u}$. Maximum rate of change is $|\\nabla f|$, in the direction of $\\nabla f$ itself.',
+          '$\\nabla f$ points up the steepest slope; its magnitude is the max rate. Directional derivative in unit $\\vec u$: $\\nabla f\\cdot\\vec u$.',
         exampleProblem:
           'Find the directional derivative of $f(x, y) = x^2 y + y^3$ at $(1, 2)$ in the direction of $\\langle 3, 4 \\rangle$.',
       },
@@ -494,7 +494,7 @@ export const COURSES: Course[] = [
         title: 'Tangent Planes & Linearization',
         blurb: 'Linear approximation to $f(x, y)$ at a point.',
         strategicAnchor:
-          'Tangent plane to $z = f(x, y)$ at $(a, b)$: $z = f(a, b) + f_x(a, b)(x - a) + f_y(a, b)(y - b)$. This is the 2D analog of the tangent line. The linearization $L(x, y)$ is the same formula — use it to approximate $f$ near $(a, b)$. Error grows quadratically with distance from the point.',
+          '$z=f(a,b)+f_x(a,b)(x-a)+f_y(a,b)(y-b)$ — the 2D analog of the tangent line. Use it as a linear approximation near $(a,b)$.',
         exampleProblem:
           'Use linearization to approximate $\\sqrt{(2.05)^2 + (2.97)^2}$.',
       },
@@ -503,7 +503,7 @@ export const COURSES: Course[] = [
         title: 'Critical Points & Second-Derivative Test',
         blurb: 'Max, min, and saddle points of $f(x, y)$.',
         strategicAnchor:
-          'Critical points: $\\nabla f = \\vec{0}$ (both partials zero). Classify with the discriminant $D = f_{xx} f_{yy} - (f_{xy})^2$ evaluated at the point. $D > 0$ and $f_{xx} > 0$: local min. $D > 0$ and $f_{xx} < 0$: local max. $D < 0$: saddle. $D = 0$: test fails (try another approach). Always also check boundaries on bounded domains.',
+          '$\\nabla f=\\vec 0$ for critical points. Classify with $D=f_{xx}f_{yy}-f_{xy}^2$: $D>0$ and $f_{xx}>0$ → min; $D>0$ and $f_{xx}<0$ → max; $D<0$ → saddle.',
         exampleProblem:
           'Find and classify all critical points of $f(x, y) = x^3 - 3xy + y^3$.',
       },
@@ -512,7 +512,7 @@ export const COURSES: Course[] = [
         title: 'Double Integrals',
         blurb: 'Integrate over a 2D region by iterated single integrals.',
         strategicAnchor:
-          'Sketch the region first. Type I (vertically simple): $\\int_a^b \\int_{g_1(x)}^{g_2(x)} f \\, dy \\, dx$. Type II (horizontally simple): swap. Pick the order that gives easier inner integration.',
+          'Sketch the region first. Pick the order ($dy\\,dx$ vs $dx\\,dy$) that gives easier inner bounds.',
         exampleProblem:
           'Compute $\\displaystyle\\iint_R xy \\, dA$ where $R$ is bounded by $y = x$ and $y = x^2$.',
       },
@@ -521,7 +521,7 @@ export const COURSES: Course[] = [
         title: 'Polar / Cylindrical / Spherical',
         blurb: 'Pick coordinates that match the geometry to simplify integration.',
         strategicAnchor:
-          'Polar (2D): use when you see $x^2 + y^2$ or circular regions; $dA = r \\, dr \\, d\\theta$. Cylindrical (3D): polar in $xy$ plus $z$; $dV = r \\, dr \\, d\\theta \\, dz$. Spherical: when you see $x^2 + y^2 + z^2$ or sphere/cone regions; $dV = \\rho^2 \\sin\\phi \\, d\\rho \\, d\\phi \\, d\\theta$.',
+          'See $x^2+y^2$ or a disk → polar, $dA=r\\,dr\\,d\\theta$. Cylinder → cylindrical. See $x^2+y^2+z^2$ or a sphere/cone → spherical, $dV=\\rho^2\\sin\\phi\\,d\\rho\\,d\\phi\\,d\\theta$.',
         exampleProblem:
           'Compute $\\displaystyle\\iint_D \\sqrt{x^2 + y^2} \\, dA$ where $D$ is the disk of radius 2 centered at the origin.',
       },
@@ -530,7 +530,7 @@ export const COURSES: Course[] = [
         title: 'Line Integrals',
         blurb: 'Integrate along a curve.',
         strategicAnchor:
-          'Parametrize the curve $\\vec{r}(t)$, express $f$ and $ds$ (or $\\vec{F} \\cdot d\\vec{r}$) in terms of $t$, integrate over the $t$-range. For conservative vector fields (one with a potential function $f$), use the fundamental theorem instead: $\\int_C \\vec{F} \\cdot d\\vec{r} = f(\\text{end}) - f(\\text{start})$ — much faster.',
+          'Parametrize the curve $\\vec r(t)$; express $f$ and $ds$ (or $\\vec F\\cdot d\\vec r$) in $t$. Conservative field? Use $\\int_C\\vec F\\cdot d\\vec r=f(\\text{end})-f(\\text{start})$.',
         exampleProblem:
           'Compute $\\displaystyle\\int_C (x + y^2) \\, ds$ where $C$ is $\\vec{r}(t) = \\langle t, t^2 \\rangle$, $0 \\le t \\le 1$.',
       },
@@ -539,7 +539,7 @@ export const COURSES: Course[] = [
         title: 'Surface Integrals',
         blurb: 'Integrate over a surface — scalar or flux integrals.',
         strategicAnchor:
-          'Parametrize the surface $\\vec{r}(u, v)$. Element of area: $dS = |\\vec{r}_u \\times \\vec{r}_v| \\, du \\, dv$. Scalar integral: $\\iint_S f \\, dS$. Flux integral $\\iint_S \\vec{F} \\cdot d\\vec{S}$ uses $d\\vec{S} = (\\vec{r}_u \\times \\vec{r}_v) \\, du \\, dv$ — the cross product gives the outward normal (check orientation). For closed surfaces, divergence theorem is usually faster.',
+          'Parametrize $\\vec r(u,v)$; area element $dS=|\\vec r_u\\times\\vec r_v|\\,du\\,dv$. Closed surface → divergence theorem is usually faster.',
         exampleProblem:
           'Find the flux of $\\vec{F} = \\langle x, y, z \\rangle$ across the sphere $x^2 + y^2 + z^2 = 4$ with outward normal.',
       },
@@ -548,7 +548,7 @@ export const COURSES: Course[] = [
         title: 'Green / Stokes / Divergence',
         blurb: 'Convert between line, surface, and volume integrals.',
         strategicAnchor:
-          "Green's: line integral around a closed plane curve = double integral over the enclosed region (uses curl, $\\partial Q/\\partial x - \\partial P/\\partial y$). Stokes: 3D analog with a surface bounded by the curve. Divergence: closed surface integral = volume integral over enclosed solid (uses divergence). Use whichever side of the boundary is easier to compute.",
+          'Closed curve in the plane → Green\'s. Closed curve in 3D → Stokes. Closed surface → Divergence. Each trades a boundary integral for one over the interior.',
         exampleProblem:
           "Use Green's theorem to compute $\\displaystyle\\oint_C (y^2 \\, dx + x^2 \\, dy)$ around the triangle with vertices $(0,0)$, $(1,0)$, $(0,1)$.",
       },
@@ -564,7 +564,7 @@ export const COURSES: Course[] = [
         title: 'Propositional Logic & Equivalences',
         blurb: 'Use logic laws (De Morgan, distribution) to simplify or prove statements.',
         strategicAnchor:
-          'Memorize the major laws: De Morgan $\\neg(P \\wedge Q) \\equiv \\neg P \\vee \\neg Q$; implication $P \\to Q \\equiv \\neg P \\vee Q$; contrapositive $P \\to Q \\equiv \\neg Q \\to \\neg P$. Truth tables work but get unwieldy past 3 variables; equivalences are how you scale.',
+          '$P\\to Q \\equiv \\neg P \\vee Q \\equiv \\neg Q\\to\\neg P$. De Morgan flips $\\wedge\\leftrightarrow\\vee$ when negating. Equivalences scale where truth tables don\'t.',
         exampleProblem: 'Show that $(P \\to Q) \\to P \\equiv P$.',
       },
       {
@@ -572,7 +572,7 @@ export const COURSES: Course[] = [
         title: 'Predicate Logic & Quantifiers',
         blurb: '$\\forall$ (for all) and $\\exists$ (there exists) over a domain.',
         strategicAnchor:
-          'Negation flips quantifiers AND negates the inner statement: $\\neg \\forall x \\, P(x) \\equiv \\exists x \\, \\neg P(x)$; $\\neg \\exists x \\, P(x) \\equiv \\forall x \\, \\neg P(x)$. Nested quantifiers: order matters. $\\forall x \\, \\exists y$ (for every $x$, some $y$ works) is weaker than $\\exists y \\, \\forall x$ (one $y$ works for every $x$). When in doubt, read it as a two-player game.',
+          'Negate by flipping the quantifier and negating inside: $\\neg\\forall x\\,P(x)\\equiv\\exists x\\,\\neg P(x)$. Quantifier order matters: $\\forall x\\,\\exists y$ ≠ $\\exists y\\,\\forall x$.',
         exampleProblem:
           'Negate and simplify: $\\forall x \\in \\mathbb{R}, \\exists y \\in \\mathbb{R}, x + y = 0$.',
       },
@@ -581,7 +581,7 @@ export const COURSES: Course[] = [
         title: 'Proof Techniques',
         blurb: 'Direct, contrapositive, contradiction.',
         strategicAnchor:
-          'Direct: assume $P$, derive $Q$. Use when there\'s a clear logical path. Contrapositive: assume $\\neg Q$, derive $\\neg P$. Use when negating $Q$ gives a more concrete fact than $P$. Contradiction: assume $P \\wedge \\neg Q$, derive a contradiction. Use as a fallback when neither direct nor contrapositive feels productive. Each is logically equivalent — pick whichever makes the proof shortest.',
+          'Direct: clean path from $P$ to $Q$. Contrapositive: when $\\neg Q$ gives a more concrete fact. Contradiction: assume $P\\wedge\\neg Q$, derive nonsense.',
         exampleProblem:
           'Prove: if $n^2$ is even, then $n$ is even. (Hint: contrapositive is easier than direct.)',
       },
@@ -590,7 +590,7 @@ export const COURSES: Course[] = [
         title: 'Mathematical Induction',
         blurb: 'Prove a claim about all natural numbers by base case + inductive step.',
         strategicAnchor:
-          'Three pieces, each its own line: (1) base case — show $P(1)$. (2) inductive hypothesis — assume $P(k)$. (3) inductive step — show $P(k+1)$ follows from $P(k)$. Use the IH explicitly inside the step.',
+          'Base case $P(1)$. Inductive hypothesis: assume $P(k)$. Inductive step: derive $P(k+1)$ using the IH explicitly.',
         exampleProblem:
           'Prove $1 + 2 + \\cdots + n = \\dfrac{n(n+1)}{2}$ for all $n \\ge 1$.',
       },
@@ -599,7 +599,7 @@ export const COURSES: Course[] = [
         title: 'Sets & Set Identities',
         blurb: 'Unions, intersections, complements, and proving set equalities.',
         strategicAnchor:
-          'To prove $A = B$, show element-wise: every $x \\in A$ is in $B$ and vice versa. To prove $A \\subseteq B$: assume $x \\in A$, conclude $x \\in B$. Use distributive laws and (the set-theory analog of) De Morgan.',
+          'To prove $A=B$, show $A\\subseteq B$ and $B\\subseteq A$ — pick an arbitrary element of one side, prove it lives on the other.',
         exampleProblem: 'Prove $A \\cap (B \\cup C) = (A \\cap B) \\cup (A \\cap C)$.',
       },
       {
@@ -607,7 +607,7 @@ export const COURSES: Course[] = [
         title: 'Relations & Equivalence Classes',
         blurb: 'Reflexive, symmetric, transitive — partitions from equivalences.',
         strategicAnchor:
-          'A relation $R$ on a set is a subset of $S \\times S$. Three key properties: reflexive ($aRa$ for all $a$), symmetric ($aRb \\Rightarrow bRa$), transitive ($aRb \\wedge bRc \\Rightarrow aRc$). An equivalence relation has all three — and it partitions $S$ into disjoint classes $[a] = \\{x : xRa\\}$. Most "is congruent to" or "is the same X as" relations are equivalences.',
+          'Equivalence relation = reflexive + symmetric + transitive. Every equivalence relation partitions the set into disjoint classes $[a]=\\{x:xRa\\}$.',
         exampleProblem:
           'Show that "$a \\equiv b \\pmod{5}$" is an equivalence relation on $\\mathbb{Z}$. List the equivalence classes.',
       },
@@ -616,7 +616,7 @@ export const COURSES: Course[] = [
         title: 'Injective / Surjective / Bijective',
         blurb: 'Prove function properties straight from the definitions.',
         strategicAnchor:
-          'Injective: assume $f(a) = f(b)$, show $a = b$. Surjective: pick arbitrary $y$ in codomain, find an $x$ in the domain with $f(x) = y$. Bijective: prove both.',
+          'Injective: assume $f(a)=f(b)$, conclude $a=b$. Surjective: take any $y$ in the codomain, exhibit an $x$ with $f(x)=y$. Bijective = both.',
         exampleProblem:
           'Show that $f: \\mathbb{R} \\to \\mathbb{R}, \\, f(x) = 2x + 3$ is bijective.',
       },
@@ -625,7 +625,7 @@ export const COURSES: Course[] = [
         title: 'Modular Arithmetic & Divisibility',
         blurb: '$a \\equiv b \\pmod{n}$ and arithmetic in $\\mathbb{Z}/n\\mathbb{Z}$.',
         strategicAnchor:
-          'Two integers are congruent mod $n$ iff their difference is a multiple of $n$. Addition, subtraction, and multiplication respect the congruence (you can reduce mod $n$ at any step). Division is tricky: $a$ has an inverse mod $n$ iff $\\gcd(a, n) = 1$, and the Extended Euclidean algorithm finds it. Fermat\'s little theorem: if $p$ is prime and $p \\nmid a$, then $a^{p-1} \\equiv 1 \\pmod{p}$ — kills big exponents.',
+          '$a\\equiv b\\pmod n$ iff $n\\mid a-b$. You can reduce mod $n$ at any step in $+,-,\\times$. Fermat: $p$ prime, $p\\nmid a$ → $a^{p-1}\\equiv 1\\pmod p$ kills huge exponents.',
         exampleProblem:
           'Compute $7^{100} \\pmod{13}$ using Fermat\'s little theorem.',
       },
@@ -634,7 +634,7 @@ export const COURSES: Course[] = [
         title: 'Recurrence Relations',
         blurb: 'Closed-form for sequences defined recursively.',
         strategicAnchor:
-          'For linear homogeneous recurrences (e.g. $a_n = c_1 a_{n-1} + c_2 a_{n-2}$): solve the characteristic equation $r^2 = c_1 r + c_2$. The roots determine the closed form: distinct → $a r_1^n + b r_2^n$; repeated → $(a + bn) r^n$.',
+          'Solve the characteristic equation $r^2=c_1r+c_2$. Distinct roots → $ar_1^n+br_2^n$; repeated $r$ → $(a+bn)r^n$; complex → trig form.',
         exampleProblem:
           'Solve: $a_n = 5 a_{n-1} - 6 a_{n-2}$, $a_0 = 1$, $a_1 = 4$.',
       },
@@ -643,7 +643,7 @@ export const COURSES: Course[] = [
         title: 'Graph Theory Basics',
         blurb: 'Vertices, edges, paths, cycles, degrees.',
         strategicAnchor:
-          'Recognize the type of graph problem: connectivity (paths/cycles), traversal (Euler — every edge once, exists iff at most 2 odd-degree vertices; Hamilton — every vertex once, hard in general), coloring (chromatic number). Handshake lemma: sum of degrees = $2 \\cdot$ (number of edges). Use it for parity/counting arguments.',
+          'Sum of degrees $=2E$ (handshake lemma). Euler circuit exists iff every vertex has even degree. Hamilton is hard in general — no clean test.',
         exampleProblem:
           'Does the graph with vertices $\\{1, 2, 3, 4, 5\\}$ where each vertex connects to the others mod-5 by $\\pm 1$ have an Eulerian circuit?',
       },
@@ -652,7 +652,7 @@ export const COURSES: Course[] = [
         title: 'Trees & Spanning Trees',
         blurb: 'Connected acyclic graphs and minimum spanning trees.',
         strategicAnchor:
-          'A tree is connected and acyclic; equivalently, connected with exactly $V - 1$ edges. Every tree has at least one leaf (degree-1 vertex). Spanning tree of a graph $G$: a subgraph that is a tree and includes every vertex. Minimum spanning tree (weighted): use Kruskal\'s (sort edges, add cheapest that doesn\'t create a cycle) or Prim\'s (grow from a seed, add cheapest edge crossing the cut).',
+          'Tree = connected, acyclic, exactly $V-1$ edges. MST: Kruskal (sort edges, add cheapest with no cycle) or Prim (grow from one vertex, add cheapest crossing edge).',
         exampleProblem:
           'Show that a tree on $n$ vertices has exactly $n - 1$ edges (use induction on $n$).',
       },
@@ -661,7 +661,7 @@ export const COURSES: Course[] = [
         title: 'Counting Principles',
         blurb: 'Addition and multiplication rules — the foundation of counting.',
         strategicAnchor:
-          'Multiplication principle: if step 1 has $m$ outcomes and step 2 has $n$, the pair has $mn$ outcomes. Addition principle: if events A and B are disjoint, $|A \\cup B| = |A| + |B|$ (overlapping events need inclusion-exclusion). When in doubt, draw a tree or table for small cases first, then generalize.',
+          'Stages multiply, disjoint cases add. Overlapping cases need inclusion–exclusion. When stuck, enumerate small cases first.',
         exampleProblem:
           'How many 5-letter strings can be formed from the alphabet $\\{a, b, c, d, e\\}$ where no letter repeats and the string starts with a vowel ($a$ or $e$)?',
       },
@@ -677,7 +677,7 @@ export const COURSES: Course[] = [
         title: 'Addition & Multiplication Principles',
         blurb: 'The two foundational rules of counting.',
         strategicAnchor:
-          'Multiplication: independent stages multiply. Addition: disjoint cases add. Most counting problems are nested applications of these two. When you hit a problem, identify: are these stages (multiply) or cases (add)? If you find yourself dividing by something, it\'s usually to undo overcounting from symmetry.',
+          'Stages multiply, cases add. If you find yourself dividing, you\'re undoing a symmetry overcount.',
         exampleProblem:
           'How many 4-digit PIN codes have at least one even digit?',
       },
@@ -686,7 +686,7 @@ export const COURSES: Course[] = [
         title: 'Permutations & Combinations',
         blurb: 'Order matters → $P(n, k)$; order does not → $C(n, k)$.',
         strategicAnchor:
-          'Ask first: does order matter? If yes → $P(n, k) = n!/(n-k)!$. If no → $C(n, k) = \\binom{n}{k} = n!/(k!(n-k)!)$. Watch separately for repetition allowed (multiset) vs forbidden (subset).',
+          'Does order matter? Yes → $P(n,k)=\\dfrac{n!}{(n-k)!}$. No → $\\binom{n}{k}=\\dfrac{n!}{k!(n-k)!}$. Watch repetition separately.',
         exampleProblem:
           'From 8 candidates, how many ways are there to (a) arrange 3 in a line, and (b) choose 3 for a committee?',
       },
@@ -695,7 +695,7 @@ export const COURSES: Course[] = [
         title: 'Permutations with Constraints',
         blurb: 'Circular arrangements, repetition, and "adjacent" rules.',
         strategicAnchor:
-          'Circular arrangements: $(n-1)!$ instead of $n!$ — fix one person to remove rotational symmetry. With reflective symmetry (e.g., necklace): divide by 2. Repetition: $n!/(n_1! n_2! \\cdots)$ where $n_i$ counts duplicates. "These must be adjacent": treat the cluster as one super-item, then permute the cluster internally.',
+          'Circular: $(n-1)!$ (fix one seat to kill rotation). "Must be adjacent": glue them into one super-item, then permute internally. Duplicates: divide by $n_1!n_2!\\cdots$.',
         exampleProblem:
           'In how many ways can 6 people sit around a round table if two specific people refuse to sit next to each other?',
       },
@@ -704,7 +704,7 @@ export const COURSES: Course[] = [
         title: 'Stars and Bars',
         blurb: 'Count solutions to $x_1 + \\cdots + x_k = n$ with non-negative integers.',
         strategicAnchor:
-          'Place $n$ stars in a row; place $k - 1$ bars to split them into $k$ groups. Total arrangements: $\\binom{n + k - 1}{k - 1}$. Adjust if $x$\'s must be positive (gift each a 1 first, then count with $n - k$ stars) or have upper bounds (use inclusion-exclusion).',
+          'Lay out $n$ stars in a row; you need $k-1$ bars to chop them into $k$ bins. Pick which $k-1$ of the $n+k-1$ total slots are bars: $\\binom{n+k-1}{k-1}$. E.g. $x_1+x_2+x_3+x_4=10$ gives $\\binom{13}{3}=286$. For strictly positive, gift each variable a 1 first, then count with $n-k$ stars.',
         exampleProblem:
           'How many non-negative integer solutions does $x_1 + x_2 + x_3 + x_4 = 10$ have?',
       },
@@ -713,7 +713,7 @@ export const COURSES: Course[] = [
         title: 'Binomial Theorem',
         blurb: '$(x + y)^n = \\sum \\binom{n}{k} x^k y^{n-k}$.',
         strategicAnchor:
-          "Coefficients are binomial coefficients $\\binom{n}{k}$. Identities to know: Pascal's rule $\\binom{n}{k} = \\binom{n-1}{k-1} + \\binom{n-1}{k}$; hockey-stick $\\sum_{i=k}^n \\binom{i}{k} = \\binom{n+1}{k+1}$; row sum $\\sum \\binom{n}{k} = 2^n$. To find a specific coefficient, identify which $k$ gives the power you want — read it from $x^k y^{n-k}$.",
+          'To pull a coefficient out of $(ax+by)^n$: spot $k$ (the power of $x$), then write $\\binom{n}{k}\\,a^k b^{n-k}$. E.g. coefficient of $x^4$ in $(2x-3)^7$: $\\binom{7}{4}\\cdot 2^4\\cdot(-3)^3 = 35\\cdot 16\\cdot(-27) = -15120$.',
         exampleProblem: 'Find the coefficient of $x^4$ in $(2x - 3)^7$.',
       },
       {
@@ -721,7 +721,7 @@ export const COURSES: Course[] = [
         title: 'Multinomial Coefficients',
         blurb: 'Generalize binomial to more than two groups.',
         strategicAnchor:
-          'The multinomial coefficient $\\binom{n}{n_1, n_2, \\ldots, n_k} = \\dfrac{n!}{n_1! n_2! \\cdots n_k!}$ counts the ways to partition $n$ items into $k$ labeled groups of sizes $n_1, \\ldots, n_k$. It\'s also the coefficient of $x_1^{n_1} \\cdots x_k^{n_k}$ in $(x_1 + \\cdots + x_k)^n$. Required: $\\sum n_i = n$.',
+          'Read the exponents off the term you want. The coefficient is $\\dfrac{n!}{e_1!\\,e_2!\\cdots e_k!}$ times each base raised to its exponent. E.g. coefficient of $x^2 y^3 z$ in $(2x+y+3z)^6$: $\\dfrac{6!}{2!\\,3!\\,1!}\\cdot 2^2\\cdot 1^3\\cdot 3 = 60\\cdot 12 = 720$.',
         exampleProblem:
           'Find the coefficient of $x^2 y^3 z$ in $(2x + y + 3z)^6$.',
       },
@@ -730,7 +730,7 @@ export const COURSES: Course[] = [
         title: 'Inclusion–Exclusion',
         blurb: '$|A \\cup B \\cup C| = $ singles $-$ doubles $+$ triples $-$ …',
         strategicAnchor:
-          'Used when objects can satisfy multiple properties. Add the singles, subtract the doubles, add the triples, and so on. Sign alternates by intersection size. Used for counting derangements, surjections, and other "at least one of" problems.',
+          'Why the alternating signs? Add the singles — you double-counted every pair, so subtract pairs. But triples got added 3 times and subtracted 3 times (net zero), so add them back. Each level corrects the previous over/undercount. Often easier: count the complement ("none of $A,B,C$") and subtract from the total.',
         exampleProblem:
           'Of 100 people, 60 like coffee, 50 like tea, 30 like both. How many like neither?',
       },
@@ -739,7 +739,7 @@ export const COURSES: Course[] = [
         title: 'Pigeonhole Principle',
         blurb: 'If $n+1$ objects go in $n$ boxes, some box has $\\ge 2$.',
         strategicAnchor:
-          'Identify the pigeons (objects), the pigeonholes (categories), and what conclusion follows. Generalized: if $n$ objects go in $k$ boxes, some box has at least $\\lceil n/k \\rceil$ objects. Often used when construction is hard but existence is easy.',
+          '$n$ objects in $k$ boxes → some box has at least $\\lceil n/k\\rceil$. Existence without construction — find the pigeons, the boxes, and the conclusion follows.',
         exampleProblem:
           'Show that among any 5 points in a $2 \\times 2$ square, two are at distance $\\le \\sqrt{2}$.',
       },
@@ -748,7 +748,7 @@ export const COURSES: Course[] = [
         title: 'Combinatorial & Bijective Proofs',
         blurb: 'Prove $|A| = |B|$ by exhibiting a bijection.',
         strategicAnchor:
-          "Two ways to prove a counting identity. Algebraic: manipulate factorials. Combinatorial/bijective: interpret both sides as counting the same set in different ways. The combinatorial proof of $\\binom{n}{k} = \\binom{n}{n-k}$: choosing $k$ to include is the same as choosing $n - k$ to exclude — a bijection between $k$-subsets and $(n-k)$-subsets. Combinatorial proofs are short and beautiful when they work.",
+          'To prove $|A|=|B|$: exhibit a bijection. Both sides count the same set in different ways — shorter and clearer than chasing factorials.',
         exampleProblem:
           'Give a combinatorial proof: $\\sum_{k=0}^{n} \\binom{n}{k}^2 = \\binom{2n}{n}$.',
       },
@@ -757,7 +757,7 @@ export const COURSES: Course[] = [
         title: 'Generating Functions',
         blurb: 'Encode a sequence as the coefficients of a power series.',
         strategicAnchor:
-          '$f(x) = \\sum a_n x^n$. Standard moves: $1/(1-x) = 1 + x + x^2 + \\cdots$; $1/(1-x)^k$ generates $\\binom{n+k-1}{k-1}$. Multiplying two GFs convolves the sequences. Useful for solving recurrences, counting partitions, and combinatorial identities.',
+          '$\\dfrac{1}{1-x}=1+x+x^2+\\cdots$. Multiplying GFs convolves the sequences they encode. Use for recurrences, partitions, and identities.',
         exampleProblem:
           'Find the coefficient of $x^{10}$ in $(1 + x + x^2 + \\cdots)^4$.',
       },
@@ -766,7 +766,7 @@ export const COURSES: Course[] = [
         title: 'Linear Recurrences (Combinatorial)',
         blurb: 'Counting interpretations of $a_n = c_1 a_{n-1} + c_2 a_{n-2}$.',
         strategicAnchor:
-          'Many counting problems satisfy a recurrence — find it by conditioning on the last step. Tilings, paths on a board, strings avoiding patterns: all classics. Once you have the recurrence, solve via the characteristic equation (real distinct roots → linear combination; repeated roots → multiply by $n$; complex roots → trig form).',
+          'Condition on the last step to discover the recurrence, then solve via the characteristic equation. Tilings, paths, strings-avoiding-patterns all fit this mold.',
         exampleProblem:
           'How many binary strings of length $n$ have no two consecutive 1s? Set up the recurrence, solve, and identify the closed form (it\'s a famous sequence).',
       },
@@ -775,7 +775,7 @@ export const COURSES: Course[] = [
         title: 'Catalan Numbers & Lattice Paths',
         blurb: 'The $n$-th Catalan number counts a half-dozen famous things.',
         strategicAnchor:
-          '$C_n = \\dfrac{1}{n+1} \\binom{2n}{n}$. Counts: lattice paths from $(0,0)$ to $(n,n)$ that never go above the diagonal; balanced parentheses with $n$ pairs; binary trees with $n$ internal nodes; triangulations of an $(n+2)$-gon. The reflection principle is the slickest proof — bad paths are in bijection with paths to a reflected endpoint.',
+          'Reflection trick: paths $(0,0)\\to(n,n)$ that never cross above $y=x$ = (all paths) − (bad paths). Every bad path bijects with a path to the reflected endpoint $(n-1,n+1)$, so bad count is $\\binom{2n}{n-1}$. Subtract: $C_n=\\binom{2n}{n}-\\binom{2n}{n-1}=\\dfrac{1}{n+1}\\binom{2n}{n}$. Same number counts balanced parens, binary trees, and $(n+2)$-gon triangulations.',
         exampleProblem:
           'How many lattice paths go from $(0,0)$ to $(5,5)$ using only unit steps right or up, never crossing above the line $y = x$?',
       },
@@ -791,7 +791,7 @@ export const COURSES: Course[] = [
         title: 'Vectors & Vector Operations',
         blurb: 'Addition, scalar multiplication, dot product.',
         strategicAnchor:
-          'Vectors in $\\mathbb{R}^n$ are tuples $(v_1, \\ldots, v_n)$. Addition and scalar multiplication are componentwise. Dot product $\\vec{u} \\cdot \\vec{v} = \\sum u_i v_i$ — algebra is one form, $|\\vec{u}||\\vec{v}|\\cos\\theta$ is the other. Length $|\\vec{v}| = \\sqrt{\\vec{v} \\cdot \\vec{v}}$.',
+          'Componentwise add and scale. $\\vec u\\cdot\\vec v=\\sum u_iv_i=|\\vec u||\\vec v|\\cos\\theta$. Length: $|\\vec v|=\\sqrt{\\vec v\\cdot\\vec v}$.',
         exampleProblem:
           'Given $\\vec{u} = (1, 2, -1, 3)$ and $\\vec{v} = (-2, 0, 4, 1)$, find $2\\vec{u} - \\vec{v}$, $\\vec{u} \\cdot \\vec{v}$, and $|\\vec{u}|$.',
       },
@@ -800,7 +800,7 @@ export const COURSES: Course[] = [
         title: 'Matrices & Systems of Equations',
         blurb: 'Write a linear system as $A\\vec{x} = \\vec{b}$.',
         strategicAnchor:
-          'A linear system with $m$ equations and $n$ unknowns becomes $A\\vec{x} = \\vec{b}$ where $A$ is $m \\times n$. Matrix multiplication: $(AB)_{ij} = \\sum_k A_{ik} B_{kj}$. Not commutative ($AB \\ne BA$ in general). The augmented matrix $[A \\mid \\vec{b}]$ is what you row-reduce in the next topic.',
+          'A system becomes $A\\vec x=\\vec b$. Matrix product: $(AB)_{ij}=\\sum_k A_{ik}B_{kj}$. Not commutative — $AB\\ne BA$ in general.',
         exampleProblem:
           'Write the system $\\begin{cases} 2x - y + z = 4 \\\\ x + 3y - 2z = -1 \\\\ -x + y + z = 2 \\end{cases}$ as $A\\vec{x} = \\vec{b}$ and identify $A$, $\\vec{x}$, $\\vec{b}$.',
       },
@@ -809,7 +809,7 @@ export const COURSES: Course[] = [
         title: 'Row Reduction (RREF)',
         blurb: 'Reduce a matrix to RREF via elementary row operations — one op at a time.',
         strategicAnchor:
-          'Three elementary operations: swap two rows, multiply a row by a nonzero scalar, add a multiple of one row to another. Pick a pivot, zero out below, move to the next pivot. Each operation is its own line — never compound two row ops.',
+          'Three operations: swap, scale by nonzero, add a multiple of one row to another. Pick a pivot, zero out below, move on — one operation per line.',
         exampleProblem:
           'Reduce to RREF: $$\\begin{bmatrix} 1 & 2 & 1 \\\\ 2 & 3 & 3 \\\\ 1 & 1 & 2 \\end{bmatrix}$$',
       },
@@ -818,7 +818,7 @@ export const COURSES: Course[] = [
         title: 'Matrix Inverses & Invertibility',
         blurb: '$A^{-1}$ exists iff $\\det A \\ne 0$; many equivalent conditions.',
         strategicAnchor:
-          'A square matrix $A$ is invertible iff any of these hold: $\\det A \\ne 0$, RREF is the identity, columns are linearly independent, $A\\vec{x} = \\vec{0}$ has only the trivial solution, $A\\vec{x} = \\vec{b}$ has a unique solution for every $\\vec{b}$. To compute $A^{-1}$: row-reduce $[A \\mid I]$ to $[I \\mid A^{-1}]$. For 2×2 only: $A^{-1} = \\dfrac{1}{ad - bc} \\begin{bmatrix} d & -b \\\\ -c & a \\end{bmatrix}$.',
+          '$A^{-1}$ exists iff $\\det A\\ne 0$ (equivalently: RREF is $I$, columns independent, $A\\vec x=\\vec 0$ has only trivial solution). Compute by row-reducing $[A\\mid I]\\to[I\\mid A^{-1}]$. 2×2 shortcut: swap diagonal, negate off-diagonal, divide by $ad-bc$.',
         exampleProblem:
           'Find the inverse of $A = \\begin{bmatrix} 1 & 2 & 3 \\\\ 0 & 1 & 4 \\\\ 5 & 6 & 0 \\end{bmatrix}$, or show it has none.',
       },
@@ -827,7 +827,7 @@ export const COURSES: Course[] = [
         title: 'Determinants',
         blurb: 'A scalar that captures invertibility, area/volume scaling, orientation.',
         strategicAnchor:
-          '2×2: $ad - bc$. 3×3: cofactor expansion along any row or column (pick the one with the most zeros). Larger: row-reduce and track each elementary operation\'s effect on the determinant.',
+          '2×2: $ad-bc$. Larger: cofactor expand along the row or column with the most zeros. Or row-reduce and track each operation\'s effect.',
         exampleProblem: 'Compute: $$\\det \\begin{bmatrix} 2 & 0 & 1 \\\\ 1 & 3 & 2 \\\\ 0 & 1 & 1 \\end{bmatrix}$$',
       },
       {
@@ -835,7 +835,7 @@ export const COURSES: Course[] = [
         title: 'Span, Basis, Dimension',
         blurb: 'Span: all linear combinations. Basis: minimal spanning set. Dimension: size of any basis.',
         strategicAnchor:
-          'Linear independence test: form a matrix with vectors as columns, row-reduce, look for a pivot in every column. To find a basis for a subspace: take a spanning set and drop the dependent vectors. Dimension is the count of basis vectors — same for any basis.',
+          'Stack vectors as columns, row-reduce: pivot in every column → linearly independent. Basis = independent spanning set; dimension = its size (same for any basis).',
         exampleProblem:
           'Are $\\langle 1, 2, 3 \\rangle$, $\\langle 2, 4, 6 \\rangle$, $\\langle 1, 0, 1 \\rangle$ linearly independent?',
       },
@@ -844,7 +844,7 @@ export const COURSES: Course[] = [
         title: 'The Four Fundamental Subspaces',
         blurb: 'Column space, null space, row space, left null space — and how they fit.',
         strategicAnchor:
-          'For an $m \\times n$ matrix $A$: column space $C(A) \\subseteq \\mathbb{R}^m$ (spans of columns); null space $N(A) \\subseteq \\mathbb{R}^n$ (solutions to $A\\vec{x} = \\vec{0}$); row space = column space of $A^T$; left null space = null space of $A^T$. Rank-nullity: $\\dim C(A) + \\dim N(A) = n$. The column space and left null space partition $\\mathbb{R}^m$ orthogonally; same for row space and null space in $\\mathbb{R}^n$. Row-reduce $A$ to find them all in one pass.',
+          'For $m\\times n$ matrix $A$: $C(A),N(A^T)\\subseteq\\mathbb{R}^m$ orthogonally complement; $C(A^T),N(A)\\subseteq\\mathbb{R}^n$ likewise. Rank-nullity: $\\dim C(A)+\\dim N(A)=n$.',
         exampleProblem:
           'For $A = \\begin{bmatrix} 1 & 2 & 0 & 1 \\\\ 2 & 4 & 1 & 3 \\\\ 0 & 0 & 1 & 1 \\end{bmatrix}$, find a basis for the column space, null space, and row space.',
       },
@@ -853,7 +853,7 @@ export const COURSES: Course[] = [
         title: 'Linear Transformations',
         blurb: 'Functions $T: V \\to W$ that respect addition and scaling.',
         strategicAnchor:
-          'A linear transformation satisfies $T(\\vec{u} + \\vec{v}) = T(\\vec{u}) + T(\\vec{v})$ and $T(c\\vec{u}) = c \\, T(\\vec{u})$. Every linear map between finite-dimensional spaces has a matrix representation (given a basis). To find it: apply $T$ to each basis vector, write the results as columns. Kernel of $T$ = null space of its matrix; image of $T$ = column space.',
+          'Matrix of $T$: apply $T$ to each basis vector, stack results as columns. Kernel = null space of that matrix; image = its column space.',
         exampleProblem:
           'Let $T: \\mathbb{R}^2 \\to \\mathbb{R}^2$ rotate vectors by $90°$ counterclockwise. Find its matrix in the standard basis, then compute $T(\\langle 3, 4 \\rangle)$.',
       },
@@ -862,7 +862,7 @@ export const COURSES: Course[] = [
         title: 'Eigenvalues & Eigenvectors',
         blurb: 'Find scalars $\\lambda$ and vectors $\\vec{v}$ with $A\\vec{v} = \\lambda\\vec{v}$.',
         strategicAnchor:
-          'Solve $\\det(A - \\lambda I) = 0$ for the characteristic polynomial\'s roots — those are the eigenvalues. For each $\\lambda$, find the null space of $(A - \\lambda I)$ — those are the eigenvectors. Triangular matrices: eigenvalues are the diagonal entries; no work needed.',
+          'Solve $\\det(A-\\lambda I)=0$ for $\\lambda$, then null space of $A-\\lambda I$ for each eigenvector. Triangular? Eigenvalues are the diagonal — done. 2×2 shortcut: $\\lambda_1+\\lambda_2=\\operatorname{tr}(A)$ and $\\lambda_1\\lambda_2=\\det(A)$ — solve those two equations in your head.',
         exampleProblem:
           'Find the eigenvalues and eigenvectors of $A = \\begin{bmatrix} 4 & -2 \\\\ 1 & 1 \\end{bmatrix}$.',
       },
@@ -871,7 +871,7 @@ export const COURSES: Course[] = [
         title: 'Diagonalization & Similarity',
         blurb: 'Decompose $A = PDP^{-1}$ where $D$ is diagonal.',
         strategicAnchor:
-          'An $n \\times n$ matrix is diagonalizable iff it has $n$ linearly independent eigenvectors. Then $A = PDP^{-1}$ where $P$\'s columns are eigenvectors and $D$\'s diagonal holds the corresponding eigenvalues. Two matrices are similar ($A = PBP^{-1}$) iff they represent the same linear map in different bases — they share eigenvalues, determinant, and trace. Diagonalization makes $A^k$ trivial: $A^k = PD^k P^{-1}$.',
+          '$n$ independent eigenvectors → $A=PDP^{-1}$ with $P$\'s columns the eigenvectors and $D$ diagonal of eigenvalues. Then $A^k=PD^kP^{-1}$ is trivial.',
         exampleProblem:
           'Diagonalize $A = \\begin{bmatrix} 2 & 1 \\\\ 0 & 3 \\end{bmatrix}$ and use it to compute $A^{10}$.',
       },
@@ -880,7 +880,7 @@ export const COURSES: Course[] = [
         title: 'Inner Products & Orthogonality',
         blurb: 'Dot products, vector lengths, perpendicular vectors, Gram-Schmidt.',
         strategicAnchor:
-          '$\\vec{u} \\cdot \\vec{v} = u_1 v_1 + \\cdots + u_n v_n$. Norm: $|\\vec{v}| = \\sqrt{\\vec{v} \\cdot \\vec{v}}$. Orthogonal iff $\\vec{u} \\cdot \\vec{v} = 0$. Use Gram-Schmidt to convert any basis into an orthogonal basis.',
+          'Orthogonal iff dot product is zero. Gram-Schmidt: subtract each vector\'s projections onto the already-built directions, then normalize.',
         exampleProblem:
           'Use Gram-Schmidt on $\\langle 1, 1, 0 \\rangle$ and $\\langle 1, 0, 1 \\rangle$.',
       },
@@ -889,7 +889,7 @@ export const COURSES: Course[] = [
         title: 'Matrix Decompositions',
         blurb: 'Factor a matrix into pieces that reveal structure (LU, QR, SVD).',
         strategicAnchor:
-          'LU: row reduction without row swaps; $A = LU$. QR: orthogonalize columns via Gram-Schmidt; $A = QR$ with $Q$ orthogonal. SVD: $A = U\\Sigma V^T$; works for any matrix; $\\Sigma$ holds the singular values, the geometric scaling factors. Pick by what you need: LU for solving systems; QR for least squares; SVD for the deepest structural read.',
+          'LU = row reduction without swaps; QR = Gram-Schmidt on columns; SVD = $U\\Sigma V^T$ for any matrix. Pick by purpose: solve systems, least squares, or deepest structure.',
         exampleProblem:
           'Find the LU decomposition of $A = \\begin{bmatrix} 2 & 1 & 1 \\\\ 4 & 3 & 3 \\\\ 8 & 7 & 9 \\end{bmatrix}$.',
       },
@@ -905,7 +905,7 @@ export const COURSES: Course[] = [
         title: 'Intro & Classification',
         blurb: 'ODE vs PDE; order, linearity, autonomous.',
         strategicAnchor:
-          'Classify before solving: ODE (one independent variable) vs PDE (multiple); order = highest derivative; linear if $y$ and its derivatives appear linearly (not multiplied together, not inside other functions). Autonomous if $t$ doesn\'t appear explicitly. The classification dictates which solution technique applies — there is no universal method.',
+          'Order = highest derivative. Linear if $y$ and its derivatives appear to power 1, not multiplied together or inside other functions. Autonomous if $t$ is absent. Classification picks the method.',
         exampleProblem:
           'Classify each ODE by order and linearity: (a) $y\'\' + 3y\' + 2y = \\sin t$; (b) $(y\')^2 + y = t$; (c) $y\'\' + y \\sin(y) = 0$.',
       },
@@ -914,7 +914,7 @@ export const COURSES: Course[] = [
         title: 'Separable Equations',
         blurb: 'When you can write $dy/dx = f(x) g(y)$.',
         strategicAnchor:
-          'Separate variables to opposite sides: $\\dfrac{dy}{g(y)} = f(x) \\, dx$. Integrate each side. Add a single constant $C$ (on either side). Watch for solutions where $g(y) = 0$ — those are equilibrium solutions you might lose by dividing.',
+          '$\\dfrac{dy}{g(y)}=f(x)\\,dx$, integrate both sides, one constant $C$. Watch for equilibrium solutions where $g(y)=0$ — dividing can lose them.',
         exampleProblem:
           'Solve: $\\dfrac{dy}{dx} = \\dfrac{x \\cos x}{y}$, $y(0) = 1$.',
       },
@@ -923,7 +923,7 @@ export const COURSES: Course[] = [
         title: 'First-Order Linear Equations',
         blurb: 'Integrating factor for $y\' + P(x) y = Q(x)$.',
         strategicAnchor:
-          'Put in standard form $y\' + P(x) y = Q(x)$. The integrating factor is $\\mu(x) = e^{\\int P(x) \\, dx}$. Multiplying through gives $(\\mu y)\' = \\mu Q$, which integrates to $\\mu y = \\int \\mu Q \\, dx + C$. Solve for $y$. The whole technique is mechanical once you spot the linear form.',
+          'Standard form $y\'+P(x)y=Q(x)$. Integrating factor $\\mu=e^{\\int P\\,dx}$. Multiply through, LHS becomes $(\\mu y)\'$, integrate, solve for $y$.',
         exampleProblem:
           'Solve: $y\' + 2xy = e^{-x^2}$.',
       },
@@ -932,7 +932,7 @@ export const COURSES: Course[] = [
         title: 'Exact Equations',
         blurb: 'When $M(x, y) \\, dx + N(x, y) \\, dy = 0$ is the differential of some $F$.',
         strategicAnchor:
-          'Check exactness: $\\partial M / \\partial y = \\partial N / \\partial x$. If yes, find $F$ with $F_x = M$ and $F_y = N$ by integrating $M$ w.r.t. $x$ (treating $y$ constant), then adjusting with terms purely in $y$ to match $N$. Solution: $F(x, y) = C$. If not exact, you may need an integrating factor (sometimes a function of $x$ alone or $y$ alone).',
+          'Check $\\partial M/\\partial y=\\partial N/\\partial x$. If exact, find $F$ with $F_x=M$, $F_y=N$; solution is $F(x,y)=C$.',
         exampleProblem:
           'Solve: $(2xy + 3) \\, dx + (x^2 - 1) \\, dy = 0$.',
       },
@@ -941,7 +941,7 @@ export const COURSES: Course[] = [
         title: 'Bernoulli & Substitution Methods',
         blurb: 'Nonlinear forms that linearize after a clever substitution.',
         strategicAnchor:
-          'Bernoulli: $y\' + P(x) y = Q(x) y^n$, $n \\ne 0, 1$. Substitute $v = y^{1-n}$, which makes the equation linear in $v$. Homogeneous (in the degree sense): $dy/dx = F(y/x)$. Substitute $v = y/x$, get a separable equation in $v$ and $x$. The pattern: find a substitution that converts the nonlinear ODE into one you already know how to solve.',
+          'Bernoulli $y\'+Py=Qy^n$ → substitute $v=y^{1-n}$ to linearize. Homogeneous $dy/dx=F(y/x)$ → $v=y/x$ to separate. Transform into something you already know.',
         exampleProblem:
           'Solve: $y\' + y = x y^2$ (Bernoulli with $n = 2$).',
       },
@@ -950,7 +950,7 @@ export const COURSES: Course[] = [
         title: 'Modeling: Growth, Mixing, Cooling',
         blurb: 'First-order ODEs in the wild.',
         strategicAnchor:
-          'Three canonical first-order models. Exponential growth/decay: $dP/dt = kP$ → $P = P_0 e^{kt}$. Newton\'s law of cooling: $dT/dt = -k(T - T_{\\text{ambient}})$ → exponential approach to ambient. Mixing tank: $dy/dt = \\text{rate in} - \\text{rate out}$ — usually linear in $y$, solve with the integrating factor. Setting up the equation correctly is most of the work; the math is straightforward once it\'s set up.',
+          'Growth: $dP/dt=kP$. Cooling: $dT/dt=-k(T-T_a)$. Mixing: $dy/dt=$ rate in $-$ rate out. Setting up the equation is most of the work.',
         exampleProblem:
           'A 100-gallon tank starts with 5 lb of dissolved salt. Brine with 1 lb/gallon flows in at 3 gallons/min; well-mixed solution flows out at 3 gallons/min. Find the amount of salt after 30 minutes.',
       },
@@ -959,7 +959,7 @@ export const COURSES: Course[] = [
         title: 'Existence, Uniqueness & Phase Lines',
         blurb: 'When does a solution exist? When is it unique?',
         strategicAnchor:
-          'Picard\'s existence-uniqueness theorem: if $f$ and $\\partial f/\\partial y$ are continuous in a rectangle around the initial point, then $y\' = f(t, y)$, $y(t_0) = y_0$ has a unique solution near $t_0$. Loss of uniqueness happens when $\\partial f/\\partial y$ blows up (the classic example: $y\' = y^{1/3}$, $y(0) = 0$). For autonomous 1D ODEs, draw the phase line: equilibria are zeros of $f$, with stability from the sign of $f$ on either side.',
+          'Picard: $f$ and $\\partial f/\\partial y$ continuous near $(t_0,y_0)$ → unique solution locally. Phase line for autonomous 1D: equilibria are zeros of $f$, stability from the sign of $f$ on either side.',
         exampleProblem:
           'For $y\' = y(1 - y)$ (the logistic equation), find the equilibria and classify each as stable or unstable. Sketch the phase line.',
       },
@@ -968,7 +968,7 @@ export const COURSES: Course[] = [
         title: 'Linear 2nd-Order Homogeneous',
         blurb: 'Constant coefficients: $ay\'\' + by\' + cy = 0$.',
         strategicAnchor:
-          'Solve the characteristic equation $ar^2 + br + c = 0$. Three cases: distinct real roots $r_1 \\ne r_2$ → $y = c_1 e^{r_1 t} + c_2 e^{r_2 t}$. Repeated real root $r$ → $y = (c_1 + c_2 t) e^{rt}$ (the second solution gets a factor of $t$). Complex roots $\\alpha \\pm \\beta i$ → $y = e^{\\alpha t}(c_1 \\cos\\beta t + c_2 \\sin\\beta t)$. The "missing" $t$ factor in the repeated case is the structural insight — without it, you only have one solution, not a 2-parameter family.',
+          'Characteristic equation $ar^2+br+c=0$. Distinct real → $c_1e^{r_1t}+c_2e^{r_2t}$. Repeated $r$ → $(c_1+c_2t)e^{rt}$ (the $t$ factor is the structural fix). Complex $\\alpha\\pm\\beta i$ → $e^{\\alpha t}(c_1\\cos\\beta t+c_2\\sin\\beta t)$.',
         exampleProblem:
           'Solve $y\'\' - 4y\' + 13y = 0$ with $y(0) = 1$, $y\'(0) = 0$.',
       },
@@ -977,7 +977,7 @@ export const COURSES: Course[] = [
         title: 'Method of Undetermined Coefficients',
         blurb: 'Guess the form of $y_p$ for nonhomogeneous $ay\'\' + by\' + cy = g(t)$.',
         strategicAnchor:
-          'General solution: $y = y_h + y_p$ where $y_h$ solves the homogeneous part and $y_p$ is any particular solution. Guess $y_p$ based on $g(t)$: polynomial → polynomial of same degree; $e^{\\alpha t}$ → $A e^{\\alpha t}$; $\\sin/\\cos(\\beta t)$ → $A \\cos\\beta t + B \\sin\\beta t$. Resonance rule: if your guess solves the homogeneous equation, multiply by $t$ (or $t^2$ for a double root). Plug in and match coefficients.',
+          '$y=y_h+y_p$. Guess $y_p$ matching $g(t)$\'s shape (polynomial, $e^{\\alpha t}$, $\\sin/\\cos$). Resonance: if your guess already solves the homogeneous, multiply by $t$.',
         exampleProblem:
           'Solve $y\'\' + y = 3\\cos t$ (note: $\\cos t$ is a homogeneous solution — resonance!).',
       },
@@ -986,7 +986,7 @@ export const COURSES: Course[] = [
         title: 'Variation of Parameters & Cauchy-Euler',
         blurb: 'When undetermined coefficients fails; Euler equations $t^2 y\'\' + \\cdots$.',
         strategicAnchor:
-          'Variation of parameters works for ANY nonhomogeneous linear ODE: write $y_p = u_1(t) y_1(t) + u_2(t) y_2(t)$ where $y_1, y_2$ are homogeneous solutions. Solve the system $u_1\' y_1 + u_2\' y_2 = 0$, $u_1\' y_1\' + u_2\' y_2\' = g/a$ for $u_1\', u_2\'$, then integrate. More work but always works. Cauchy-Euler: $at^2 y\'\' + bt y\' + cy = 0$. Try $y = t^r$, get a characteristic equation $ar(r-1) + br + c = 0$. Solve as in the constant-coefficient case, with $t^r$ instead of $e^{rt}$.',
+          '$y_p=u_1y_1+u_2y_2$ with $y_1,y_2$ homogeneous. Solve $u_1\'y_1+u_2\'y_2=0$ and $u_1\'y_1\'+u_2\'y_2\'=g/a$, then integrate. Cauchy-Euler: try $y=t^r$.',
         exampleProblem:
           'Solve the Cauchy-Euler equation: $t^2 y\'\' - 3t y\' + 4y = 0$.',
       },
@@ -995,7 +995,7 @@ export const COURSES: Course[] = [
         title: 'Laplace Transforms',
         blurb: 'Algebra-ize ODEs by transforming to the $s$-domain.',
         strategicAnchor:
-          '$\\mathcal{L}\\{f(t)\\} = \\int_0^{\\infty} e^{-st} f(t) \\, dt = F(s)$. Key transforms to memorize: $\\mathcal{L}\\{1\\} = 1/s$, $\\mathcal{L}\\{e^{at}\\} = 1/(s - a)$, $\\mathcal{L}\\{\\sin\\omega t\\} = \\omega/(s^2 + \\omega^2)$, $\\mathcal{L}\\{\\cos\\omega t\\} = s/(s^2 + \\omega^2)$. Derivative rule: $\\mathcal{L}\\{y\'\\} = sY(s) - y(0)$, $\\mathcal{L}\\{y\'\'\\} = s^2 Y(s) - sy(0) - y\'(0)$. Apply Laplace to both sides of the ODE → algebra in $s$ → solve for $Y(s)$ → use a table (and partial fractions) to invert. Especially powerful for ODEs with discontinuous forcing or impulses.',
+          '$\\mathcal{L}\\{y\'\\}=sY-y(0)$; $\\mathcal{L}\\{y\'\'\\}=s^2Y-sy(0)-y\'(0)$. Transform → algebra in $s$ → partial fractions → invert via table. Best for discontinuous or impulse forcing.',
         exampleProblem:
           'Use the Laplace transform to solve: $y\'\' + 4y = \\sin(2t)$, $y(0) = 0$, $y\'(0) = 0$.',
       },
@@ -1004,7 +1004,7 @@ export const COURSES: Course[] = [
         title: 'Systems of Linear ODEs',
         blurb: 'Couple equations $\\vec{x}\' = A\\vec{x}$ — solve via eigenvalues.',
         strategicAnchor:
-          'For $\\vec{x}\' = A\\vec{x}$ with constant matrix $A$: find eigenvalues and eigenvectors of $A$. Each eigenvalue $\\lambda$ with eigenvector $\\vec{v}$ contributes a solution $\\vec{v} e^{\\lambda t}$. General solution is the linear combination. Complex eigenvalues give spiral solutions (split real and imaginary parts to get real-valued solutions). Phase portraits: classify the origin as node, saddle, spiral, or center based on eigenvalue signs and types.',
+          '$\\vec x\'=A\\vec x$: each eigenpair $(\\lambda,\\vec v)$ contributes $\\vec v\\,e^{\\lambda t}$. Complex eigenvalues → spirals; classify the origin by eigenvalue signs (node, saddle, spiral, center).',
         exampleProblem:
           'Solve the system $\\vec{x}\' = \\begin{bmatrix} 1 & 1 \\\\ 4 & 1 \\end{bmatrix} \\vec{x}$ with $\\vec{x}(0) = \\langle 1, 0 \\rangle$.',
       },

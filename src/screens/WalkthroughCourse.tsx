@@ -48,8 +48,13 @@ function TopicCard({
       >
         {topic.title}
       </div>
-      <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.4 }}>
-        {topic.blurb}
+      <div
+        className="markdown-body"
+        style={{ fontSize: 13, color: T.muted, lineHeight: 1.4 }}
+      >
+        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+          {topic.blurb}
+        </ReactMarkdown>
       </div>
       <div
         className="markdown-body"

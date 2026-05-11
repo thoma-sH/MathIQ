@@ -130,16 +130,18 @@ export function TopicScreen({
 
     setClassifying(true);
     try {
-      const matchedId = await classifyTopic({
-        course: course!,
+      const match = await classifyTopic({
         problem: trimmed,
         getToken,
       });
-      if (matchedId && matchedId !== topic!.id) {
+      if (
+        match &&
+        (match.courseId !== course!.id || match.topicId !== topic!.id)
+      ) {
         onNavigate({
           name: 'topic',
-          courseId: course!.id,
-          topicId: matchedId,
+          courseId: match.courseId,
+          topicId: match.topicId,
           problem: trimmed,
         });
         return;

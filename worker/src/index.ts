@@ -5,7 +5,7 @@
  *   POST /api/classify     — auth optional, no rate limit (cheap call)
  *   GET  /api/health       — no auth
  */
-import { COURSES_BY_ID, findTopic } from './courses';
+import { COURSES, COURSES_BY_ID, findTopic } from './courses';
 import { authenticate, type AuthState } from './auth';
 import {
   anonymousCounter,
@@ -30,7 +30,7 @@ interface Env {
   USAGE: KVNamespace;
 }
 
-const CLASSIFY_MODEL = 'claude-haiku-4-5-20251001';
+const CLASSIFY_MODEL = 'claude-sonnet-4-6';
 const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 
 interface WalkthroughBody {
@@ -40,7 +40,6 @@ interface WalkthroughBody {
 }
 
 interface ClassifyBody {
-  courseId?: string;
   problem?: string;
 }
 
@@ -231,19 +230,10 @@ async function handleClassify(
     return json({ error: 'invalid JSON body' }, 400, cors);
   }
 
-  const { courseId, problem } = body;
-  if (!courseId || !problem?.trim()) {
-    return json({ error: 'courseId and problem required' }, 400, cors);
+  const { problem } = body;
+  if (!problem?.trim()) {
+    return json({ error: 'problem required' }, 400, cors);
   }
-
-  const course = COURSES_BY_ID[courseId];
-  if (!course) {
-    return json({ error: 'unknown course' }, 404, cors);
-  }
-
-  const topicList = course.topics
-    .map((t) => `- ${t.id}: ${t.title} — ${t.blurb}`)
-    .join('\n');
 
   const upstream = await fetch(ANTHROPIC_MESSAGES_URL, {
     method: 'POST',
@@ -254,15 +244,17 @@ async function handleClassify(
     },
     body: JSON.stringify({
       model: CLASSIFY_MODEL,
-      max_tokens: 64,
-      system:
-        'You classify math problems into topics. Reply with EXACTLY the topic id (the part before the colon) of the topic that best matches the problem. Reply with nothing else — no prose, no quotes, no punctuation. If none of the topics fits, reply with the single word: none.',
-      messages: [
+      max_tokens: 32,
+      // Static catalog is cached via ephemeral cache_control — after the
+      // first request in a 5-min window subsequent calls pay ~10% input.
+      system: [
         {
-          role: 'user',
-          content: `Course: ${course.title}\n\nTopics:\n${topicList}\n\nProblem:\n${problem}\n\nWhich topic id best matches this problem?`,
+          type: 'text',
+          text: CLASSIFIER_SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
         },
       ],
+      messages: [{ role: 'user', content: `Problem:\n${problem}` }],
     }),
   });
 
@@ -286,10 +278,49 @@ async function handleClassify(
       .trim() || '';
 
   if (!text || text === 'none') {
-    return json({ topicId: null }, 200, cors);
+    return json({ courseId: null, topicId: null }, 200, cors);
   }
-  const valid = course.topics.some((t) => t.id === text);
-  return json({ topicId: valid ? text : null }, 200, cors);
+
+  // Expect "courseId.topicId" format. Anything else → null.
+  const dot = text.indexOf('.');
+  if (dot < 1 || dot === text.length - 1) {
+    return json({ courseId: null, topicId: null }, 200, cors);
+  }
+  const courseId = text.slice(0, dot);
+  const topicId = text.slice(dot + 1);
+  const course = COURSES_BY_ID[courseId];
+  if (!course) {
+    return json({ courseId: null, topicId: null }, 200, cors);
+  }
+  const valid = course.topics.some((t) => t.id === topicId);
+  return json(
+    valid ? { courseId, topicId } : { courseId: null, topicId: null },
+    200,
+    cors,
+  );
+}
+
+const CLASSIFIER_SYSTEM_PROMPT = buildClassifierPrompt();
+
+function buildClassifierPrompt(): string {
+  const lines: string[] = [];
+  lines.push(
+    'You classify a math problem into the single best (course, topic) pair from the catalog below.',
+    '',
+    'The problem may be informal, colloquial, or framed as a real-world scenario — poker hands, dice rolls, mixing tanks, population growth, voting, lottery odds, geometric layouts, "how many ways," "what\'s the probability," etc. Recognize the underlying mathematical technique the problem demands, then pick the topic that teaches it. A counting question is combinatorics. A probability-of-arrangement question is combinatorics. A growth-or-decay model is differential equations. A "how fast is X changing" question is related rates. Map informal language to the right technique.',
+    '',
+    'Reply with EXACTLY the pair as `courseId.topicId` (e.g. `combinatorics.permutations-combinations`). No prose, no quotes, no punctuation around it.',
+    '',
+    'Reply `none` ONLY if the input is genuinely not a math problem (a greeting, gibberish, a question about the app, etc.). When in doubt between two topics, pick the one whose technique most directly produces the answer. Never reply `none` to bail out of an informal but legitimate math question.',
+    '',
+    'Catalog:',
+  );
+  for (const course of COURSES) {
+    for (const topic of course.topics) {
+      lines.push(`- ${course.id}.${topic.id}: ${course.title} — ${topic.title}. ${topic.blurb}`);
+    }
+  }
+  return lines.join('\n');
 }
 
 function buildRateLimitHeaders(
