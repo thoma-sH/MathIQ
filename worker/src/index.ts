@@ -49,6 +49,7 @@ import {
   type HistoryRecord,
 } from './history';
 import { extractProblemFromImage } from './ocr';
+import { verifyAnswer } from './verify';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -169,6 +170,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/ocr') {
       return handleOcr(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/verify') {
+      return handleVerify(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -864,6 +869,54 @@ async function handleOcr(
     return json({ problem: null, notAMathProblem: true }, 200, cors);
   }
   return json({ problem: result.problem }, 200, cors);
+}
+
+// ─── Verify handler ──────────────────────────────────────────────────
+
+const MAX_VERIFY_CHARS = 30000;
+
+interface VerifyBody {
+  walkthrough?: string;
+}
+
+async function handleVerify(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  // Allow anonymous + free + paid — verification is part of the walkthrough
+  // package; gating it would hurt trust.
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
+  }
+
+  let body: VerifyBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.walkthrough || typeof body.walkthrough !== 'string') {
+    return json({ error: 'walkthrough required' }, 400, cors);
+  }
+  if (body.walkthrough.length > MAX_VERIFY_CHARS) {
+    return json({ error: 'walkthrough too long', limit: MAX_VERIFY_CHARS }, 413, cors);
+  }
+  if (!/\*\*Answer:\*\*/i.test(body.walkthrough)) {
+    return json({ verdict: 'unclear', reason: 'no answer block' }, 200, cors);
+  }
+
+  const result = await verifyAnswer({
+    apiKey: env.ANTHROPIC_API_KEY,
+    walkthrough: body.walkthrough,
+  });
+
+  if (!result.ok) {
+    console.error('verify upstream failed', result.status);
+    return json({ error: 'verify_failed' }, 502, cors);
+  }
+  return json({ verdict: result.verdict ?? 'unclear', reason: result.reason ?? null }, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {

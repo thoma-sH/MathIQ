@@ -14,6 +14,7 @@ import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { saveHistoryRecord } from '../walkthroughs/history';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
+import { verifyWalkthrough, type Verdict } from '../walkthroughs/verify';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
@@ -108,6 +109,10 @@ export function TopicScreen({
   const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
 
+  const verifyAbortRef = useRef<AbortController | null>(null);
+  const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | Verdict>('idle');
+  const [verifyReason, setVerifyReason] = useState<string | null>(null);
+
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
 
   // Auto-reveal the first segment as soon as it lands.
@@ -125,6 +130,7 @@ export function TopicScreen({
       walkthroughAbortRef.current?.abort();
       whyHowAbortRef.current?.abort();
       classifyAbortRef.current?.abort();
+      verifyAbortRef.current?.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProblem, courseId, topicId]);
@@ -141,6 +147,9 @@ export function TopicScreen({
   function resetSession() {
     walkthroughAbortRef.current?.abort();
     whyHowAbortRef.current?.abort();
+    verifyAbortRef.current?.abort();
+    setVerifyState('idle');
+    setVerifyReason(null);
     setBuffer('');
     setStreamDone(false);
     setRevealCount(0);
@@ -184,6 +193,11 @@ export function TopicScreen({
         // Reveal everything immediately.
         const { complete } = parseStream(accumulated, true);
         setRevealCount(complete.length);
+      }
+      // Fire verification in the background if the walkthrough actually
+      // produced an answer. Non-blocking; we render the badge when it lands.
+      if (/\*\*Answer:\*\*/i.test(accumulated)) {
+        void runVerify(accumulated);
       }
       // Fire-and-forget auto-save for signed-in users. Failure is non-fatal:
       // history is a convenience, not part of the walkthrough flow.
@@ -263,6 +277,28 @@ export function TopicScreen({
     }
     setLimitStatus('error');
     setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
+  }
+
+  async function runVerify(walkthroughText: string) {
+    verifyAbortRef.current?.abort();
+    const controller = new AbortController();
+    verifyAbortRef.current = controller;
+    setVerifyState('verifying');
+    setVerifyReason(null);
+    try {
+      const res = await verifyWalkthrough({ walkthrough: walkthroughText, getToken, signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (!res) {
+        // Network/upstream failure — fail open quietly; no badge instead of a false "correct".
+        setVerifyState('idle');
+        return;
+      }
+      setVerifyState(res.verdict);
+      setVerifyReason(res.reason);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setVerifyState('idle');
+    }
   }
 
   async function handleImageFile(file: File) {
@@ -718,6 +754,41 @@ export function TopicScreen({
             : parsed.complete.length === 1
               ? 'No further steps were generated'
               : 'Walkthrough finished'}
+        </div>
+      )}
+
+      {verifyState !== 'idle' && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 10,
+            padding: verifyState === 'incorrect' ? '8px 12px' : 0,
+            border: verifyState === 'incorrect' ? `1px solid ${T.ink}` : 'none',
+            background: verifyState === 'incorrect' ? T.paper2 : 'transparent',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color:
+              verifyState === 'correct' ? T.accent3 :
+              verifyState === 'incorrect' ? T.ink :
+              T.muted,
+          }}
+        >
+          <span aria-hidden style={{ fontSize: 13 }}>
+            {verifyState === 'verifying' ? '·' :
+             verifyState === 'correct'   ? '✓' :
+             verifyState === 'incorrect' ? '!' :
+             '?'}
+          </span>
+          {verifyState === 'verifying' ? 'Checking the answer…' :
+           verifyState === 'correct'   ? 'Answer verified' :
+           verifyState === 'incorrect' ? (verifyReason ? `Possible issue: ${verifyReason}` : 'Possible issue — double-check this') :
+           'Couldn’t verify automatically'}
         </div>
       )}
 
