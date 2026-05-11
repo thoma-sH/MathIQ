@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Header } from './shell/Header';
+import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
 import { Lessons } from './screens/Lessons';
 import { WalkthroughCourse } from './screens/WalkthroughCourse';
@@ -60,6 +61,7 @@ export default function App() {
         {route.name === 'history'     && <History onNavigate={setRoute} />}
         {route.name === 'settings'    && <Settings onNavigate={setRoute} />}
       </Page>
+      <InstallPrompt />
     </>
   );
 }

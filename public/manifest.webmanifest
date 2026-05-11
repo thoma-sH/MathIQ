@@ -1,0 +1,31 @@
+{
+  "name": "MathIQ",
+  "short_name": "MathIQ",
+  "description": "Math problems, walked through one line at a time.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#d4e26a",
+  "theme_color": "#d4e26a",
+  "orientation": "portrait",
+  "categories": ["education"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
