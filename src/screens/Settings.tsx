@@ -313,10 +313,7 @@ function AccountCard() {
           <div style={{ fontSize: 18, fontWeight: 500, lineHeight: 1.35, marginBottom: 2, wordBreak: 'break-word' }}>
             {email}
           </div>
-          <div style={{ fontSize: 13, color: T.muted, marginBottom: 10 }}>
-            Free tier · 5 walkthroughs / day.
-          </div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

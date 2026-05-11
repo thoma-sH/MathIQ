@@ -45,10 +45,10 @@ MAX_USER_IDS = ""
 
 # Stripe price IDs — create products + prices in the Stripe Dashboard, then
 # paste the `price_...` IDs here. Test-mode IDs for dev, live-mode for prod.
-STRIPE_PRICE_PLUS_MONTHLY = "price_REPLACE_PLUS_MONTHLY"
-STRIPE_PRICE_PLUS_ANNUAL  = "price_REPLACE_PLUS_ANNUAL"
-STRIPE_PRICE_PRO_MONTHLY  = "price_REPLACE_PRO_MONTHLY"
-STRIPE_PRICE_PRO_ANNUAL   = "price_REPLACE_PRO_ANNUAL"
+STRIPE_PRICE_PLUS_MONTHLY = "price_1TVyPgHWJKrZNHAOuyN7vdA7"
+STRIPE_PRICE_PLUS_ANNUAL  = "price_1TVyPgHWJKrZNHAOrOJlw4pT"
+STRIPE_PRICE_PRO_MONTHLY  = "price_1TVyTRHWJKrZNHAObwe6cNaG"
+STRIPE_PRICE_PRO_ANNUAL   = "price_1TVyTRHWJKrZNHAOD8c3PX5t"
 
 # Where Stripe redirects after Checkout success/cancel and Portal exit.
 # Use your client origin + the Settings route.
