@@ -55,6 +55,9 @@ lerna-debug.log*
 *.key
 secrets.json
 HACKMATHKEY
+.dev.vars
+.dev.vars.*
+.wrangler/
 
 # ─── Editors / IDEs ────────────────────────────────────────────────────
 .idea

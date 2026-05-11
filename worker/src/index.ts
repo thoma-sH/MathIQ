@@ -1,26 +1,37 @@
 /**
  * MathIQ API worker.
  *
- *   POST /api/walkthrough  — auth + rate limit + streaming proxy to Anthropic
+ *   POST /api/walkthrough  — auth + tier-aware rate limit + streaming
  *   POST /api/classify     — auth optional, no rate limit (cheap call)
  *   GET  /api/health       — no auth
  */
 import { COURSES_BY_ID, findTopic } from './courses';
-import { buildSystemPrompt } from './prompt';
 import { authenticate, type AuthState } from './auth';
-import { checkAnonymous, checkUser, type RateLimitOutcome } from './rateLimit';
+import {
+  anonymousCounter,
+  commit,
+  nextMidnightUtc,
+  peek,
+  userCounter,
+  type CounterRef,
+} from './rateLimit';
+import { decideTier, resolveTier, type Tier, type TierDecision } from './tier';
+import { callAnthropicStream } from './anthropic';
+import { callOpenRouterStream } from './openrouter';
+import { normalizeLatexDelimiters } from './normalize';
 
 interface Env {
   ANTHROPIC_API_KEY: string;
+  OPENROUTER_API_KEY: string;
   CLERK_SECRET_KEY: string;
   CLERK_PUBLISHABLE_KEY: string;
   ALLOWED_ORIGINS: string;
+  PRO_USER_IDS?: string;
   USAGE: KVNamespace;
 }
 
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
-const WALKTHROUGH_MODEL = 'claude-sonnet-4-6';
 const CLASSIFY_MODEL = 'claude-haiku-4-5-20251001';
+const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 
 interface WalkthroughBody {
   courseId?: string;
@@ -44,7 +55,7 @@ export default {
       'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
       'Access-Control-Allow-Headers': 'content-type, authorization',
       'Access-Control-Expose-Headers':
-        'X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Scope',
+        'X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Scope, X-Tier, X-Model-Used, X-Degraded, X-Premium-Allotment',
       Vary: 'Origin',
     };
 
@@ -55,7 +66,7 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/api/health') {
-      return json({ ok: true, model: WALKTHROUGH_MODEL }, 200, cors);
+      return json({ ok: true }, 200, cors);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/walkthrough') {
@@ -84,46 +95,45 @@ async function handleWalkthrough(
     );
   }
 
-  // Rate limit gate
-  let outcome: RateLimitOutcome;
-  if (authState.kind === 'user') {
-    outcome = await checkUser(env.USAGE, authState.userId);
-  } else {
-    const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
-    outcome = await checkAnonymous(env.USAGE, ip);
-  }
+  const tier: Tier = resolveTier(authState, env);
+  const counter: CounterRef =
+    authState.kind === 'user'
+      ? userCounter(env.USAGE, authState.userId)
+      : anonymousCounter(
+          env.USAGE,
+          request.headers.get('CF-Connecting-IP') ?? 'unknown',
+        );
 
-  const rateHeaders = {
-    'X-RateLimit-Limit': String(outcome.limit),
-    'X-RateLimit-Remaining': String(Math.max(0, outcome.limit - outcome.used)),
-    'X-RateLimit-Reset': outcome.resetAt,
-    'X-RateLimit-Scope': outcome.scope,
-  };
+  const usedToday = await peek(counter);
+  const decision: TierDecision = decideTier(tier, usedToday);
 
-  if (!outcome.ok) {
-    if (authState.kind === 'anonymous') {
+  const baseHeaders = buildRateLimitHeaders(tier, usedToday, decision);
+
+  // Over the ceiling — 429 (signed-in) or 401 (anonymous, prompt to sign in)
+  if (decision.model === null) {
+    if (tier === 'anonymous') {
       return json(
         {
           error: 'sign_in_required',
-          message: `You've used your free walkthrough. Sign in for ${5} walkthroughs/day.`,
-          limit: outcome.limit,
-          used: outcome.used,
-          resetAt: outcome.resetAt,
+          message: `You've used your free walkthrough. Sign in for 5/day.`,
+          limit: decision.ceiling,
+          used: usedToday,
+          resetAt: nextMidnightUtc(),
         },
         401,
-        { ...cors, ...rateHeaders },
+        { ...cors, ...baseHeaders },
       );
     }
     return json(
       {
         error: 'rate_limit',
-        message: `You've used your ${outcome.limit} walkthroughs today.`,
-        limit: outcome.limit,
-        used: outcome.used,
-        resetAt: outcome.resetAt,
+        message: `You've used all ${decision.ceiling} walkthroughs today.`,
+        limit: decision.ceiling,
+        used: usedToday,
+        resetAt: nextMidnightUtc(),
       },
       429,
-      { ...cors, ...rateHeaders },
+      { ...cors, ...baseHeaders },
     );
   }
 
@@ -131,7 +141,7 @@ async function handleWalkthrough(
   try {
     body = await request.json();
   } catch {
-    return json({ error: 'invalid JSON body' }, 400, { ...cors, ...rateHeaders });
+    return json({ error: 'invalid JSON body' }, 400, { ...cors, ...baseHeaders });
   }
 
   const { courseId, topicId, problem } = body;
@@ -139,7 +149,7 @@ async function handleWalkthrough(
     return json(
       { error: 'courseId and topicId required' },
       400,
-      { ...cors, ...rateHeaders },
+      { ...cors, ...baseHeaders },
     );
   }
 
@@ -148,48 +158,51 @@ async function handleWalkthrough(
     return json(
       { error: 'unknown course or topic' },
       404,
-      { ...cors, ...rateHeaders },
+      { ...cors, ...baseHeaders },
     );
   }
   const { course, topic } = found;
 
-  const problemText = problem?.trim() || topic.exampleProblem;
-  const userText = problem
-    ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
-    : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
-
-  const upstream = await fetch(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: WALKTHROUGH_MODEL,
-      max_tokens: 4096,
-      system: buildSystemPrompt(course, topic),
-      messages: [{ role: 'user', content: userText }],
-      stream: true,
-    }),
-  });
+  // Provider dispatch
+  const model = decision.model;
+  const upstream =
+    model.provider === 'anthropic'
+      ? await callAnthropicStream({
+          apiKey: env.ANTHROPIC_API_KEY,
+          model: model.id,
+          course,
+          topic,
+          problem,
+        })
+      : await callOpenRouterStream({
+          apiKey: env.OPENROUTER_API_KEY,
+          model: model.id,
+          course,
+          topic,
+          problem,
+        });
 
   if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => '');
     return json(
-      { error: `anthropic ${upstream.status}`, detail: detail.slice(0, 500) },
+      { error: `upstream ${upstream.status}`, detail: upstream.detail ?? '' },
       upstream.status === 401 || upstream.status === 403 ? 502 : upstream.status,
-      { ...cors, ...rateHeaders },
+      { ...cors, ...baseHeaders },
     );
   }
 
-  const transformed = transformAnthropicSse(upstream.body);
+  // Increment counter only on successful upstream call dispatch.
+  await commit(counter, usedToday + 1);
 
-  return new Response(transformed, {
+  // Re-build rate-limit headers reflecting the post-commit count.
+  const postHeaders = buildRateLimitHeaders(tier, usedToday + 1, decision);
+
+  return new Response(upstream.body.pipeThrough(normalizeLatexDelimiters()), {
     status: 200,
     headers: {
       ...cors,
-      ...rateHeaders,
+      ...postHeaders,
+      'X-Model-Used': model.id,
+      'X-Degraded': decision.degraded ? 'true' : 'false',
       'content-type': 'text/plain; charset=utf-8',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
@@ -202,8 +215,6 @@ async function handleClassify(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
-  // Classify is free of rate limit but still requires non-invalid auth
-  // (anonymous OK; bad token rejected).
   const authState: AuthState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json(
@@ -234,7 +245,7 @@ async function handleClassify(
     .map((t) => `- ${t.id}: ${t.title} — ${t.blurb}`)
     .join('\n');
 
-  const upstream = await fetch(ANTHROPIC_URL, {
+  const upstream = await fetch(ANTHROPIC_MESSAGES_URL, {
     method: 'POST',
     headers: {
       'x-api-key': env.ANTHROPIC_API_KEY,
@@ -281,48 +292,21 @@ async function handleClassify(
   return json({ topicId: valid ? text : null }, 200, cors);
 }
 
-function transformAnthropicSse(
-  body: ReadableStream<Uint8Array>,
-): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder();
-  const encoder = new TextEncoder();
-
-  return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const reader = body.getReader();
-      let buffer = '';
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const payload = line.slice(6).trim();
-            if (!payload || payload === '[DONE]') continue;
-            try {
-              const event = JSON.parse(payload);
-              if (
-                event.type === 'content_block_delta' &&
-                event.delta?.type === 'text_delta'
-              ) {
-                const text = event.delta.text as string;
-                if (text) controller.enqueue(encoder.encode(text));
-              }
-            } catch {
-              // skip malformed event lines silently
-            }
-          }
-        }
-      } catch (err) {
-        controller.error(err);
-        return;
-      }
-      controller.close();
-    },
-  });
+function buildRateLimitHeaders(
+  tier: Tier,
+  used: number,
+  decision: TierDecision,
+): Record<string, string> {
+  return {
+    'X-RateLimit-Limit': String(decision.ceiling),
+    'X-RateLimit-Remaining': String(Math.max(0, decision.ceiling - used)),
+    'X-RateLimit-Reset': nextMidnightUtc(),
+    'X-RateLimit-Scope': tier === 'anonymous' ? 'anonymous' : 'user',
+    'X-Tier': tier,
+    ...(decision.premiumAllotment !== undefined
+      ? { 'X-Premium-Allotment': String(decision.premiumAllotment) }
+      : {}),
+  };
 }
 
 function json(body: unknown, status: number, cors: Record<string, string>) {

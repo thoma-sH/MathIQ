@@ -29,6 +29,15 @@ export interface RateLimitInfo {
   remaining: number;
   /** 'anonymous' if the user is unauthenticated, 'user' if signed in. */
   scope: 'anonymous' | 'user';
+  /** 'anonymous' | 'free' | 'pro' */
+  tier: 'anonymous' | 'free' | 'pro';
+  /** Which model the worker actually used for this response. */
+  modelUsed?: string;
+  /** True if the user is on the degraded (fallback) model because they
+   *  exhausted their premium allotment. Only meaningful for Pro tier. */
+  degraded: boolean;
+  /** For Pro: how many premium walkthroughs they get before degrading. */
+  premiumAllotment?: number;
 }
 
 export interface GenerateRequest {
@@ -113,12 +122,30 @@ function emitRateLimit(
   if (!cb) return;
   const limitHeader = resp.headers.get('X-RateLimit-Limit');
   const remainingHeader = resp.headers.get('X-RateLimit-Remaining');
-  const scopeHeader = resp.headers.get('X-RateLimit-Scope');
   if (!limitHeader || !remainingHeader) return;
   const limit = parseInt(limitHeader, 10);
   const remaining = parseInt(remainingHeader, 10);
-  const scope = (scopeHeader === 'user' ? 'user' : 'anonymous') as 'user' | 'anonymous';
-  if (Number.isFinite(limit) && Number.isFinite(remaining)) {
-    cb({ limit, remaining, scope });
-  }
+  if (!Number.isFinite(limit) || !Number.isFinite(remaining)) return;
+
+  const scopeHeader = resp.headers.get('X-RateLimit-Scope');
+  const scope: 'anonymous' | 'user' = scopeHeader === 'user' ? 'user' : 'anonymous';
+
+  const tierHeader = resp.headers.get('X-Tier');
+  const tier: 'anonymous' | 'free' | 'pro' =
+    tierHeader === 'pro' ? 'pro' : tierHeader === 'free' ? 'free' : 'anonymous';
+
+  const modelUsed = resp.headers.get('X-Model-Used') ?? undefined;
+  const degraded = resp.headers.get('X-Degraded') === 'true';
+  const allotmentHeader = resp.headers.get('X-Premium-Allotment');
+  const premiumAllotment = allotmentHeader ? parseInt(allotmentHeader, 10) : undefined;
+
+  cb({
+    limit,
+    remaining,
+    scope,
+    tier,
+    modelUsed,
+    degraded,
+    premiumAllotment: Number.isFinite(premiumAllotment as number) ? premiumAllotment : undefined,
+  });
 }

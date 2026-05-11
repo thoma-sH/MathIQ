@@ -196,9 +196,14 @@ export function TopicScreen({
         }}
       >
         <div style={kicker()}>STRATEGIC ANCHOR</div>
-        <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55 }}>
-          {topic.strategicAnchor}
-        </p>
+        <div
+          className="markdown-body"
+          style={{ fontSize: 15, lineHeight: 1.55 }}
+        >
+          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {topic.strategicAnchor}
+          </ReactMarkdown>
+        </div>
       </section>
 
       <section className="reveal reveal-3" style={{ marginBottom: 20 }}>
@@ -263,7 +268,38 @@ export function TopicScreen({
       )}
 
       {rateInfo && (status === 'streaming' || status === 'done') && (
-        <UsagePill rate={rateInfo} signedIn={!!isSignedIn} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+          <UsagePill rate={rateInfo} signedIn={!!isSignedIn} />
+          {rateInfo.modelUsed && (
+            <span
+              style={{
+                fontFamily: T.mono,
+                fontSize: 11,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: T.muted,
+              }}
+            >
+              · {modelLabel(rateInfo.modelUsed)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {rateInfo?.degraded && rateInfo.tier === 'pro' && (status === 'streaming' || status === 'done') && (
+        <div
+          style={{
+            border: `1px solid ${T.ink}`,
+            background: T.paper2,
+            padding: '12px 16px',
+            marginBottom: 12,
+            fontSize: 14,
+            lineHeight: 1.5,
+          }}
+        >
+          <strong>You've used your {rateInfo.premiumAllotment ?? 20} Opus walkthroughs today.</strong>{' '}
+          Now on Sonnet 4.6 for the rest of today — still strong, just not the top of the stack.
+        </div>
       )}
 
       {status === 'sign-in-required' && (
@@ -461,6 +497,13 @@ function UsagePill({
       {label}
     </div>
   );
+}
+
+function modelLabel(id: string): string {
+  if (id === 'claude-opus-4-6') return 'OPUS 4.6';
+  if (id === 'claude-sonnet-4-6') return 'SONNET 4.6';
+  if (id === 'deepseek/deepseek-chat') return 'DEEPSEEK V3';
+  return id.toUpperCase();
 }
 
 function formatReset(iso: string): string {
