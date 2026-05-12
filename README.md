@@ -1,106 +1,213 @@
 # MathIQ
 
-Mental math trainer — speed drills + AI tutor across arithmetic → calculus.
+Type a math problem. Walk through it. One line at a time.
 
-Built on the editorial design system from [`legacy/MathIQ.html`](legacy/MathIQ.html)
-(originally a Claude Design prototype): cream paper, ink, single tangerine
-accent, slab serif numerals.
+A guided AI tutor for nine college math courses. Iris (the tutor) reads your
+problem, picks the right technique, and walks through every move — not just
+the answer.
 
-## Quickstart
+**Live**: [math-iq.vercel.app](https://math-iq.vercel.app/)
+
+---
+
+## What it is
+
+Nine courses, 108 topics, three tiers:
+
+- **Anonymous** — 1 walkthrough/day on DeepSeek V3.
+- **Signed in (free)** — 5/day on DeepSeek V3.
+- **MathIQ+** ($7.99/mo, $4.99/mo annual) — 20 Opus 4.6 walkthroughs daily,
+  then 50 on Sonnet 4.6. "Why & how" step reflection. Image input.
+- **MathIQ Pro** ($29.99/mo, $19.99/mo annual) — 70 Opus 4.6 walkthroughs
+  daily, no degradation. Everything in Plus.
+
+Every paid walkthrough auto-saves to a 90-day history. Every answer is
+verified by a separate model before the badge says "verified." Photos of
+textbook problems get extracted to LaTeX and walked through. The landing
+page rotates a different ancient-Greek scribe and tagline by day of week.
+
+---
+
+## Stack
+
+| Layer | What |
+|---|---|
+| Frontend | React 18 + Vite 5 + TypeScript, Vercel |
+| Worker | Cloudflare Worker (TypeScript) for auth, AI streaming, OCR, history, billing |
+| State | Cloudflare KV (subscription, history, idempotency) + Durable Object (atomic rate-limit counters) |
+| AI | Anthropic Claude (Opus 4.6 / Sonnet 4.6 / Haiku) + OpenRouter (DeepSeek V3 for free tier) |
+| Auth | Clerk (email magic link, no passwords) |
+| Billing | Stripe Checkout + Customer Portal + Webhooks |
+| Math | KaTeX + remark-math via react-markdown |
+| Fonts | DM Sans + JetBrains Mono |
+
+No global state library. Routes are a discriminated union; render is
+exhaustive. Streaming responses use a TransformStream to normalize LaTeX
+delimiters mid-flight.
+
+---
+
+## Quickstart (local)
 
 ```bash
+# Frontend
 npm install
-npm run dev        # Vite dev server on :5173
-npm run build      # type-check + production bundle in dist/
-npm run typecheck  # type-check only
+npm run dev          # Vite on :5173
+
+# Worker (separate terminal)
+cd worker
+npm install
+npx wrangler dev     # :8787
+
+# Webhook forwarder (third terminal, only when testing billing)
+stripe listen --forward-to http://localhost:8787/api/stripe/webhook
 ```
+
+You'll need `.env` (frontend) and `worker/.dev.vars` (worker). See
+`.env.example` and the comments in `worker/wrangler.toml`.
+
+---
 
 ## Project structure
 
 ```
 src/
-├─ main.tsx                # entry — mounts <App>
-├─ App.tsx                 # shell + route switch
-├─ router.ts               # Route discriminated union
-├─ index.css               # CSS variables + global resets
+├─ main.tsx              # mounts <App>, wraps in ClerkProvider
+├─ App.tsx               # route switch (internal state), /terms /privacy URL handler
+├─ router.ts             # Route discriminated union
+├─ index.css             # tokens, reveal animations, scribe-trigger hover
 │
-├─ design/                 # design system primitives
-│  ├─ tokens.ts            # T.* — references CSS vars
-│  ├─ Kicker.tsx           # mono uppercase label
-│  └─ buttons.ts           # primary/ghost/chip helpers
+├─ design/
+│  └─ tokens.ts          # T.* references CSS vars
 │
-├─ math/                   # problem generators
-│  ├─ types.ts             # Domain, Problem
-│  ├─ generators.ts        # genProblem(domain) — arithmetic … calculus
-│  └─ checkAnswer.ts       # tolerant equality (numeric + string answers)
+├─ screens/
+│  ├─ Landing.tsx        # home — daily scribe + animated search
+│  ├─ Lessons.tsx        # course-picker grid (was "Home" pre-redesign)
+│  ├─ WalkthroughCourse.tsx
+│  ├─ Topic.tsx          # the main walkthrough surface
+│  ├─ History.tsx        # past walkthroughs, grouped by day
+│  ├─ Settings.tsx       # account, photo upload, plan, pace toggle
+│  ├─ Terms.tsx          # /terms — real URL via App-level pathname check
+│  ├─ Privacy.tsx        # /privacy — same
+│  └─ NotFound.tsx
 │
-├─ state/                  # global app state
-│  ├─ tweaks.tsx           # TweaksProvider + useTweaks (themes, density, timer)
-│  └─ stats.ts             # useStats — streak / today's solved
+├─ shell/
+│  ├─ Header.tsx         # wordmark + Settings + Clerk UserButton
+│  └─ InstallPrompt.tsx  # beforeinstallprompt listener
 │
-├─ shell/                  # surface chrome
-│  ├─ TopNav.tsx
-│  └─ DrillBack.tsx        # floating back button on full-bleed drills
+├─ state/
+│  ├─ dailyScribe.ts     # DAY_LABELS, DAY_TAGLINES, DAY_SCRIBES
+│  ├─ promptFlow.ts      # walkthrough pace setting (step | all)
+│  └─ useTypedString.ts  # type-in animation hook
 │
-├─ drills/                 # the five drill modes (one bold idea each)
-│  ├─ types.ts             # DrillMode, DrillProps, DrillResult
-│  ├─ index.tsx            # DRILLS registry — add a drill in one place
-│  ├─ PulseDrill.tsx       # 01 newspaper front-page, BPM beat tracker
-│  ├─ StreamDrill.tsx      # 02 ledger feed, combo scoring
-│  ├─ VoiceDrill.tsx       # 03 hands-free, breathing waveform
-│  ├─ LayersDrill.tsx      # 04 visual decomposition stepper
-│  └─ ArenaDrill.tsx       # 05 head-to-head with AI
+├─ walkthroughs/
+│  ├─ generate.ts        # /api/walkthrough client + RateLimitInfo
+│  ├─ classify.ts        # /api/classify
+│  ├─ ocr.ts             # /api/ocr
+│  ├─ verify.ts          # /api/verify
+│  ├─ history.ts         # /api/history/*
+│  ├─ isProblem.ts       # client-side heuristic for problem vs topic search
+│  ├─ courses.ts         # 9 courses × 12 topics catalog (source of truth)
+│  └─ types.ts
 │
-├─ screens/                # everything that isn't a drill
-│  ├─ Onboard.tsx          # first-run placement
-│  ├─ Dashboard.tsx        # "today" — recommended + continue
-│  ├─ DrillPicker.tsx      # mode + domain picker
-│  ├─ Gallery.tsx          # browse all 5 modes side-by-side (live)
-│  ├─ Tutor.tsx            # Iris chat
-│  ├─ Library.tsx          # 8-track lesson grid
-│  ├─ Profile.tsx          # streak grid, badges, records
-│  ├─ Settings.tsx         # tweaks panel as a real settings page
-│  └─ Results.tsx          # post-drill debrief
-│
-└─ tour/
-   └─ Tour.tsx             # first-run walkthrough overlay
+└─ billing/
+   └─ client.ts          # /api/billing/* fetchers
+
+worker/
+└─ src/
+   ├─ index.ts           # routes + handlers + CORS
+   ├─ auth.ts            # Clerk JWT verification
+   ├─ courses.ts         # mirror of frontend catalog
+   ├─ prompt.ts          # TUTORING_FOUNDATION + step / why-how / practice instructions
+   ├─ anthropic.ts       # streaming Anthropic call
+   ├─ openrouter.ts      # streaming OpenRouter (DeepSeek) call
+   ├─ tier.ts            # resolveTier + decideTier
+   ├─ rateLimit.ts       # DO-backed atomic counter wrapper
+   ├─ counterDO.ts       # the UsageCounter Durable Object
+   ├─ subscription.ts    # KV CRUD for subscription state + idempotency
+   ├─ stripe.ts          # checkout + portal + webhook verification
+   ├─ ocr.ts             # vision call
+   ├─ verify.ts          # answer-correctness check
+   ├─ history.ts         # walkthrough history CRUD
+   └─ normalize.ts       # \( → $ TransformStream
 ```
+
+---
 
 ## Architecture notes
 
-**Theming via CSS variables.** Color theme, typography, and density are
-set as `data-*` attributes on `<html>` by `TweaksContext`. All tokens in
-[`src/design/tokens.ts`](src/design/tokens.ts) reference CSS vars (e.g.
-`var(--accent)`), so a theme change re-skins every screen with no
-re-render. To add a theme: add a `[data-theme='foo'] { --accent: … }`
-block in `src/index.css`, then add `'foo'` to `COLOR_THEMES` in
-[`src/state/tweaks.tsx`](src/state/tweaks.tsx).
+**Two surfaces only.** `home` is the landing (scribe morph + search);
+`lessons` is the course picker grid. Everything else lives under one of
+those two or inside Settings.
 
-**Drill registry.** [`src/drills/index.tsx`](src/drills/index.tsx) is the
-single place where drills are declared. The `DrillPicker`, `Gallery`,
-and `App` route handler all consume it — adding a 6th drill is one new
-component file plus one entry in `DRILLS`.
+**Routes are internal state.** No client-side URL router. URL stays at `/`
+during normal navigation. `/terms` and `/privacy` are the exception —
+App-level pathname check at boot, falls through to the SPA otherwise. The
+Vercel `vercel.json` rewrite serves `index.html` for any path so this
+works.
 
-**Routes are a discriminated union.** [`src/router.ts`](src/router.ts)
-defines `Route` so the route switch in `App.tsx` is exhaustive — a new
-route requires a `Route` variant + a render branch. No string-typed nav
-calls.
+**Rate limiting is atomic.** Each (user, day) gets a Durable Object
+instance. The DO is single-threaded per id, so the peek → upstream call →
+commit pattern is race-free. On upstream failure we decrement (refund) so
+the user isn't charged.
 
-**Persistence.** Settings and stats persist to `localStorage` under
-namespaced keys (`mathiq:tweaks`, `mathiq:stats`, `mathiq:onboard`,
-`mathiq:tour-seen`). Storage failures (private mode / quota) degrade
-silently — the in-memory state still works.
+**Subscription state lives in KV.** Stripe is system of record; we mirror
+the bits we need for tier resolution (`subscription:user:<userId>` →
+`{tier, interval, status, currentPeriodEnd, stripeCustomerId,
+stripeSubscriptionId}`) so request-path tier lookups are one KV read.
+TTL is `currentPeriodEnd + 7d` so canceled subscriptions decay quickly
+even if the cancel webhook is missed.
 
-## Adding things
+**Webhook idempotency.** Every processed Stripe event is marked
+(`stripe-event:<id>` → 24h TTL). Retries that arrive after the first
+delivery are dropped.
 
-| Thing                  | Touch                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| New drill mode         | `src/drills/<Foo>Drill.tsx` + entry in `src/drills/index.tsx`                                        |
-| New top-level screen   | `src/screens/<Foo>.tsx` + `Route` variant + branch in `App.tsx` + (optional) tab in `TopNav.tsx`     |
-| New problem domain     | `Domain` in `src/math/types.ts` + generator in `src/math/generators.ts` + chip in `DrillPicker.tsx`  |
-| New theme / font stack | CSS vars in `src/index.css` + entry in `COLOR_THEMES` / `FONT_STACKS` in `src/state/tweaks.tsx`      |
+**Walkthrough streaming.** Worker proxies SSE from Anthropic / OpenRouter,
+extracts text deltas, pipes through `normalizeLatexDelimiters()` to
+convert `\( … \)` → `$ … $` for the markdown renderer, sends plain text
+to the client. The client splits on `**Step N.**` boundaries to enable
+step-by-step reveal.
 
-## Legacy
+**Tier resolution order:**
+1. `anonymous` if not signed in
+2. `MAX_USER_IDS` env whitelist → `pro`
+3. `PRO_USER_IDS` env whitelist → `plus` (dev override)
+4. KV subscription state if `active` or `trialing`
+5. `free`
 
-[`legacy/MathIQ.html`](legacy/MathIQ.html) is the prototype
-that this modular codebase was created from.
+The env whitelists are intentional — they're how the dev (or comped
+accounts) get paid-tier access without paying through Stripe.
+
+---
+
+## Deployment
+
+**Worker** (Cloudflare):
+```bash
+cd worker
+npx wrangler kv namespace create USAGE          # one-time
+# paste the id into wrangler.toml
+
+npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put OPENROUTER_API_KEY
+npx wrangler secret put CLERK_SECRET_KEY
+npx wrangler secret put STRIPE_SECRET_KEY
+npx wrangler secret put STRIPE_WEBHOOK_SECRET
+
+npx wrangler deploy
+# first deploy creates the UsageCounter DO class via the v1 migration
+```
+
+**Frontend** (Vercel): connect the repo, set `VITE_WORKER_URL` and
+`VITE_CLERK_PUBLISHABLE_KEY` env vars, deploy.
+
+**Stripe**: create products + prices in the dashboard, paste the four
+`price_…` IDs into `wrangler.toml`, configure Customer Portal, add a
+webhook destination at `<worker-url>/api/stripe/webhook` listening to
+`checkout.session.completed` + `customer.subscription.{created,updated,deleted}`.
+
+---
+
+## License
+
+Private. All rights reserved.
