@@ -420,6 +420,24 @@ export function Landing({ onNavigate }: LandingProps) {
           or browse Lessons →
         </button>
       </div>
+
+      <footer
+        style={{
+          marginTop: 64,
+          display: 'flex',
+          gap: 18,
+          justifyContent: 'center',
+          fontFamily: T.mono,
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: T.muted,
+        }}
+      >
+        <a href="/terms" style={{ color: T.muted, textDecoration: 'none' }}>Terms</a>
+        <span aria-hidden>·</span>
+        <a href="/privacy" style={{ color: T.muted, textDecoration: 'none' }}>Privacy</a>
+      </footer>
     </main>
   );
 }

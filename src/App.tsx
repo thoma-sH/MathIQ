@@ -7,6 +7,8 @@ import { WalkthroughCourse } from './screens/WalkthroughCourse';
 import { TopicScreen } from './screens/Topic';
 import { History } from './screens/History';
 import { Settings } from './screens/Settings';
+import { Terms } from './screens/Terms';
+import { Privacy } from './screens/Privacy';
 import type { Route } from './router';
 
 interface PageProps {
@@ -33,7 +35,24 @@ function escapeTarget(route: Route): Route | null {
   return null;
 }
 
+// Legal pages are real URLs (Stripe Customer Portal links to them, so deep-
+// linking has to work). Everything else uses internal `route` state.
+function getLegalPath(): 'terms' | 'privacy' | null {
+  if (typeof window === 'undefined') return null;
+  const p = window.location.pathname.replace(/\/$/, '');
+  if (p === '/terms') return 'terms';
+  if (p === '/privacy') return 'privacy';
+  return null;
+}
+
 export default function App() {
+  const legalPath = getLegalPath();
+  if (legalPath === 'terms') return <Terms />;
+  if (legalPath === 'privacy') return <Privacy />;
+  return <MathIQApp />;
+}
+
+function MathIQApp() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
 
   useEffect(() => {
