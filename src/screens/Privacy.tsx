@@ -69,7 +69,6 @@ export function Privacy() {
       <Section title="Third parties we share with">
         <ul style={listStyle}>
           <li><strong>Anthropic</strong> — your problem text is sent to Claude to produce walkthroughs.</li>
-          <li><strong>OpenRouter (DeepSeek)</strong> — used for free-tier walkthroughs.</li>
           <li><strong>Clerk</strong> — handles authentication. Stores your email and profile data.</li>
           <li><strong>Stripe</strong> — processes payments. Stores your card and billing details.</li>
           <li><strong>Cloudflare</strong> — hosts our worker and stores your walkthrough history (KV).</li>

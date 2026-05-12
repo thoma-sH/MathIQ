@@ -38,11 +38,19 @@ type StreamTarget =
   | 'walkthrough'
   | { kind: 'why-how'; index: number };
 
-// Accept any `**Step N...` regardless of terminator. Some models drift from
-// `**Step 1.**` to `**Step 1:**` or `**Step 1**` after the first marker.
-const STEP_MARKER = /\*\*Step\s+\d+/gi;
+// Step markers vary by model drift. Match any of these line-starts:
+//   `**Step 1.**`, `**Step 1:**`, `**Step 1**`        — bold form (preferred)
+//   `**Step 1: Identify u and dv**`                    — bold spanning whole heading
+//   `### Step 1`, `## Step 1:`                          — markdown heading form
+//   `Step 1:` / `Step 1.` at the start of a line       — bare form
+// Anchored to start-of-line (multi-line flag) so a "Step 3" mentioned in
+// body prose never splits the stream.
+const STEP_MARKER = /^\s*(?:\*\*\s*Step\s+\d+|#{1,6}\s+Step\s+\d+|Step\s+\d+\s*[:.])/gim;
 
 interface ParsedStream {
+  /** Text before the first `**Step N**` marker. Practice mode opens with
+   *  `*Practice problem.* <statement>` here. Null if empty. */
+  preamble: string | null;
   /** Segments where the *next* marker has arrived, or stream is done. */
   complete: string[];
   /** Currently-arriving last segment, while streaming. Null when done or no markers seen. */
@@ -51,17 +59,21 @@ interface ParsedStream {
 
 function parseStream(buffer: string, done: boolean): ParsedStream {
   if (!buffer.trim()) {
-    return { complete: [], streamingTail: null };
+    return { preamble: null, complete: [], streamingTail: null };
   }
   const positions: number[] = [];
   STEP_MARKER.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = STEP_MARKER.exec(buffer)) !== null) positions.push(m.index);
   if (positions.length === 0) {
+    // No step markers yet. While streaming, show buffer as preamble so the
+    // practice problem statement renders as it arrives; on done with no
+    // markers at all, treat the whole thing as a single complete segment.
     return done
-      ? { complete: [buffer.trim()], streamingTail: null }
-      : { complete: [], streamingTail: buffer.trim() || null };
+      ? { preamble: null, complete: [buffer.trim()], streamingTail: null }
+      : { preamble: buffer.trim() || null, complete: [], streamingTail: null };
   }
+  const preamble = buffer.slice(0, positions[0]).trim() || null;
   const complete: string[] = [];
   for (let i = 0; i < positions.length - 1; i++) {
     complete.push(buffer.slice(positions[i], positions[i + 1]).trim());
@@ -69,9 +81,9 @@ function parseStream(buffer: string, done: boolean): ParsedStream {
   const tail = buffer.slice(positions[positions.length - 1]).trim();
   if (done) {
     complete.push(tail);
-    return { complete, streamingTail: null };
+    return { preamble, complete, streamingTail: null };
   }
-  return { complete, streamingTail: tail };
+  return { preamble, complete, streamingTail: tail };
 }
 
 export function TopicScreen({
@@ -237,7 +249,9 @@ export function TopicScreen({
     setWhyHowStream({ index, text: '' });
 
     // Send the walkthrough text up to and including the target step.
-    const cumulative = parsed.complete.slice(0, index + 1).join('\n\n');
+    // Prepend the preamble so practice-mode why-how sees the problem statement.
+    const steps = parsed.complete.slice(0, index + 1).join('\n\n');
+    const cumulative = parsed.preamble ? `${parsed.preamble}\n\n${steps}` : steps;
 
     let accumulated = '';
     try {
@@ -407,7 +421,10 @@ export function TopicScreen({
   }
 
   const otherTopics = course.topics.filter((t) => t.id !== topic.id).slice(0, 4);
-  const hasOutput = parsed.complete.length > 0 || parsed.streamingTail !== null;
+  const hasOutput =
+    parsed.preamble !== null ||
+    parsed.complete.length > 0 ||
+    parsed.streamingTail !== null;
   const isStreamingWalkthrough = streaming === 'walkthrough';
   const isStreamingAnything = streaming !== null;
 
@@ -658,6 +675,26 @@ export function TopicScreen({
             Try again
           </button>
         </div>
+      )}
+
+      {parsed.preamble && /^\*Practice problem\.?\*/i.test(parsed.preamble) && (
+        <section
+          style={{
+            border: `1px solid ${T.ink}`,
+            background: T.paper,
+            padding: '18px 22px',
+            marginBottom: 16,
+            fontSize: 16,
+            lineHeight: 1.55,
+            overflowX: 'auto',
+          }}
+        >
+          <div className="markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {parsed.preamble}
+            </ReactMarkdown>
+          </div>
+        </section>
       )}
 
       {visibleSteps.map((stepText, i) => (
@@ -1130,6 +1167,7 @@ function UsagePill({
 function modelLabel(id: string): string {
   if (id === 'claude-opus-4-6') return 'OPUS 4.6';
   if (id === 'claude-sonnet-4-6') return 'SONNET 4.6';
+  if (id === 'claude-haiku-4-5') return 'HAIKU 4.5';
   if (id === 'deepseek/deepseek-chat') return 'DEEPSEEK V3';
   return id.toUpperCase();
 }

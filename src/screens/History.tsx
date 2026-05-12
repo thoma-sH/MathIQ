@@ -122,6 +122,10 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
     }
   }
 
+  // Group by day for readable scanning. Must be called before any early
+  // return — React requires the same hook order on every render.
+  const groups = useMemo(() => groupByDay(items ?? []), [items]);
+
   if (error) {
     return (
       <div role="status" aria-live="polite" style={{ fontSize: 14, color: T.muted, fontFamily: T.mono }}>
@@ -135,9 +139,6 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
   if (items.length === 0) {
     return <EmptyState onNavigate={onNavigate} />;
   }
-
-  // Group by day for readable scanning.
-  const groups = useMemo(() => groupByDay(items), [items]);
 
   return (
     <section className="reveal reveal-3">

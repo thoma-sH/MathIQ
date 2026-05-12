@@ -20,6 +20,7 @@ export { UsageCounter } from './counterDO';
 import { decideTier, resolveTier, type Tier, type TierDecision } from './tier';
 import { callAnthropicStream } from './anthropic';
 import { callOpenRouterStream } from './openrouter';
+import { getIrisPrompts } from './prompt';
 import { normalizeLatexDelimiters } from './normalize';
 import {
   clearSubscription,
@@ -71,6 +72,10 @@ interface Env {
   STRIPE_SUCCESS_URL: string;
   STRIPE_CANCEL_URL: string;
   STRIPE_PORTAL_RETURN_URL: string;
+  IRIS_FOUNDATION_PROMPT_1?: string;
+  IRIS_FOUNDATION_PROMPT_2?: string;
+  IRIS_WHY_HOW_PROMPT?: string;
+  IRIS_PRACTICE_PROMPT?: string;
 }
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
@@ -328,11 +333,13 @@ async function handleWalkthrough(
 
   // Provider dispatch
   const model = finalDecision.model;
+  const prompts = getIrisPrompts(env);
   const upstream =
     model.provider === 'anthropic'
       ? await callAnthropicStream({
           apiKey: env.ANTHROPIC_API_KEY,
           model: model.id,
+          prompts,
           course,
           topic,
           problem,
@@ -342,6 +349,7 @@ async function handleWalkthrough(
       : await callOpenRouterStream({
           apiKey: env.OPENROUTER_API_KEY,
           model: model.id,
+          prompts,
           course,
           topic,
           problem,

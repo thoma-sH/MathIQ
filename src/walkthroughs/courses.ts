@@ -458,7 +458,7 @@ export const COURSES: Course[] = [
         title: 'Dot & Cross Products',
         blurb: '$\\vec{u} \\cdot \\vec{v}$ is a scalar; $\\vec{u} \\times \\vec{v}$ is a vector.',
         strategicAnchor:
-          'Dot: $\\vec u\\cdot\\vec v=|\\vec u||\\vec v|\\cos\\theta$, zero iff perpendicular. Cross: vector perpendicular to both, magnitude $|\\vec u||\\vec v|\\sin\\theta$ (parallelogram area), zero iff parallel.',
+          'Dot: $\\vec u\\cdot\\vec v=|\\vec u|\\,|\\vec v|\\cos\\theta$, zero iff perpendicular. Cross: vector perpendicular to both, magnitude $|\\vec u|\\,|\\vec v|\\sin\\theta$ (parallelogram area), zero iff parallel.',
         exampleProblem:
           'Find the area of the triangle with vertices $A = (1, 0, 0)$, $B = (0, 2, 0)$, $C = (0, 0, 3)$.',
       },
@@ -791,7 +791,7 @@ export const COURSES: Course[] = [
         title: 'Vectors & Vector Operations',
         blurb: 'Addition, scalar multiplication, dot product.',
         strategicAnchor:
-          'Componentwise add and scale. $\\vec u\\cdot\\vec v=\\sum u_iv_i=|\\vec u||\\vec v|\\cos\\theta$. Length: $|\\vec v|=\\sqrt{\\vec v\\cdot\\vec v}$.',
+          'Componentwise add and scale. $\\vec u\\cdot\\vec v=\\sum u_iv_i=|\\vec u|\\,|\\vec v|\\cos\\theta$. Length: $|\\vec v|=\\sqrt{\\vec v\\cdot\\vec v}$.',
         exampleProblem:
           'Given $\\vec{u} = (1, 2, -1, 3)$ and $\\vec{v} = (-2, 0, 4, 1)$, find $2\\vec{u} - \\vec{v}$, $\\vec{u} \\cdot \\vec{v}$, and $|\\vec{u}|$.',
       },

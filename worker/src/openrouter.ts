@@ -3,7 +3,7 @@
  * Same plain-text output shape as the Anthropic helper.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPromptFlat, PRACTICE_INSTRUCTION, WHY_HOW_INSTRUCTION } from './prompt';
+import { buildSystemPromptFlat, type IrisPrompts } from './prompt';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -13,6 +13,7 @@ export interface OpenRouterCallParams {
   apiKey: string;
   /** OpenRouter model id, e.g. "deepseek/deepseek-chat". */
   model: string;
+  prompts: IrisPrompts;
   course: Course;
   topic: Topic;
   problem?: string;
@@ -37,6 +38,7 @@ export async function callOpenRouterStream(
   const {
     apiKey,
     model,
+    prompts,
     course,
     topic,
     problem,
@@ -47,14 +49,14 @@ export async function callOpenRouterStream(
     walkthroughSoFar,
   } = params;
 
-  const systemPrompt = buildSystemPromptFlat(course, topic);
+  const systemPrompt = buildSystemPromptFlat(prompts, course, topic);
 
   const problemText = problem?.trim() || topic.exampleProblem;
   const initialUserText = problem
     ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
     : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
 
-  const conversation = buildConversation(initialUserText, action, walkthroughSoFar);
+  const conversation = buildConversation(prompts, initialUserText, action, walkthroughSoFar);
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
@@ -95,6 +97,7 @@ export async function callOpenRouterStream(
 }
 
 function buildConversation(
+  prompts: IrisPrompts,
   initialUserText: string,
   action: WalkthroughAction,
   walkthroughSoFar: string | undefined,
@@ -103,11 +106,11 @@ function buildConversation(
     return [
       { role: 'user', content: initialUserText },
       { role: 'assistant', content: walkthroughSoFar.trim() },
-      { role: 'user', content: WHY_HOW_INSTRUCTION },
+      { role: 'user', content: prompts.whyHow },
     ];
   }
   if (action === 'practice') {
-    return [{ role: 'user', content: PRACTICE_INSTRUCTION }];
+    return [{ role: 'user', content: prompts.practice }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

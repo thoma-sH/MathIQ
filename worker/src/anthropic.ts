@@ -3,15 +3,33 @@
  * returns a plain-text ReadableStream of the model's output.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPrompt, PRACTICE_INSTRUCTION, WHY_HOW_INSTRUCTION } from './prompt';
+import { buildSystemPrompt, type IrisPrompts } from './prompt';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+
+/**
+ * Tail-end format reinforcement. Appended after the foundation + course/topic
+ * blocks — closest to the user message, where attention is highest. Smaller
+ * Claude models (Haiku) drift from the foundation's ending format and emit
+ * mangled markdown tables; the reinforcement reins them in without diluting
+ * the main prompt.
+ */
+const FORMAT_REINFORCEMENT = `Format reinforcement (priority — these override any drift):
+
+1. ENDING. After the final step, close with EXACTLY these two lines and nothing else:
+   **Answer:** <final answer, in LaTeX>
+   *Trigger to remember:* <1-3 sentence retrospective on the technique's trigger condition>
+
+   Do NOT write "Summary —", "Conclusion", "Final result", "What to remember", "Recap", or any other closing heading. The two lines above are the only permitted close. The literal token \`**Answer:**\` must appear — downstream verification depends on it.
+
+2. NO MARKDOWN TABLES. If data needs rows and columns, use a vertical list of \`- key: value\` lines or a LaTeX matrix (\`\\begin{bmatrix}...\\end{bmatrix}\` or \`\\begin{array}\`). Pipe-delimited markdown tables (\`| col | col |\`) routinely render as mangled inline text and must not appear.`;
 
 export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
 
 export interface AnthropicCallParams {
   apiKey: string;
-  model: 'claude-opus-4-6' | 'claude-sonnet-4-6';
+  model: 'claude-opus-4-6' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+  prompts: IrisPrompts;
   course: Course;
   topic: Topic;
   problem?: string;
@@ -37,6 +55,7 @@ export async function callAnthropicStream(
   const {
     apiKey,
     model,
+    prompts,
     course,
     topic,
     problem,
@@ -50,7 +69,7 @@ export async function callAnthropicStream(
     ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
     : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
 
-  const messages = buildConversation(initialUserText, action, walkthroughSoFar);
+  const messages = buildConversation(prompts, initialUserText, action, walkthroughSoFar);
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -62,7 +81,10 @@ export async function callAnthropicStream(
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      system: buildSystemPrompt(course, topic),
+      system: [
+        ...buildSystemPrompt(prompts, course, topic),
+        { type: 'text' as const, text: FORMAT_REINFORCEMENT },
+      ],
       messages,
       stream: true,
     }),
@@ -86,6 +108,7 @@ export async function callAnthropicStream(
 }
 
 function buildConversation(
+  prompts: IrisPrompts,
   initialUserText: string,
   action: WalkthroughAction,
   walkthroughSoFar: string | undefined,
@@ -94,11 +117,11 @@ function buildConversation(
     return [
       { role: 'user', content: initialUserText },
       { role: 'assistant', content: walkthroughSoFar.trim() },
-      { role: 'user', content: WHY_HOW_INSTRUCTION },
+      { role: 'user', content: prompts.whyHow },
     ];
   }
   if (action === 'practice') {
-    return [{ role: 'user', content: PRACTICE_INSTRUCTION }];
+    return [{ role: 'user', content: prompts.practice }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

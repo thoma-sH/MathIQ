@@ -14,8 +14,8 @@ the answer.
 
 Nine courses, 108 topics, three tiers:
 
-- **Anonymous** — 1 walkthrough/day on DeepSeek V3.
-- **Signed in (free)** — 5/day on DeepSeek V3.
+- **Anonymous** — 1 walkthrough/day on Claude Haiku 4.5.
+- **Signed in (free)** — 5/day on Claude Haiku 4.5.
 - **MathIQ+** ($7.99/mo, $4.99/mo annual) — 20 Opus 4.6 walkthroughs daily,
   then 50 on Sonnet 4.6. "Why & how" step reflection. Image input.
 - **MathIQ Pro** ($29.99/mo, $19.99/mo annual) — 70 Opus 4.6 walkthroughs
@@ -35,7 +35,7 @@ page rotates a different ancient-Greek scribe and tagline by day of week.
 | Frontend | React 18 + Vite 5 + TypeScript, Vercel |
 | Worker | Cloudflare Worker (TypeScript) for auth, AI streaming, OCR, history, billing |
 | State | Cloudflare KV (subscription, history, idempotency) + Durable Object (atomic rate-limit counters) |
-| AI | Anthropic Claude (Opus 4.6 / Sonnet 4.6 / Haiku) + OpenRouter (DeepSeek V3 for free tier) |
+| AI | Anthropic Claude (Opus 4.6 / Sonnet 4.6 / Haiku 4.5) |
 | Auth | Clerk (email magic link, no passwords) |
 | Billing | Stripe Checkout + Customer Portal + Webhooks |
 | Math | KaTeX + remark-math via react-markdown |
@@ -118,7 +118,7 @@ worker/
    ├─ index.ts           # routes + handlers + CORS
    ├─ auth.ts            # Clerk JWT verification
    ├─ courses.ts         # mirror of frontend catalog
-   ├─ prompt.ts          # TUTORING_FOUNDATION + step / why-how / practice instructions
+   ├─ prompt.ts          # Iris system prompts (loaded from worker secrets, fallbacks here)
    ├─ anthropic.ts       # streaming Anthropic call
    ├─ openrouter.ts      # streaming OpenRouter (DeepSeek) call
    ├─ tier.ts            # resolveTier + decideTier

@@ -58,6 +58,7 @@ HACKMATHKEY
 .dev.vars
 .dev.vars.*
 .wrangler/
+worker/.prompts/
 
 # ─── Editors / IDEs ────────────────────────────────────────────────────
 .idea

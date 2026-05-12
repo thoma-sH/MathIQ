@@ -43,7 +43,7 @@ export async function resolveTier(
 }
 
 export type ModelKey =
-  | { provider: 'anthropic'; id: 'claude-opus-4-6' | 'claude-sonnet-4-6' }
+  | { provider: 'anthropic'; id: 'claude-opus-4-6' | 'claude-sonnet-4-6' | 'claude-haiku-4-5' }
   | { provider: 'openrouter'; id: 'deepseek/deepseek-chat' };
 
 export interface TierDecision {
@@ -65,7 +65,7 @@ const PLUS_OPUS_LIMIT = 20;
 const PLUS_TOTAL_LIMIT = 70;
 const PRO_LIMIT = 70;
 
-const DEEPSEEK: ModelKey = { provider: 'openrouter', id: 'deepseek/deepseek-chat' };
+const HAIKU: ModelKey = { provider: 'anthropic', id: 'claude-haiku-4-5' };
 const OPUS: ModelKey = { provider: 'anthropic', id: 'claude-opus-4-6' };
 const SONNET: ModelKey = { provider: 'anthropic', id: 'claude-sonnet-4-6' };
 
@@ -73,14 +73,14 @@ export function decideTier(tier: Tier, alreadyUsedToday: number): TierDecision {
   if (tier === 'anonymous') {
     return {
       ceiling: ANONYMOUS_LIMIT,
-      model: alreadyUsedToday < ANONYMOUS_LIMIT ? DEEPSEEK : null,
+      model: alreadyUsedToday < ANONYMOUS_LIMIT ? HAIKU : null,
       degraded: false,
     };
   }
   if (tier === 'free') {
     return {
       ceiling: FREE_LIMIT,
-      model: alreadyUsedToday < FREE_LIMIT ? DEEPSEEK : null,
+      model: alreadyUsedToday < FREE_LIMIT ? HAIKU : null,
       degraded: false,
     };
   }
