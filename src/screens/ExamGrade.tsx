@@ -231,7 +231,7 @@ function IdleCard({
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf,image/jpeg,image/png,image/webp"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
         style={{ display: 'none' }}
         onChange={(e) => onFile(e.target.files?.[0] ?? null)}
       />

@@ -164,8 +164,22 @@ const ALLOWED_GRADE_MEDIA = new Set([
 ]);
 const MAX_GRADE_BYTES = 15 * 1024 * 1024;
 
+/** iOS Safari sometimes hands back File objects with an empty `type` string,
+ *  particularly for files picked from Files.app. Fall back to the filename
+ *  extension so PDFs and PNGs still get the right MIME type. */
+function inferMediaType(file: File): string {
+  if (file.type) return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (ext === 'pdf') return 'application/pdf';
+  if (ext === 'png') return 'image/png';
+  if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+  if (ext === 'webp') return 'image/webp';
+  return '';
+}
+
 export async function gradeExam(opts: GradeOpts): Promise<ExamGradeResult> {
-  if (!ALLOWED_GRADE_MEDIA.has(opts.file.type)) {
+  const mediaType = inferMediaType(opts.file);
+  if (!ALLOWED_GRADE_MEDIA.has(mediaType)) {
     throw new ExamError(
       'bad_request',
       'Use a PDF or a JPEG/PNG/WebP photo of your attempt.',
@@ -178,7 +192,7 @@ export async function gradeExam(opts: GradeOpts): Promise<ExamGradeResult> {
     );
   }
 
-  const { base64, mediaType } = await fileToBase64(opts.file);
+  const { base64 } = await fileToBase64(opts.file);
   const token = await opts.getToken();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
