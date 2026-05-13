@@ -22,7 +22,14 @@ const FORMAT_REINFORCEMENT = `Format reinforcement (priority — these override 
 
    Do NOT write "Summary —", "Conclusion", "Final result", "What to remember", "Recap", or any other closing heading. The two lines above are the only permitted close. The literal token \`**Answer:**\` must appear — downstream verification depends on it.
 
-2. NO MARKDOWN TABLES. If data needs rows and columns, use a vertical list of \`- key: value\` lines or a LaTeX matrix (\`\\begin{bmatrix}...\\end{bmatrix}\` or \`\\begin{array}\`). Pipe-delimited markdown tables (\`| col | col |\`) routinely render as mangled inline text and must not appear.`;
+2. NO MARKDOWN TABLES. Pipe-delimited tables (\`| col | col |\`) routinely render as mangled inline text and must not appear. Choose the right alternative based on what the data is:
+
+   - **Numerical/symbolic matrices** (eigenvectors, linear transformations, augmented systems): use a LaTeX matrix wrapped in display-math delimiters. The \`$$\` wrappers are REQUIRED — matrix commands without them render as raw text. Example:
+     \`$$\\begin{bmatrix} 1 & 2 \\\\ 3 & 4 \\end{bmatrix}$$\`
+
+   - **Categorical or descriptive lists** (regions, cases, subdivisions, scenarios): use a markdown bullet list, NOT a matrix. Matrices are for math, not for "here are the four regions." Example:
+     \`- Region 1: $[0,1] \\times [0,1]$\`
+     \`- Region 2: $[0,1] \\times [1,2]$\``;
 
 export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
 
