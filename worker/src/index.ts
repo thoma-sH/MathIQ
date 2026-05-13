@@ -50,6 +50,7 @@ import {
 } from './history';
 import { extractProblemFromImage } from './ocr';
 import { verifyAnswer } from './verify';
+import { generateExam, type ExamId } from './exam';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -180,6 +181,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/verify') {
       return handleVerify(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/exam/generate') {
+      return handleExamGenerate(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -928,6 +933,106 @@ async function handleVerify(
     return json({ error: 'verify_failed' }, 502, cors);
   }
   return json({ verdict: result.verdict ?? 'unclear', reason: result.reason ?? null }, 200, cors);
+}
+
+interface ExamGenerateBody {
+  courseId?: string;
+  exam?: ExamId;
+}
+
+async function handleExamGenerate(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
+  }
+  if (authState.kind !== 'user') {
+    return json(
+      { error: 'sign_in_required', message: 'Exam mode requires a MathIQ Pro account.' },
+      401,
+      cors,
+    );
+  }
+
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'pro') {
+    return json(
+      {
+        error: 'upgrade_required',
+        message: 'Exam mode is a MathIQ Pro feature.',
+      },
+      403,
+      cors,
+    );
+  }
+
+  let body: ExamGenerateBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.courseId || typeof body.courseId !== 'string') {
+    return json({ error: 'courseId required' }, 400, cors);
+  }
+  if (
+    body.exam !== 'exam1' &&
+    body.exam !== 'exam2' &&
+    body.exam !== 'exam3' &&
+    body.exam !== 'final'
+  ) {
+    return json({ error: 'exam must be one of exam1, exam2, exam3, final' }, 400, cors);
+  }
+
+  const course = COURSES_BY_ID[body.courseId];
+  if (!course) {
+    return json({ error: 'unknown courseId' }, 400, cors);
+  }
+
+  // Exam generation counts against the user's daily Opus quota (1 slot).
+  const counter = userCounter(env.USAGE_DO, authState.userId);
+  const usedToday = await peek(counter);
+  const decision = decideTier(tier, usedToday);
+  if (decision.model === null) {
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've used all ${decision.ceiling} Pro slots today.`,
+        limit: decision.ceiling,
+        used: usedToday,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+  await increment(counter);
+
+  const result = await generateExam(
+    {
+      apiKey: env.ANTHROPIC_API_KEY,
+      course,
+      exam: body.exam,
+      userId: authState.userId,
+    },
+    env.USAGE,
+  );
+
+  if (!result.ok || !result.record) {
+    // Refund the slot on upstream failure.
+    await decrement(counter);
+    if (result.detail) console.error('exam generate failed', result.status, result.detail);
+    return json(
+      { error: 'upstream_error', message: 'Exam generation failed — try again in a moment.' },
+      502,
+      cors,
+    );
+  }
+
+  return json(result.record, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {

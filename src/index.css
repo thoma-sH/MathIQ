@@ -355,4 +355,81 @@ img, svg { max-width: 100%; }
     page-break-inside: avoid;
   }
   .print-doc .katex { font-size: 1.05em; }
+
+  /* Exam document — generous work space between problems */
+  .exam-doc {
+    color: #000;
+    background: #fff;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 12pt;
+    line-height: 1.55;
+    padding: 0.6in 0.7in;
+  }
+  .exam-doc .exam-header {
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 14pt;
+    margin-bottom: 18pt;
+  }
+  .exam-doc .exam-course {
+    font-size: 10pt;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 4pt;
+  }
+  .exam-doc .exam-title {
+    font-size: 24pt;
+    font-weight: 700;
+    margin: 0 0 10pt;
+    letter-spacing: -0.02em;
+  }
+  .exam-doc .exam-meta {
+    font-size: 11pt;
+    color: #222;
+    margin-bottom: 8pt;
+  }
+  .exam-doc .exam-instructions {
+    font-size: 10pt;
+    color: #444;
+    font-style: italic;
+  }
+  .exam-doc .exam-problem {
+    page-break-inside: avoid;
+    margin-bottom: 14pt;
+    border-top: 1px solid #999;
+    padding-top: 10pt;
+  }
+  .exam-doc .exam-problem:first-of-type {
+    border-top: none;
+    padding-top: 0;
+  }
+  .exam-doc .exam-problem-label {
+    font-size: 11pt;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .exam-doc .exam-problem-topic {
+    font-size: 9pt;
+    color: #666;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6pt;
+  }
+  .exam-doc .exam-problem-body { color: #000; font-size: 12pt; }
+  .exam-doc .exam-problem-body .katex { font-size: 1.05em; }
+  /* Each problem gets ~3 inches of blank work space before the next */
+  .exam-doc .exam-workspace {
+    min-height: 3in;
+    border-bottom: 1px dashed #ccc;
+    margin-top: 8pt;
+  }
+  .exam-doc .print-footer {
+    margin-top: 24pt;
+    padding-top: 8pt;
+    border-top: 1px solid #ccc;
+    font-size: 8pt;
+    color: #777;
+    text-align: center;
+  }
 }

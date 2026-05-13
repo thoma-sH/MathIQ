@@ -150,12 +150,43 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
           fontSize: 16,
           color: T.muted,
           lineHeight: 1.55,
-          margin: '0 0 32px',
+          margin: '0 0 24px',
           maxWidth: 540,
         }}
       >
         {course.blurb}
       </p>
+
+      <button
+        onClick={() => onNavigate({ name: 'exams', courseId: course.id })}
+        className="lift btn-press"
+        aria-label={`Open ${course.title} exam mode`}
+        style={{
+          background: T.accent,
+          border: `1px solid ${T.ink}`,
+          color: T.paper,
+          padding: '16px 22px',
+          fontSize: 15,
+          fontWeight: 600,
+          fontFamily: T.sans,
+          cursor: 'pointer',
+          width: '100%',
+          marginBottom: 24,
+          textAlign: 'left',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span>Exam mode</span>
+          <span style={{ fontSize: 12, opacity: 0.75, fontWeight: 400, fontFamily: T.mono, letterSpacing: '0.1em' }}>
+            4 EXAMS · GENERATED + GRADED · PRO
+          </span>
+        </span>
+        <span aria-hidden style={{ fontSize: 18 }}>→</span>
+      </button>
 
       <div
         className="stagger-children"
