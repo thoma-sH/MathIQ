@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import {
@@ -427,80 +430,187 @@ function GradeResultView({
       <section>
         <div
           style={{
-            fontSize: 11,
-            fontFamily: T.mono,
-            letterSpacing: '0.14em',
-            textTransform: 'uppercase',
-            color: T.muted,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
             marginBottom: 8,
           }}
         >
-          PROBLEM-BY-PROBLEM
+          <div
+            style={{
+              fontSize: 11,
+              fontFamily: T.mono,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: T.muted,
+            }}
+          >
+            PROBLEM-BY-PROBLEM
+          </div>
+          <div
+            style={{
+              fontSize: 11,
+              fontFamily: T.mono,
+              letterSpacing: '0.08em',
+              color: T.muted,
+            }}
+          >
+            tap to expand
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {result.problems.map((p) => (
-            <article
+            <ProblemCard
               key={p.index}
-              style={{
-                padding: '14px 18px',
-                border: `1px solid ${T.ink}`,
-                background: p.correct ? T.paper : T.paper2,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 10,
-                  marginBottom: 6,
-                }}
-              >
-                <span style={{ fontSize: 13, fontFamily: T.mono, letterSpacing: '0.1em', color: T.muted }}>
-                  PROBLEM {p.index} · {p.topicTitle}
-                </span>
-                <span
-                  style={{
-                    fontFamily: T.mono,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: p.correct ? T.accent3 : T.ink,
-                  }}
-                >
-                  {p.score} / {p.max}
-                </span>
-              </div>
-              <p style={{ fontSize: 14, lineHeight: 1.5, margin: 0 }}>{p.feedback}</p>
-              {p.score < 8 && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onNavigate({
-                      name: 'topic',
-                      courseId,
-                      topicId: p.topicId,
-                    })
-                  }
-                  className="btn-press"
-                  style={{
-                    marginTop: 8,
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    fontSize: 13,
-                    color: T.accent,
-                    textDecoration: 'underline',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  Review {p.topicTitle} →
-                </button>
-              )}
-            </article>
+              problem={p}
+              onReview={() =>
+                onNavigate({ name: 'topic', courseId, topicId: p.topicId })
+              }
+            />
           ))}
         </div>
       </section>
     </>
+  );
+}
+
+type PipStatus = 'full' | 'partial' | 'missed';
+function pipStatus(score: number, max: number): PipStatus {
+  if (score >= 8) return 'full';
+  if (score / Math.max(max, 1) >= 0.4) return 'partial';
+  return 'missed';
+}
+
+function StatusPip({ status }: { status: PipStatus }) {
+  const fill =
+    status === 'full' ? T.accent3 : status === 'partial' ? T.accent2 : 'transparent';
+  const stroke = status === 'missed' ? T.muted : fill;
+  return (
+    <svg
+      width="9"
+      height="9"
+      viewBox="0 0 9 9"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <circle cx="4.5" cy="4.5" r="3.5" fill={fill} stroke={stroke} strokeWidth="1" />
+    </svg>
+  );
+}
+
+function ProblemCard({
+  problem: p,
+  onReview,
+}: {
+  problem: ExamGradeResult['problems'][number];
+  onReview: () => void;
+}) {
+  const status = pipStatus(p.score, p.max);
+  return (
+    <details
+      className="disclosure"
+      style={{
+        border: `1px solid ${T.ink}`,
+        background: p.correct ? T.paper : T.paper2,
+      }}
+    >
+      <summary
+        style={{
+          padding: '13px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+        }}
+      >
+        <span
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 10,
+              fontFamily: T.mono,
+              letterSpacing: '0.14em',
+              color: T.muted,
+              textTransform: 'uppercase',
+            }}
+          >
+            <StatusPip status={status} />
+            Problem {p.index}
+          </span>
+          <span style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.3 }}>
+            {p.topicTitle}
+          </span>
+        </span>
+        <span
+          style={{
+            fontFamily: T.mono,
+            fontSize: 14,
+            fontWeight: 600,
+            color: p.correct ? T.accent3 : T.ink,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {p.score} <span style={{ color: T.muted, fontWeight: 400 }}>/ {p.max}</span>
+        </span>
+        <svg
+          className="chev"
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M3.5 5.5 L7 9 L10.5 5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </summary>
+      <div
+        className="reveal feedback-md"
+        style={{
+          padding: '12px 16px 16px',
+          borderTop: `1px solid ${T.hair}`,
+          fontSize: 14,
+          lineHeight: 1.55,
+        }}
+      >
+        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+          {p.feedback}
+        </ReactMarkdown>
+        {p.score < 8 && (
+          <button
+            type="button"
+            onClick={onReview}
+            className="btn-press"
+            style={{
+              marginTop: 12,
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              fontSize: 13,
+              color: T.accent,
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >
+            Review {p.topicTitle} →
+          </button>
+        )}
+      </div>
+    </details>
   );
 }

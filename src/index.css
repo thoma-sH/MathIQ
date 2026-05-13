@@ -79,6 +79,46 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   );
 }
 
+/* ─── Disclosure cards (per-problem grading breakdown) ─────────────── */
+.disclosure {
+  transition: background-color 180ms var(--ease-out-quart);
+}
+.disclosure summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.disclosure summary::-webkit-details-marker { display: none; }
+.disclosure summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.disclosure summary:hover .chev { color: var(--ink); }
+.disclosure .chev {
+  transition: transform 200ms var(--ease-out-quart), color 120ms ease;
+  color: var(--muted);
+  flex-shrink: 0;
+  display: inline-flex;
+}
+.disclosure[open] .chev { transform: rotate(180deg); }
+.disclosure .reveal {
+  animation: disclosure-reveal 220ms var(--ease-out-quart) both;
+}
+/* ReactMarkdown wraps content in <p> with default browser margins —
+ * collapse those so feedback hugs the hairline border above. */
+.feedback-md > :first-child { margin-top: 0; }
+.feedback-md > :last-child  { margin-bottom: 0; }
+.feedback-md p { margin: 0 0 8px; }
+.feedback-md p:last-of-type { margin-bottom: 0; }
+@keyframes disclosure-reveal {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure .chev,
+  .disclosure .reveal { transition: none; animation: none; }
+}
+
 /* ─── Animations ────────────────────────────────────────────────────── */
 @keyframes reveal-up {
   from { opacity: 0; transform: translateY(14px); }
