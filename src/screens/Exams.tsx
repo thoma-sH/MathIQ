@@ -24,26 +24,26 @@ const EXAMS: ExamSpec[] = [
   {
     id: 'exam1',
     title: 'Exam 1',
-    topicRangeLabel: () => 'Topics 1–4',
-    blurb: 'First-unit coverage. Routine problems from the foundational topics.',
+    topicRangeLabel: () => 'Topics 1–4 · 10 problems',
+    blurb: 'First-unit coverage. Routine textbook-style problems from the foundational topics.',
   },
   {
     id: 'exam2',
     title: 'Exam 2',
-    topicRangeLabel: () => 'Topics 5–8',
+    topicRangeLabel: () => 'Topics 5–8 · 10 problems',
     blurb: 'Middle of the course. Builds on Exam 1, no overlap.',
   },
   {
     id: 'exam3',
     title: 'Exam 3',
-    topicRangeLabel: () => 'Topics 9–12',
-    blurb: 'Final unit before the cumulative. The hardest individual exam.',
+    topicRangeLabel: () => 'Topics 9–12 · 10 problems',
+    blurb: 'The third unit. Same accessible difficulty as the first two.',
   },
   {
     id: 'final',
     title: 'Final Exam',
-    topicRangeLabel: (total) => `All ${total} topics (cumulative)`,
-    blurb: 'Cumulative across the whole course. Mix of routine and hard problems.',
+    topicRangeLabel: (total) => `All ${total} topics · 15 problems`,
+    blurb: 'Cumulative across the whole course. One slightly harder stretch problem; the rest is routine.',
   },
 ];
 

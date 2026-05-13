@@ -45,22 +45,34 @@ export function examTitle(exam: ExamId): string {
   return 'Final Exam';
 }
 
+/** Number of problems per exam. Final is bigger because it's cumulative. */
+export function problemCountForExam(exam: ExamId): number {
+  return exam === 'final' ? 15 : 10;
+}
+
 function generateExamId(): string {
   const ts = new Date().toISOString().replace(/[-:.TZ]/g, '');
   const entropy = Math.random().toString(36).slice(2, 6);
   return `${ts}_${entropy}`;
 }
 
-const EXAM_SYSTEM_PROMPT = `You are an exam-problem author for a college math course. The user will tell you the course, the topic range, and how many problems to produce. Your job: produce a clean, professional, exam-style problem set.
+const EXAM_SYSTEM_PROMPT = `You are an exam-problem author for a college math course. The user will tell you the course, the topic range, and the exact number of problems to produce. Your job: produce a clean, professional, accessible exam problem set.
 
 RULES:
 - Output ONLY valid JSON conforming to the schema below. No prose before or after. No markdown code fences. Start with { and end with }.
 - Every problem must be self-contained — the student should be able to attempt it from the problem statement alone, no figure references or external context.
 - No hints, no solutions, no "show your work" reminders. This is an exam, not a tutorial.
-- Distribute the 10 problems across the listed topics — roughly equal coverage, no two problems on the same micro-concept.
-- Mix difficulty: ~3 routine (warm-ups), ~5 mid-difficulty, ~2 hard. Hard does not mean obscure — it means requires multi-step reasoning.
-- Use LaTeX with $...$ inline and $$...$$ display delimiters. Never \\( or \\[.
-- Problem text should be 1–3 sentences. Concise. Numbers and expressions should be clean (small integers when possible).
+- Distribute problems across the listed topics — roughly equal coverage, no two problems on the same micro-concept.
+
+DIFFICULTY — keep it accessible:
+- The vast majority (about 70%) should be ROUTINE: direct application of one technique a prepared student has practiced. Standard textbook-style problems, not curveballs.
+- About 25% should be MID: require chaining two ideas at most. Still familiar shape, no surprises.
+- At most one (only on the cumulative Final) should be slightly harder: requires multi-step reasoning but not trick-style or obscure.
+- Students have a scientific calculator (no graphing). Clean exact answers are still preferred where the technique is the lesson; numerical evaluations (e.g. $\\sin(37°)$, $\\ln 8.4$) are fine when they exercise the concept.
+- Numbers should be clean — small integers, simple fractions, common angles. The problem should test the technique, not arithmetic stamina.
+- Problem text: 1–2 sentences. Concise.
+
+Use LaTeX with $...$ inline and $$...$$ display delimiters. Never \\( or \\[.
 
 JSON SCHEMA:
 {
@@ -68,9 +80,9 @@ JSON SCHEMA:
     {
       "topicId": "<one of the topicIds I provide>",
       "topicTitle": "<exact topic title>",
-      "problemText": "<the problem in markdown+LaTeX, 1-3 sentences>"
+      "problemText": "<the problem in markdown+LaTeX, 1-2 sentences>"
     },
-    ... (exactly 10 entries)
+    ... (exactly the number of entries the user requests)
   ]
 }`;
 
@@ -94,8 +106,9 @@ export async function generateExam(
 ): Promise<GenerateExamResult> {
   const { apiKey, course, exam, userId } = params;
   const topics = topicRangeForExam(course, exam);
+  const count = problemCountForExam(exam);
 
-  const userMessage = buildUserMessage(course, exam, topics);
+  const userMessage = buildUserMessage(course, exam, topics, count);
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -106,7 +119,8 @@ export async function generateExam(
     },
     body: JSON.stringify({
       model: GENERATE_MODEL,
-      max_tokens: 4096,
+      // 15-problem final needs more tokens than the 10-problem regular exams
+      max_tokens: exam === 'final' ? 6144 : 4096,
       system: EXAM_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userMessage }],
     }),
@@ -131,7 +145,7 @@ export async function generateExam(
     return { ok: false, status: 502, detail: 'Model returned no problems' };
   }
 
-  const problems: ExamProblem[] = parsed.problems.slice(0, 10).map((p, i) => ({
+  const problems: ExamProblem[] = parsed.problems.slice(0, count).map((p, i) => ({
     index: i + 1,
     topicId: typeof p.topicId === 'string' ? p.topicId : topics[i % topics.length].id,
     topicTitle: typeof p.topicTitle === 'string' ? p.topicTitle : topics[i % topics.length].title,
@@ -170,7 +184,7 @@ export async function getExam(kv: KVNamespace, examId: string): Promise<ExamReco
   }
 }
 
-function buildUserMessage(course: Course, exam: ExamId, topics: Topic[]): string {
+function buildUserMessage(course: Course, exam: ExamId, topics: Topic[], count: number): string {
   const range =
     exam === 'final'
       ? `all ${topics.length} topics in the course (cumulative)`
@@ -184,7 +198,9 @@ function buildUserMessage(course: Course, exam: ExamId, topics: Topic[]): string
 
 ${topicList}
 
-Produce exactly 10 problems, well-distributed across the listed topics, mixed difficulty. Remember: JSON only, no prose, no code fences.`;
+Produce exactly ${count} problems, well-distributed across the listed topics. Keep difficulty accessible: most problems should be routine textbook-style applications, mid-difficulty problems chain at most two ideas, and (only on the cumulative Final) include at most one slightly harder problem. No trick-style or obscure problems.
+
+Remember: JSON only, no prose, no code fences. Exactly ${count} entries in the "problems" array.`;
 }
 
 function stripCodeFences(s: string): string {

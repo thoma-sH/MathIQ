@@ -179,7 +179,7 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
         </div>
         <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14, lineHeight: 1.6 }}>
           <li>Show all work on each problem.</li>
-          <li>No calculators. No outside resources.</li>
+          <li>Scientific calculator allowed. No graphing calculators or outside resources.</li>
           <li>Number your work to match each problem.</li>
         </ul>
       </section>
@@ -227,7 +227,7 @@ function ExamPrintHost({ record }: { record: ExamRecord }) {
             Name: ________________________ &nbsp; Date: {generated}
           </div>
           <div className="exam-instructions">
-            Show all work. No calculators. Number your answers to match each problem.
+            Show all work. Scientific calculator allowed; no graphing calculators or outside resources. Number your answers to match each problem.
           </div>
         </header>
         {record.problems.map((p) => (
