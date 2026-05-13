@@ -49,6 +49,7 @@ import {
   type HistoryRecord,
 } from './history';
 import { extractProblemFromImage } from './ocr';
+import { extractStudentWork } from './mathpix';
 import { verifyAnswer } from './verify';
 import {
   generateExam,
@@ -86,6 +87,12 @@ interface Env {
   IRIS_FOUNDATION_PROMPT_4?: string;
   IRIS_WHY_HOW_PROMPT?: string;
   IRIS_PRACTICE_PROMPT?: string;
+  IRIS_GRADE_PROMPT?: string;
+  IRIS_GRADE_PROMPT_2?: string;
+  // Mathpix OCR — transcribes handwritten exam attempts before Claude grades.
+  // Sign up at mathpix.com → Dashboard → API Keys. Free tier: 1k pages/month.
+  MATHPIX_APP_ID?: string;
+  MATHPIX_APP_KEY?: string;
 }
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
@@ -1131,6 +1138,40 @@ async function handleExamGrade(
       cors,
     );
   }
+
+  // Mathpix OCR pre-pass. Separating OCR from grading eliminates the
+  // "Claude auto-corrects what it sees" failure mode — Mathpix has no
+  // math priors and transcribes exactly what's on the page, then Claude
+  // grades the transcribed text instead of looking at the photo.
+  if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    console.error('[exam-grade] Mathpix credentials missing');
+    return json(
+      { error: 'service_unavailable', message: 'Exam grading is temporarily unavailable. Try again shortly.' },
+      503,
+      cors,
+    );
+  }
+
+  const ocr = await extractStudentWork({
+    appId: env.MATHPIX_APP_ID,
+    appKey: env.MATHPIX_APP_KEY,
+    imageBase64: body.image,
+    mediaType: body.mediaType,
+  });
+  if (!ocr.ok || !ocr.text) {
+    console.error('[exam-grade] Mathpix failed', ocr.status, ocr.detail);
+    const detailLower = (ocr.detail ?? '').toLowerCase();
+    const message =
+      ocr.status === 401
+        ? 'Exam grading is temporarily unavailable. Try again shortly.'
+        : detailLower.includes('content not found') || detailLower.includes('no content')
+          ? "Couldn't find any work on the page. Make sure your handwriting is visible and the photo isn't blank — try retaking the shot with better lighting."
+          : detailLower.includes('decode') || detailLower.includes('not supported')
+            ? 'That image format could not be read. Try a PNG or JPEG screenshot of your attempt.'
+            : 'Could not read the photo. Try a clearer, better-lit shot with the whole page visible.';
+    return json({ error: 'ocr_failed', message }, 502, cors);
+  }
+
   await increment(counter);
 
   const prompts = getIrisPrompts(env);
@@ -1138,8 +1179,8 @@ async function handleExamGrade(
     apiKey: env.ANTHROPIC_API_KEY,
     gradePrompt: prompts.grade,
     record,
-    imageBase64: body.image,
-    mediaType: body.mediaType,
+    studentWorkText: ocr.text,
+    ocrConfidence: ocr.confidence,
   });
 
   if (!result.ok || !result.result) {

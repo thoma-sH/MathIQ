@@ -354,8 +354,14 @@ interface GradeExamParams {
   apiKey: string;
   gradePrompt: string;
   record: ExamRecord;
-  imageBase64: string;
-  mediaType: string;
+  /** Mathpix-transcribed student work. Plain text + LaTeX in $...$ delimiters.
+   *  Separating OCR (Mathpix) from grading (Claude) eliminates the
+   *  "Claude auto-corrects what it sees" failure mode. */
+  studentWorkText: string;
+  /** Optional Mathpix confidence score (0..1). Surfaced in the prompt so
+   *  the grader can flag low-confidence transcriptions explicitly rather
+   *  than silently grading garbage. */
+  ocrConfidence?: number;
 }
 
 export interface GradeExamCallResult {
@@ -366,11 +372,31 @@ export interface GradeExamCallResult {
 }
 
 export async function gradeExam(params: GradeExamParams): Promise<GradeExamCallResult> {
-  const { apiKey, gradePrompt, record, imageBase64, mediaType } = params;
+  const { apiKey, gradePrompt, record, studentWorkText, ocrConfidence } = params;
 
   const problemsList = record.problems
     .map((p) => `Problem ${p.index} (topic: ${p.topicTitle}): ${p.problemText}`)
     .join('\n\n');
+
+  const confidenceLine =
+    typeof ocrConfidence === 'number'
+      ? `\n\nOCR confidence: ${(ocrConfidence * 100).toFixed(0)}%. ${
+          ocrConfidence < 0.6
+            ? 'Low confidence — be charitable about transcription artifacts, but if a fragment is unreadable, mark it illegible rather than guessing.'
+            : 'High confidence — treat the transcription as faithful to what the student wrote.'
+        }`
+      : '';
+
+  const userText = `Here are the ${record.problems.length} original problems for ${record.courseTitle} ${record.examTitle}:
+
+${problemsList}
+
+Here is the student's work, transcribed by an OCR engine (Mathpix). The transcription preserves what is on the paper — math in $...$ delimiters, plain text otherwise. Treat it as the source of truth for what the student wrote.${confidenceLine}
+
+STUDENT WORK (transcribed):
+${studentWorkText}
+
+Grade each problem.`;
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -383,21 +409,7 @@ export async function gradeExam(params: GradeExamParams): Promise<GradeExamCallR
       model: GRADE_MODEL,
       max_tokens: 4096,
       system: gradePrompt,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `Here are the ${record.problems.length} original problems for ${record.courseTitle} ${record.examTitle}:\n\n${problemsList}\n\nAnd here is the photo of my attempt. Grade each problem.`,
-            },
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: mediaType, data: imageBase64 },
-            },
-          ],
-        },
-      ],
+      messages: [{ role: 'user', content: userText }],
     }),
   });
 
