@@ -26,7 +26,6 @@ import {
   clearSubscription,
   findUserByCustomer,
   getSubscription,
-  isEntitled,
   isEventProcessed,
   markEventProcessed,
   rememberCustomer,
@@ -544,12 +543,14 @@ async function handleBillingState(
   if (authState.kind !== 'user') {
     return json({ error: 'sign_in_required' }, 401, cors);
   }
+  // Effective tier includes the MAX_USER_IDS / PRO_USER_IDS whitelists,
+  // not just Stripe state — so dev-granted Pro/Plus accounts are reflected.
+  const effectiveTier = await resolveTier(authState, env);
   const state = await getSubscription(env.USAGE, authState.userId);
-  const entitled = isEntitled(state);
   return json(
     {
-      tier: entitled && state ? state.tier : null,
-      interval: entitled && state ? state.interval : null,
+      tier: effectiveTier === 'plus' || effectiveTier === 'pro' ? effectiveTier : null,
+      interval: state?.interval ?? null,
       status: state?.status ?? null,
       currentPeriodEnd: state?.currentPeriodEnd ?? null,
       manageable: !!state?.stripeCustomerId,

@@ -297,3 +297,62 @@ img, svg { max-width: 100%; }
     scroll-behavior: auto !important;
   }
 }
+
+/* ─── Print mode — used for PDF export of walkthroughs + exams ────── */
+/* The print-host is rendered via React Portal directly under document.body
+ * (as a sibling of #root). On screen it's pushed offscreen so it doesn't
+ * disturb the app layout. During print, #root is hidden entirely so the
+ * print-host paginates from page 1 with no upstream layout dragging it
+ * downstream. */
+.print-host {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+@media print {
+  #root { display: none !important; }
+  .print-host {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .print-doc {
+    color: #000;
+    background: #fff;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    padding: 0.6in 0.7in;
+    max-width: none;
+  }
+  .print-doc .markdown-body { color: #000; }
+  .print-doc h1 { font-size: 18pt; margin: 0 0 4pt; }
+  .print-doc .print-meta {
+    font-size: 9pt;
+    color: #555;
+    margin-bottom: 14pt;
+    padding-bottom: 8pt;
+    border-bottom: 1px solid #000;
+  }
+  .print-doc .print-footer {
+    margin-top: 18pt;
+    padding-top: 8pt;
+    border-top: 1px solid #ccc;
+    font-size: 8pt;
+    color: #777;
+    text-align: center;
+  }
+  .print-doc .markdown-body p,
+  .print-doc .markdown-body li,
+  .print-doc .markdown-body .katex-display {
+    page-break-inside: avoid;
+  }
+  .print-doc .katex { font-size: 1.05em; }
+}

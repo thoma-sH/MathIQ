@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -11,6 +12,8 @@ import {
   type HistoryListItem,
   type HistoryRecord,
 } from '../walkthroughs/history';
+import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { isPro } from '../walkthroughs/tier';
 import type { Route } from '../router';
 
 interface HistoryProps {
@@ -80,6 +83,8 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const [expandedRecord, setExpandedRecord] = useState<HistoryRecord | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [tier, setTier] = useState<Tier | null>(null);
+  const [printRecord, setPrintRecord] = useState<HistoryRecord | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +100,33 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
       cancelled = true;
     };
   }, [getToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const sub = await fetchSubscriptionState({ getToken });
+      if (!cancelled) setTier(sub?.tier ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  // When printRecord becomes truthy, React mounts the PrintHost (as a portal
+  // under body); once it's committed, we invoke the print dialog and clear
+  // state shortly after so the screen view returns to normal.
+  useEffect(() => {
+    if (!printRecord) return;
+    const printT = setTimeout(() => {
+      window.print();
+      setTimeout(() => setPrintRecord(null), 200);
+    }, 50);
+    return () => clearTimeout(printT);
+  }, [printRecord]);
+
+  function handlePrint(record: HistoryRecord) {
+    setPrintRecord(record);
+  }
 
   async function openDetail(id: string) {
     if (expandedId === id) {
@@ -154,8 +186,11 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
                 record={expandedId === it.id ? expandedRecord : null}
                 loading={expandedId === it.id && loadingDetail}
                 deleting={deletingId === it.id}
+                isPro={isPro(tier)}
                 onToggle={() => void openDetail(it.id)}
                 onDelete={() => void remove(it.id)}
+                onPrint={() => expandedRecord && handlePrint(expandedRecord)}
+                onUpgrade={() => onNavigate({ name: 'settings' })}
                 onOpenTopic={() =>
                   onNavigate({
                     name: 'topic',
@@ -168,7 +203,42 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
           </div>
         </div>
       ))}
+
+      {printRecord && <PrintHost record={printRecord} />}
     </section>
+  );
+}
+
+function PrintHost({ record }: { record: HistoryRecord }) {
+  const created = new Date(record.createdAt).toLocaleDateString(undefined, {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  // Render directly under document.body so the print-host is a sibling of
+  // #root, not a descendant. This lets us hide #root via `display: none` in
+  // @media print, collapsing the app layout entirely so the print-host
+  // paginates naturally from page 1.
+  return createPortal(
+    <div className="print-host" aria-hidden>
+      <article className="print-doc">
+        <h1>{record.topicTitle}</h1>
+        <div className="print-meta">
+          {record.problem ? `Problem: ${record.problem}` : 'Canonical example'}
+          <br />
+          Walked through on {created}
+          {record.modelUsed ? ` · ${record.modelUsed}` : ''}
+        </div>
+        <div className="markdown-body">
+          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {record.walkthrough}
+          </ReactMarkdown>
+        </div>
+        <div className="print-footer">MathIQ · math-iq.vercel.app</div>
+      </article>
+    </div>,
+    document.body,
   );
 }
 
@@ -178,8 +248,11 @@ function HistoryEntry({
   record,
   loading,
   deleting,
+  isPro,
   onToggle,
   onDelete,
+  onPrint,
+  onUpgrade,
   onOpenTopic,
 }: {
   item: HistoryListItem;
@@ -187,8 +260,11 @@ function HistoryEntry({
   record: HistoryRecord | null;
   loading: boolean;
   deleting: boolean;
+  isPro: boolean;
   onToggle: () => void;
   onDelete: () => void;
+  onPrint: () => void;
+  onUpgrade: () => void;
   onOpenTopic: () => void;
 }) {
   return (
@@ -238,7 +314,7 @@ function HistoryEntry({
                   {record.walkthrough}
                 </ReactMarkdown>
               </div>
-              <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   type="button"
                   onClick={onOpenTopic}
@@ -256,6 +332,44 @@ function HistoryEntry({
                 >
                   Open topic →
                 </button>
+                {isPro ? (
+                  <button
+                    type="button"
+                    onClick={onPrint}
+                    className="btn-press chamfer"
+                    style={{
+                      background: 'transparent',
+                      color: T.ink,
+                      border: `1px solid ${T.ink}`,
+                      padding: '7px 13px',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      fontFamily: T.sans,
+                    }}
+                  >
+                    Print / Save as PDF
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onUpgrade}
+                    className="btn-press"
+                    aria-label="Upgrade to MathIQ Pro to download walkthroughs as PDF"
+                    style={{
+                      background: 'transparent',
+                      border: `1px dashed ${T.hair}`,
+                      padding: '7px 13px',
+                      fontSize: 12,
+                      fontFamily: T.mono,
+                      letterSpacing: '0.08em',
+                      color: T.muted,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Save as PDF — Pro only →
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={onDelete}

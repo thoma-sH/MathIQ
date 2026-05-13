@@ -475,9 +475,10 @@ function BillingSection() {
     );
   }
 
-  // Active subscription state
-  if (state?.tier && (state.status === 'active' || state.status === 'trialing')) {
-    const renew = state.currentPeriodEnd
+  // Active or granted plan — Stripe sub OR dev/comp whitelist
+  if (state?.tier) {
+    const stripeActive = state.status === 'active' || state.status === 'trialing';
+    const renew = stripeActive && state.currentPeriodEnd
       ? new Date(state.currentPeriodEnd * 1000).toLocaleDateString(undefined, {
           month: 'short',
           day: 'numeric',
@@ -488,14 +489,19 @@ function BillingSection() {
       <>
         <div style={kicker()}>CURRENT PLAN</div>
         <div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>
-          {PLAN_LABELS[state.tier]} ({state.interval ?? 'monthly'})
+          {PLAN_LABELS[state.tier]}{state.interval ? ` (${state.interval})` : ''}
         </div>
+        {!stripeActive && (
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 4, fontFamily: T.mono, letterSpacing: '0.1em' }}>
+            GRANTED · NO BILLING
+          </div>
+        )}
         {renew && (
           <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
             Renews {renew}
           </div>
         )}
-        {state.manageable && (
+        {state.manageable && stripeActive && (
           <button
             type="button"
             onClick={() => void manage()}
