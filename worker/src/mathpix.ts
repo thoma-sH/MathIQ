@@ -137,7 +137,9 @@ export async function extractStudentWorkFromPdf(params: MathpixPdfParams): Promi
   form.append(
     'options_json',
     JSON.stringify({
-      conversion_formats: { 'mmd': true },
+      // Mathpix generates .mmd (Mathpix Markdown) for every PDF by default —
+      // no conversion_formats needed. The field is only for additional
+      // outputs like docx/html/md, which we don't use.
       math_inline_delimiters: ['$', '$'],
       math_display_delimiters: ['$$', '$$'],
       rm_spaces: false,
