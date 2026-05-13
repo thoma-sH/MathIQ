@@ -2,16 +2,23 @@
  * Prompts for Iris, the tutor.
  *
  * Production prompts are loaded from worker secrets. The foundation prompt
- * is split across two secrets (IRIS_FOUNDATION_PROMPT_1, IRIS_FOUNDATION_PROMPT_2)
+ * is split across four secrets (IRIS_FOUNDATION_PROMPT_1 through _4)
  * because Cloudflare Workers caps each secret value at 5 KB on the default
- * plan, and the real foundation is ~8 KB. The two halves are concatenated
- * verbatim at startup. The fallbacks here are intentionally generic — they
- * keep the system functional for OSS users who clone the repo without
- * setting the secrets.
+ * plan, and the real foundation is ~19 KB across four logical sections:
+ *   _1: identity + ONE LINE principle + step format + voice + audience + notation
+ *   _2: rigor framing + WHAT TO SKIP + commit-and-proceed discipline + closing
+ *   _3: advanced heuristics by domain (integration, series, linalg, etc.)
+ *   _4: algebraic hygiene + sanity checks
+ * The four parts are concatenated verbatim with double-newline separators
+ * at startup. Fallbacks here are intentionally generic — they keep the
+ * system functional for OSS users who clone the repo without setting
+ * the secrets.
  *
  * Set the real prompts via:
  *   wrangler secret put IRIS_FOUNDATION_PROMPT_1
  *   wrangler secret put IRIS_FOUNDATION_PROMPT_2
+ *   wrangler secret put IRIS_FOUNDATION_PROMPT_3
+ *   wrangler secret put IRIS_FOUNDATION_PROMPT_4
  *   wrangler secret put IRIS_WHY_HOW_PROMPT
  *   wrangler secret put IRIS_PRACTICE_PROMPT
  *
@@ -43,6 +50,8 @@ Then immediately begin \`**Step 1.**\` and walk through it following the foundat
 export interface PromptEnv {
   IRIS_FOUNDATION_PROMPT_1?: string;
   IRIS_FOUNDATION_PROMPT_2?: string;
+  IRIS_FOUNDATION_PROMPT_3?: string;
+  IRIS_FOUNDATION_PROMPT_4?: string;
   IRIS_WHY_HOW_PROMPT?: string;
   IRIS_PRACTICE_PROMPT?: string;
 }
@@ -60,11 +69,19 @@ function unescapeDevVars(s: string): string {
   return s.replace(/\\"/g, '"');
 }
 
+function readPart(raw: string | undefined): string | undefined {
+  return raw ? unescapeDevVars(raw).trim() : undefined;
+}
+
 export function getIrisPrompts(env: PromptEnv): IrisPrompts {
-  const part1 = env.IRIS_FOUNDATION_PROMPT_1 ? unescapeDevVars(env.IRIS_FOUNDATION_PROMPT_1).trim() : undefined;
-  const part2 = env.IRIS_FOUNDATION_PROMPT_2 ? unescapeDevVars(env.IRIS_FOUNDATION_PROMPT_2).trim() : undefined;
+  const parts = [
+    readPart(env.IRIS_FOUNDATION_PROMPT_1),
+    readPart(env.IRIS_FOUNDATION_PROMPT_2),
+    readPart(env.IRIS_FOUNDATION_PROMPT_3),
+    readPart(env.IRIS_FOUNDATION_PROMPT_4),
+  ].filter((p): p is string => Boolean(p));
   return {
-    foundation: part1 ? `${part1}${part2 ? `\n\n${part2}` : ''}` : FOUNDATION_FALLBACK,
+    foundation: parts.length > 0 ? parts.join('\n\n') : FOUNDATION_FALLBACK,
     whyHow: env.IRIS_WHY_HOW_PROMPT ? unescapeDevVars(env.IRIS_WHY_HOW_PROMPT).trim() : WHY_HOW_FALLBACK,
     practice: env.IRIS_PRACTICE_PROMPT ? unescapeDevVars(env.IRIS_PRACTICE_PROMPT).trim() : PRACTICE_FALLBACK,
   };

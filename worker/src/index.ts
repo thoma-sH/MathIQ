@@ -74,6 +74,8 @@ interface Env {
   STRIPE_PORTAL_RETURN_URL: string;
   IRIS_FOUNDATION_PROMPT_1?: string;
   IRIS_FOUNDATION_PROMPT_2?: string;
+  IRIS_FOUNDATION_PROMPT_3?: string;
+  IRIS_FOUNDATION_PROMPT_4?: string;
   IRIS_WHY_HOW_PROMPT?: string;
   IRIS_PRACTICE_PROMPT?: string;
 }

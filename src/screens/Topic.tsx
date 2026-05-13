@@ -836,6 +836,42 @@ export function TopicScreen({
         </div>
       )}
 
+      {verifyState === 'incorrect' && rateInfo && !isPaid && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '8px 12px',
+            border: `1px solid ${T.hair}`,
+            background: 'transparent',
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: '0.1em',
+            lineHeight: 1.5,
+            color: T.muted,
+          }}
+        >
+          MathIQ+ runs Opus 4.6 and Sonnet 4.6 — far fewer errors on problems like this.{' '}
+          <button
+            type="button"
+            onClick={() => onNavigate({ name: 'settings' })}
+            className="btn-press"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              fontFamily: T.mono,
+              fontSize: 11,
+              letterSpacing: '0.1em',
+              color: T.accent,
+              textDecoration: 'underline',
+              cursor: 'pointer',
+            }}
+          >
+            Upgrade →
+          </button>
+        </div>
+      )}
+
       {saveState !== 'idle' && (
         <div
           role="status"
