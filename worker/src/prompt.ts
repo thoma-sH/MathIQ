@@ -21,6 +21,7 @@
  *   wrangler secret put IRIS_FOUNDATION_PROMPT_4
  *   wrangler secret put IRIS_WHY_HOW_PROMPT
  *   wrangler secret put IRIS_PRACTICE_PROMPT
+ *   wrangler secret put IRIS_GRADE_PROMPT
  *
  * Locally, set the same keys in `worker/.dev.vars`.
  */
@@ -47,6 +48,25 @@ const PRACTICE_FALLBACK = `Generate ONE new practice problem similar in shape an
 
 Then immediately begin \`**Step 1.**\` and walk through it following the foundation rules. End with \`**Answer:**\` and the trigger-to-remember retrospective.`;
 
+const GRADE_FALLBACK = `You are a math exam grader. The user will give you the original problems plus a photo of the student's attempt.
+
+Grade each problem 0-10. Use partial credit for correct technique with arithmetic errors. Read what the student actually wrote; never invent grades.
+
+Output ONLY valid JSON, starting with \`{\` (no preamble, no code fences):
+
+{
+  "problems": [
+    {
+      "index": <number>,
+      "problemEcho": "<10-20 chars from the original problem statement>",
+      "score": <0-10>,
+      "correct": <true if score >= 8>,
+      "feedback": "<1-2 sentences referencing student's actual work>"
+    }
+  ],
+  "studyRecommendations": ["<recommendation>", ...]
+}`;
+
 export interface PromptEnv {
   IRIS_FOUNDATION_PROMPT_1?: string;
   IRIS_FOUNDATION_PROMPT_2?: string;
@@ -54,12 +74,14 @@ export interface PromptEnv {
   IRIS_FOUNDATION_PROMPT_4?: string;
   IRIS_WHY_HOW_PROMPT?: string;
   IRIS_PRACTICE_PROMPT?: string;
+  IRIS_GRADE_PROMPT?: string;
 }
 
 export interface IrisPrompts {
   foundation: string;
   whyHow: string;
   practice: string;
+  grade: string;
 }
 
 /** Dotenv leaves `\"` as literal backslash-quote inside quoted values.
@@ -84,6 +106,7 @@ export function getIrisPrompts(env: PromptEnv): IrisPrompts {
     foundation: parts.length > 0 ? parts.join('\n\n') : FOUNDATION_FALLBACK,
     whyHow: env.IRIS_WHY_HOW_PROMPT ? unescapeDevVars(env.IRIS_WHY_HOW_PROMPT).trim() : WHY_HOW_FALLBACK,
     practice: env.IRIS_PRACTICE_PROMPT ? unescapeDevVars(env.IRIS_PRACTICE_PROMPT).trim() : PRACTICE_FALLBACK,
+    grade: env.IRIS_GRADE_PROMPT ? unescapeDevVars(env.IRIS_GRADE_PROMPT).trim() : GRADE_FALLBACK,
   };
 }
 

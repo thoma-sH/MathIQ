@@ -1133,8 +1133,10 @@ async function handleExamGrade(
   }
   await increment(counter);
 
+  const prompts = getIrisPrompts(env);
   const result = await gradeExam({
     apiKey: env.ANTHROPIC_API_KEY,
+    gradePrompt: prompts.grade,
     record,
     imageBase64: body.image,
     mediaType: body.mediaType,

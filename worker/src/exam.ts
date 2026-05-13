@@ -346,43 +346,13 @@ export interface ExamGradeResult {
   gradedAt: number;
 }
 
-const GRADE_SYSTEM_PROMPT = `You are Iris, the math grader. The user will give you:
-1. The EXACT list of problems on the student's exam (text, listed by index)
-2. ONE photo of the student's handwritten attempt
-
-ANTI-HALLUCINATION — read twice before scoring:
-
-- Grade ONLY the problems in the list I provide. Never invent generic problems or grade "what a typical exam looks like."
-- For each problem, echo a 10–20 character fragment from the ORIGINAL problem statement into the "problemEcho" field. This is your grounding check.
-- If the photo is blank or doesn't show the listed problems, score 0 for every problem with feedback "photo unreadable" — don't fabricate. A wrong honest 0 beats a fake 100.
-- If you can read SOME problems, score those; give 0 + "not attempted" to the rest. Never invent answers the student didn't write.
-
-SCORING per problem (out of 10):
-- 4 points: Correct final answer (or correct exact answer when arithmetic is reasonable)
-- 3 points: Correct technique chosen and applied
-- 3 points: Work shown — substitutions, intermediate steps visible
-
-Use partial credit liberally — correct technique with arithmetic errors is worth most of the credit.
-
-Output ONLY valid JSON. The VERY FIRST character of your response must be \`{\`. No preamble, no code fences.
-
-JSON SCHEMA:
-{
-  "problems": [
-    {
-      "index": <number matching the original problem number>,
-      "problemEcho": "<10-20 chars copied from the original problem statement>",
-      "score": <0-10>,
-      "correct": <true if score >= 8, else false>,
-      "feedback": "<1-2 short sentences; quote student's actual writing>"
-    },
-    ...
-  ],
-  "studyRecommendations": ["<recommendation>", ...]
-}`;
+/* Grading prompt loaded from worker secret IRIS_GRADE_PROMPT via
+ * getIrisPrompts() in prompt.ts. Generic fallback there keeps OSS
+ * clones functional. */
 
 interface GradeExamParams {
   apiKey: string;
+  gradePrompt: string;
   record: ExamRecord;
   imageBase64: string;
   mediaType: string;
@@ -396,7 +366,7 @@ export interface GradeExamCallResult {
 }
 
 export async function gradeExam(params: GradeExamParams): Promise<GradeExamCallResult> {
-  const { apiKey, record, imageBase64, mediaType } = params;
+  const { apiKey, gradePrompt, record, imageBase64, mediaType } = params;
 
   const problemsList = record.problems
     .map((p) => `Problem ${p.index} (topic: ${p.topicTitle}): ${p.problemText}`)
@@ -412,7 +382,7 @@ export async function gradeExam(params: GradeExamParams): Promise<GradeExamCallR
     body: JSON.stringify({
       model: GRADE_MODEL,
       max_tokens: 4096,
-      system: GRADE_SYSTEM_PROMPT,
+      system: gradePrompt,
       messages: [
         {
           role: 'user',
