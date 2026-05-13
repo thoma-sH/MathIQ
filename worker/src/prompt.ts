@@ -22,6 +22,7 @@
  *   wrangler secret put IRIS_WHY_HOW_PROMPT
  *   wrangler secret put IRIS_PRACTICE_PROMPT
  *   wrangler secret put IRIS_GRADE_PROMPT
+ *   wrangler secret put IRIS_GRADE_PROMPT_2
  *
  * Locally, set the same keys in `worker/.dev.vars`.
  */
@@ -75,6 +76,7 @@ export interface PromptEnv {
   IRIS_WHY_HOW_PROMPT?: string;
   IRIS_PRACTICE_PROMPT?: string;
   IRIS_GRADE_PROMPT?: string;
+  IRIS_GRADE_PROMPT_2?: string;
 }
 
 export interface IrisPrompts {
@@ -102,11 +104,18 @@ export function getIrisPrompts(env: PromptEnv): IrisPrompts {
     readPart(env.IRIS_FOUNDATION_PROMPT_3),
     readPart(env.IRIS_FOUNDATION_PROMPT_4),
   ].filter((p): p is string => Boolean(p));
+  // Grade prompt: two parts concatenated (rules + professor-level rubric).
+  const grade1 = env.IRIS_GRADE_PROMPT ? unescapeDevVars(env.IRIS_GRADE_PROMPT).trim() : undefined;
+  const grade2 = env.IRIS_GRADE_PROMPT_2 ? unescapeDevVars(env.IRIS_GRADE_PROMPT_2).trim() : undefined;
+  const grade = grade1
+    ? `${grade1}${grade2 ? `\n\n${grade2}` : ''}`
+    : GRADE_FALLBACK;
+
   return {
     foundation: parts.length > 0 ? parts.join('\n\n') : FOUNDATION_FALLBACK,
     whyHow: env.IRIS_WHY_HOW_PROMPT ? unescapeDevVars(env.IRIS_WHY_HOW_PROMPT).trim() : WHY_HOW_FALLBACK,
     practice: env.IRIS_PRACTICE_PROMPT ? unescapeDevVars(env.IRIS_PRACTICE_PROMPT).trim() : PRACTICE_FALLBACK,
-    grade: env.IRIS_GRADE_PROMPT ? unescapeDevVars(env.IRIS_GRADE_PROMPT).trim() : GRADE_FALLBACK,
+    grade,
   };
 }
 
