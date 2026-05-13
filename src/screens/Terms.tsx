@@ -83,7 +83,7 @@ export function Terms() {
       </Section>
 
       <Section title="10. Contact">
-        For questions about these Terms, contact <a href="mailto:support@mathiq.app" style={{ color: T.accent }}>support@mathiq.app</a>.
+        For questions about these Terms, contact <a href="mailto:math.iq.support@gmail.com" style={{ color: T.accent }}>math.iq.support@gmail.com</a>.
       </Section>
 
       <p style={{ marginTop: 56, padding: '14px 18px', border: `1px solid ${T.hair}`, fontSize: 13, color: T.muted, fontFamily: T.mono, lineHeight: 1.55 }}>
