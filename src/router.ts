@@ -12,6 +12,7 @@ export type Route =
   | { name: 'history' }
   | { name: 'settings' }
   | { name: 'exams'; courseId: string }
-  | { name: 'exam-take'; courseId: string; examId: ExamId };
+  | { name: 'exam-take'; courseId: string; examId: ExamId }
+  | { name: 'exam-grade'; courseId: string; examId: ExamId };
 
 export type RouteName = Route['name'];

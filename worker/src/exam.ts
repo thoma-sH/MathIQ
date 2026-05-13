@@ -203,8 +203,280 @@ Produce exactly ${count} problems, well-distributed across the listed topics. Ke
 Remember: JSON only, no prose, no code fences. Exactly ${count} entries in the "problems" array.`;
 }
 
+/** Extract JSON from a model response. Handles code fences and prose
+ *  before/after the JSON block by finding the outer `{ ... }`. */
+function extractJson(s: string): string {
+  const trimmed = s.trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  const fenced = fenceMatch ? fenceMatch[1].trim() : trimmed;
+  const firstBrace = fenced.indexOf('{');
+  const lastBrace = fenced.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return fenced.slice(firstBrace, lastBrace + 1);
+  }
+  return fenced;
+}
+
 function stripCodeFences(s: string): string {
   const trimmed = s.trim();
   const fenceMatch = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
   return fenceMatch ? fenceMatch[1].trim() : trimmed;
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Grading
+// ──────────────────────────────────────────────────────────────────────────
+
+const GRADE_MODEL = 'claude-opus-4-6';
+
+export interface ExamProblemGrade {
+  index: number;
+  topicId: string;
+  topicTitle: string;
+  score: number;
+  max: number;
+  correct: boolean;
+  feedback: string;
+}
+
+export interface ExamTopicBreakdown {
+  topicId: string;
+  topicTitle: string;
+  score: number;
+  max: number;
+}
+
+export interface ExamGradeResult {
+  examId: string;
+  courseId: string;
+  problems: ExamProblemGrade[];
+  totalScore: number;
+  totalMax: number;
+  topicBreakdown: ExamTopicBreakdown[];
+  studyRecommendations: string[];
+  gradedAt: number;
+}
+
+const GRADE_SYSTEM_PROMPT = `You are Iris, the math grader. The user will give you:
+1. The EXACT list of problems on the student's exam (text, listed by index)
+2. ONE photo of the student's handwritten attempt
+
+ANTI-HALLUCINATION — read twice before scoring:
+
+- Grade ONLY the problems in the list I provide. Never invent generic problems or grade "what a typical exam looks like."
+- For each problem, echo a 10–20 character fragment from the ORIGINAL problem statement into the "problemEcho" field. This is your grounding check.
+- If the photo is blank or doesn't show the listed problems, score 0 for every problem with feedback "photo unreadable" — don't fabricate. A wrong honest 0 beats a fake 100.
+- If you can read SOME problems, score those; give 0 + "not attempted" to the rest. Never invent answers the student didn't write.
+
+SCORING per problem (out of 10):
+- 4 points: Correct final answer (or correct exact answer when arithmetic is reasonable)
+- 3 points: Correct technique chosen and applied
+- 3 points: Work shown — substitutions, intermediate steps visible
+
+Use partial credit liberally — correct technique with arithmetic errors is worth most of the credit.
+
+Output ONLY valid JSON. The VERY FIRST character of your response must be \`{\`. No preamble, no code fences.
+
+JSON SCHEMA:
+{
+  "problems": [
+    {
+      "index": <number matching the original problem number>,
+      "problemEcho": "<10-20 chars copied from the original problem statement>",
+      "score": <0-10>,
+      "correct": <true if score >= 8, else false>,
+      "feedback": "<1-2 short sentences; quote student's actual writing>"
+    },
+    ...
+  ],
+  "studyRecommendations": ["<recommendation>", ...]
+}`;
+
+interface GradeExamParams {
+  apiKey: string;
+  record: ExamRecord;
+  imageBase64: string;
+  mediaType: string;
+}
+
+export interface GradeExamCallResult {
+  ok: boolean;
+  status: number;
+  result?: ExamGradeResult;
+  detail?: string;
+}
+
+export async function gradeExam(params: GradeExamParams): Promise<GradeExamCallResult> {
+  const { apiKey, record, imageBase64, mediaType } = params;
+
+  const problemsList = record.problems
+    .map((p) => `Problem ${p.index} (topic: ${p.topicTitle}): ${p.problemText}`)
+    .join('\n\n');
+
+  const resp = await fetch(ANTHROPIC_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: GRADE_MODEL,
+      max_tokens: 4096,
+      system: GRADE_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Here are the ${record.problems.length} original problems for ${record.courseTitle} ${record.examTitle}:\n\n${problemsList}\n\nAnd here is the photo of my attempt. Grade each problem.`,
+            },
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mediaType, data: imageBase64 },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!resp.ok) {
+    const detail = (await resp.text().catch(() => '')).slice(0, 500);
+    return { ok: false, status: resp.status, detail };
+  }
+
+  const data = (await resp.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+  };
+  const text = (data.content ?? [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
+    .join('')
+    .trim();
+
+  let parsed: {
+    problems?: Array<{
+      index?: number;
+      problemEcho?: string;
+      score?: number;
+      correct?: boolean;
+      feedback?: string;
+    }>;
+    studyRecommendations?: string[];
+  };
+  try {
+    parsed = JSON.parse(extractJson(text));
+  } catch {
+    console.error('[exam-grade] malformed JSON. First 600 chars:', text.slice(0, 600));
+    return { ok: false, status: 502, detail: 'Grader returned malformed JSON' };
+  }
+
+  if (!Array.isArray(parsed.problems)) {
+    return { ok: false, status: 502, detail: 'Grader returned no problems' };
+  }
+
+  // Validate each grade's problemEcho against the canonical problem text.
+  // Normalization strips all non-alphanumeric so `n!/5^n` matches `\frac{n!}{5^n}`.
+  // Match succeeds if any 5+ char window from the echo appears in the original.
+  const normMatch = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const echoMatches = (echo: string, original: string): boolean => {
+    const e = normMatch(echo);
+    const o = normMatch(original);
+    if (e.length < 5) return false;
+    if (o.includes(e)) return true;
+    for (let i = 0; i + 5 <= e.length; i++) {
+      if (o.includes(e.slice(i, i + 5))) return true;
+    }
+    return false;
+  };
+
+  let hallucinationCount = 0;
+  const problemsByIndex = new Map(record.problems.map((p) => [p.index, p]));
+  for (const g of parsed.problems) {
+    if (typeof g?.index !== 'number') continue;
+    const orig = problemsByIndex.get(g.index);
+    if (!orig) continue;
+    const echo = typeof g.problemEcho === 'string' ? g.problemEcho.trim() : '';
+    if (echo.length === 0) {
+      hallucinationCount++;
+      continue;
+    }
+    if (!echoMatches(echo, orig.problemText)) {
+      hallucinationCount++;
+    }
+  }
+  if (hallucinationCount > record.problems.length / 3) {
+    console.error(
+      '[exam-grade] hallucination detected:',
+      hallucinationCount,
+      'of',
+      record.problems.length,
+      'echoes failed. Raw response (first 800 chars):',
+      text.slice(0, 800),
+    );
+    return {
+      ok: false,
+      status: 502,
+      detail:
+        'Grader hallucinated — could not verify the photo matches the exam problems. Try a clearer or better-lit photo.',
+    };
+  }
+
+  const grades: ExamProblemGrade[] = record.problems.map((orig) => {
+    const g = parsed.problems!.find((q) => q.index === orig.index);
+    const score = clamp(typeof g?.score === 'number' ? g.score : 0, 0, 10);
+    return {
+      index: orig.index,
+      topicId: orig.topicId,
+      topicTitle: orig.topicTitle,
+      score,
+      max: 10,
+      correct: typeof g?.correct === 'boolean' ? g.correct : score >= 8,
+      feedback: typeof g?.feedback === 'string' && g.feedback.trim()
+        ? g.feedback.trim()
+        : 'Not attempted.',
+    };
+  });
+
+  const totalScore = grades.reduce((s, g) => s + g.score, 0);
+  const totalMax = grades.length * 10;
+
+  const topicScores = new Map<string, { topicTitle: string; score: number; max: number }>();
+  for (const g of grades) {
+    const existing = topicScores.get(g.topicId);
+    if (existing) {
+      existing.score += g.score;
+      existing.max += g.max;
+    } else {
+      topicScores.set(g.topicId, { topicTitle: g.topicTitle, score: g.score, max: g.max });
+    }
+  }
+  const topicBreakdown: ExamTopicBreakdown[] = Array.from(topicScores.entries()).map(
+    ([topicId, v]) => ({ topicId, topicTitle: v.topicTitle, score: v.score, max: v.max }),
+  );
+
+  const studyRecommendations = Array.isArray(parsed.studyRecommendations)
+    ? parsed.studyRecommendations.filter((s): s is string => typeof s === 'string' && s.trim().length > 0).slice(0, 6)
+    : [];
+
+  return {
+    ok: true,
+    status: 200,
+    result: {
+      examId: record.examId,
+      courseId: record.courseId,
+      problems: grades,
+      totalScore,
+      totalMax,
+      topicBreakdown,
+      studyRecommendations,
+      gradedAt: Date.now(),
+    },
+  };
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
 }

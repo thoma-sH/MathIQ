@@ -11,6 +11,7 @@ import { Terms } from './screens/Terms';
 import { Privacy } from './screens/Privacy';
 import { Exams } from './screens/Exams';
 import { ExamTake } from './screens/ExamTake';
+import { ExamGrade } from './screens/ExamGrade';
 import type { Route } from './router';
 
 interface PageProps {
@@ -27,6 +28,7 @@ function pageKey(route: Route): string {
   if (route.name === 'topic') return `topic-${route.courseId}-${route.topicId}`;
   if (route.name === 'exams') return `exams-${route.courseId}`;
   if (route.name === 'exam-take') return `exam-take-${route.courseId}-${route.examId}`;
+  if (route.name === 'exam-grade') return `exam-grade-${route.courseId}-${route.examId}`;
   return route.name;
 }
 
@@ -38,6 +40,7 @@ function escapeTarget(route: Route): Route | null {
   if (route.name === 'settings') return { name: 'home' };
   if (route.name === 'exams') return { name: 'walkthrough', courseId: route.courseId };
   if (route.name === 'exam-take') return { name: 'exams', courseId: route.courseId };
+  if (route.name === 'exam-grade') return { name: 'exam-take', courseId: route.courseId, examId: route.examId };
   return null;
 }
 
@@ -87,6 +90,7 @@ function MathIQApp() {
         {route.name === 'settings'    && <Settings onNavigate={setRoute} />}
         {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={setRoute} />}
         {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} examId={route.examId} onNavigate={setRoute} />}
+        {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} examId={route.examId} onNavigate={setRoute} />}
       </Page>
       <InstallPrompt />
     </>

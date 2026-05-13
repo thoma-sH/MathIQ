@@ -74,3 +74,104 @@ export async function generateExam(opts: GenerateOpts): Promise<ExamRecord> {
   }
   return (await resp.json()) as ExamRecord;
 }
+
+export interface ExamProblemGrade {
+  index: number;
+  topicId: string;
+  topicTitle: string;
+  score: number;
+  max: number;
+  correct: boolean;
+  feedback: string;
+}
+
+export interface ExamTopicBreakdown {
+  topicId: string;
+  topicTitle: string;
+  score: number;
+  max: number;
+}
+
+export interface ExamGradeResult {
+  examId: string;
+  courseId: string;
+  problems: ExamProblemGrade[];
+  totalScore: number;
+  totalMax: number;
+  topicBreakdown: ExamTopicBreakdown[];
+  studyRecommendations: string[];
+  gradedAt: number;
+}
+
+interface GradeOpts {
+  examId: string;
+  file: File;
+  getToken: () => Promise<string | null>;
+}
+
+const ALLOWED_GRADE_MEDIA = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+const MAX_GRADE_BYTES = 6 * 1024 * 1024;
+
+export async function gradeExam(opts: GradeOpts): Promise<ExamGradeResult> {
+  if (!ALLOWED_GRADE_MEDIA.has(opts.file.type)) {
+    throw new ExamError(
+      'bad_request',
+      'Use a JPEG, PNG, or WebP photo of your attempt.',
+    );
+  }
+  if (opts.file.size > MAX_GRADE_BYTES) {
+    throw new ExamError(
+      'bad_request',
+      'Image is too large — try a tighter crop or lower resolution.',
+    );
+  }
+
+  const { base64, mediaType } = await fileToBase64(opts.file);
+  const token = await opts.getToken();
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const resp = await fetch(`${WORKER_URL}/api/exam/grade`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ examId: opts.examId, image: base64, mediaType }),
+  });
+
+  if (resp.status === 401) {
+    throw new ExamError('sign_in_required', 'Sign in to grade your exam.');
+  }
+  if (resp.status === 403) {
+    throw new ExamError('upgrade_required', 'Exam grading is a MathIQ Pro feature.');
+  }
+  if (resp.status === 404) {
+    throw new ExamError(
+      'bad_request',
+      "That exam expired or wasn't found. Generate a fresh exam to grade.",
+    );
+  }
+  if (resp.status === 429) {
+    throw new ExamError('rate_limit', "You've used all your daily Pro slots.");
+  }
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({ message: '' }));
+    throw new ExamError(
+      'upstream_error',
+      (body as { message?: string }).message ?? 'Grading failed.',
+    );
+  }
+  return (await resp.json()) as ExamGradeResult;
+}
+
+function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new ExamError('other', 'Failed to read image file.'));
+    reader.onload = () => {
+      const url = reader.result as string;
+      const commaIdx = url.indexOf(',');
+      const base64 = commaIdx >= 0 ? url.slice(commaIdx + 1) : url;
+      resolve({ base64, mediaType: file.type });
+    };
+    reader.readAsDataURL(file);
+  });
+}

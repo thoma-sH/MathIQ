@@ -50,7 +50,7 @@ import {
 } from './history';
 import { extractProblemFromImage } from './ocr';
 import { verifyAnswer } from './verify';
-import { generateExam, type ExamId } from './exam';
+import { generateExam, getExam, gradeExam, type ExamId } from './exam';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -185,6 +185,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/exam/generate') {
       return handleExamGenerate(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/exam/grade') {
+      return handleExamGrade(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -1033,6 +1037,107 @@ async function handleExamGenerate(
   }
 
   return json(result.record, 200, cors);
+}
+
+interface ExamGradeBody {
+  examId?: string;
+  image?: string;
+  mediaType?: string;
+}
+
+async function handleExamGrade(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
+  }
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'pro') {
+    return json(
+      { error: 'upgrade_required', message: 'Exam grading is a MathIQ Pro feature.' },
+      403,
+      cors,
+    );
+  }
+
+  let body: ExamGradeBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.examId || typeof body.examId !== 'string') {
+    return json({ error: 'examId required' }, 400, cors);
+  }
+  if (!body.image || typeof body.image !== 'string') {
+    return json({ error: 'image required' }, 400, cors);
+  }
+  if (!body.mediaType || !ALLOWED_OCR_MEDIA.has(body.mediaType)) {
+    return json({ error: 'unsupported media type' }, 400, cors);
+  }
+  if (body.image.length > MAX_OCR_BASE64_CHARS) {
+    return json({ error: 'image too large', limit: MAX_OCR_BASE64_CHARS }, 413, cors);
+  }
+
+  const record = await getExam(env.USAGE, body.examId);
+  if (!record) {
+    return json(
+      {
+        error: 'exam_not_found',
+        message: 'That exam has expired or was never generated. Generate a new one.',
+      },
+      404,
+      cors,
+    );
+  }
+  if (record.userId !== authState.userId) {
+    return json({ error: 'not_yours' }, 403, cors);
+  }
+
+  // Grading counts against the user's daily Pro quota (1 slot).
+  const counter = userCounter(env.USAGE_DO, authState.userId);
+  const usedToday = await peek(counter);
+  const decision = decideTier(tier, usedToday);
+  if (decision.model === null) {
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've used all ${decision.ceiling} Pro slots today.`,
+        limit: decision.ceiling,
+        used: usedToday,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+  await increment(counter);
+
+  const result = await gradeExam({
+    apiKey: env.ANTHROPIC_API_KEY,
+    record,
+    imageBase64: body.image,
+    mediaType: body.mediaType,
+  });
+
+  if (!result.ok || !result.result) {
+    await decrement(counter);
+    if (result.detail) console.error('exam grade failed', result.status, result.detail);
+    const message =
+      result.detail && result.detail.startsWith('Grader hallucinated')
+        ? result.detail
+        : 'Grading failed — try again in a moment.';
+    return json({ error: 'upstream_error', message }, 502, cors);
+  }
+
+  return json(result.result, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {

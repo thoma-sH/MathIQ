@@ -151,6 +151,23 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
         >
           Print / Save as PDF
         </button>
+        <button
+          type="button"
+          onClick={() => onNavigate({ name: 'exam-grade', courseId, examId })}
+          className="btn-press chamfer"
+          style={{
+            background: 'transparent',
+            color: T.ink,
+            border: `1px solid ${T.ink}`,
+            padding: '10px 18px',
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          I'm done — grade my attempt →
+        </button>
       </div>
 
       <p
