@@ -158,20 +158,23 @@ interface GradeOpts {
   getToken: () => Promise<string | null>;
 }
 
-const ALLOWED_GRADE_MEDIA = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-const MAX_GRADE_BYTES = 6 * 1024 * 1024;
+const ALLOWED_GRADE_MEDIA = new Set([
+  'application/pdf',
+  'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+]);
+const MAX_GRADE_BYTES = 15 * 1024 * 1024;
 
 export async function gradeExam(opts: GradeOpts): Promise<ExamGradeResult> {
   if (!ALLOWED_GRADE_MEDIA.has(opts.file.type)) {
     throw new ExamError(
       'bad_request',
-      'Use a JPEG, PNG, or WebP photo of your attempt.',
+      'Use a PDF or a JPEG/PNG/WebP photo of your attempt.',
     );
   }
   if (opts.file.size > MAX_GRADE_BYTES) {
     throw new ExamError(
       'bad_request',
-      'Image is too large — try a tighter crop or lower resolution.',
+      'File is too large — try compressing the PDF or lowering photo resolution.',
     );
   }
 
@@ -214,7 +217,7 @@ export async function gradeExam(opts: GradeOpts): Promise<ExamGradeResult> {
 function fileToBase64(file: File): Promise<{ base64: string; mediaType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new ExamError('other', 'Failed to read image file.'));
+    reader.onerror = () => reject(new ExamError('other', 'Failed to read the file.'));
     reader.onload = () => {
       const url = reader.result as string;
       const commaIdx = url.indexOf(',');

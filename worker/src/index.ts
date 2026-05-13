@@ -49,7 +49,7 @@ import {
   type HistoryRecord,
 } from './history';
 import { extractProblemFromImage } from './ocr';
-import { extractStudentWork } from './mathpix';
+import { extractStudentWork, extractStudentWorkFromPdf } from './mathpix';
 import { verifyAnswer } from './verify';
 import {
   generateExam,
@@ -858,6 +858,13 @@ const MAX_OCR_BASE64_CHARS = 8 * 1024 * 1024;       // ~6MB raw image
 const ALLOWED_OCR_MEDIA = new Set([
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif',
 ]);
+/** Exam grading accepts everything OCR does PLUS multi-page PDFs.
+ *  PDFs route through Mathpix's /v3/pdf endpoint (async + per-page billing). */
+const ALLOWED_GRADE_MEDIA = new Set([
+  ...ALLOWED_OCR_MEDIA,
+  'application/pdf',
+]);
+const MAX_GRADE_BASE64_CHARS = 20 * 1024 * 1024;    // ~15MB raw — PDFs run larger
 
 interface OcrBody {
   image?: string;
@@ -1102,11 +1109,11 @@ async function handleExamGrade(
   if (!body.image || typeof body.image !== 'string') {
     return json({ error: 'image required' }, 400, cors);
   }
-  if (!body.mediaType || !ALLOWED_OCR_MEDIA.has(body.mediaType)) {
+  if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
     return json({ error: 'unsupported media type' }, 400, cors);
   }
-  if (body.image.length > MAX_OCR_BASE64_CHARS) {
-    return json({ error: 'image too large', limit: MAX_OCR_BASE64_CHARS }, 413, cors);
+  if (body.image.length > MAX_GRADE_BASE64_CHARS) {
+    return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
   }
 
   const record = await getExam(env.USAGE, authState.userId, body.examId);
@@ -1152,23 +1159,36 @@ async function handleExamGrade(
     );
   }
 
-  const ocr = await extractStudentWork({
-    appId: env.MATHPIX_APP_ID,
-    appKey: env.MATHPIX_APP_KEY,
-    imageBase64: body.image,
-    mediaType: body.mediaType,
-  });
+  // PDFs go through Mathpix's async /v3/pdf endpoint (multi-page, no
+  // dimension cap). Single images go through /v3/text (synchronous, faster).
+  const ocr =
+    body.mediaType === 'application/pdf'
+      ? await extractStudentWorkFromPdf({
+          appId: env.MATHPIX_APP_ID,
+          appKey: env.MATHPIX_APP_KEY,
+          pdfBase64: body.image,
+        })
+      : await extractStudentWork({
+          appId: env.MATHPIX_APP_ID,
+          appKey: env.MATHPIX_APP_KEY,
+          imageBase64: body.image,
+          mediaType: body.mediaType,
+        });
   if (!ocr.ok || !ocr.text) {
     console.error('[exam-grade] Mathpix failed', ocr.status, ocr.detail);
     const detailLower = (ocr.detail ?? '').toLowerCase();
+    const isPdf = body.mediaType === 'application/pdf';
+    const noun = isPdf ? 'PDF' : 'photo';
     const message =
       ocr.status === 401
         ? 'Exam grading is temporarily unavailable. Try again shortly.'
-        : detailLower.includes('content not found') || detailLower.includes('no content')
-          ? "Couldn't find any work on the page. Make sure your handwriting is visible and the photo isn't blank — try retaking the shot with better lighting."
-          : detailLower.includes('decode') || detailLower.includes('not supported')
-            ? 'That image format could not be read. Try a PNG or JPEG screenshot of your attempt.'
-            : 'Could not read the photo. Try a clearer, better-lit shot with the whole page visible.';
+        : ocr.status === 504
+          ? `Your ${noun} took too long to transcribe. Try a shorter attempt or split it across two uploads.`
+          : detailLower.includes('content not found') || detailLower.includes('no content')
+            ? `Couldn't find any work in the ${noun}. Make sure your handwriting is visible and the file isn't blank.`
+            : detailLower.includes('decode') || detailLower.includes('not supported')
+              ? `That file format could not be read. Upload a PDF or a PNG/JPEG image.`
+              : `Could not read the ${noun}. Try a clearer, better-lit scan with the whole page visible.`;
     return json({ error: 'ocr_failed', message }, 502, cors);
   }
 

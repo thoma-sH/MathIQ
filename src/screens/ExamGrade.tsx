@@ -134,9 +134,9 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
           maxWidth: 560,
         }}
       >
-        Upload one photo of your completed attempt — multi-page or compact, as long as
-        each problem's work is legible and numbered. Iris will score each problem,
-        flag the topics you missed, and recommend what to review.
+        Upload a PDF or photo of your completed attempt — PDFs work best for
+        multi-page exams. Iris will score each problem, flag the topics you missed,
+        and recommend what to review.
       </p>
 
       {state.kind === 'idle' && record && (
@@ -231,7 +231,7 @@ function IdleCard({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="application/pdf,image/jpeg,image/png,image/webp"
         style={{ display: 'none' }}
         onChange={(e) => onFile(e.target.files?.[0] ?? null)}
       />
@@ -250,12 +250,13 @@ function IdleCard({
           fontFamily: T.sans,
         }}
       >
-        Choose photo →
+        Choose file →
       </button>
       <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
-        JPEG, PNG, or WebP. Up to 6 MB. Take the photo straight-on with good light. If
-        your attempt spans multiple pages, lay them side by side or arrange them in a
-        single shot before snapping.
+        PDF (best for multi-page) or a PNG/JPEG photo. Up to 15&nbsp;MB. For photos,
+        shoot straight-on with good light. For PDFs, browser "Print → Save as PDF"
+        on the exam screen makes a clean copy in seconds — write on a printout,
+        scan or shoot each page, and combine into one PDF.
       </p>
     </section>
   );
