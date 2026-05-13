@@ -27,8 +27,8 @@ function pageKey(route: Route): string {
   if (route.name === 'walkthrough') return `walkthrough-${route.courseId}`;
   if (route.name === 'topic') return `topic-${route.courseId}-${route.topicId}`;
   if (route.name === 'exams') return `exams-${route.courseId}`;
-  if (route.name === 'exam-take') return `exam-take-${route.courseId}-${route.examId}`;
-  if (route.name === 'exam-grade') return `exam-grade-${route.courseId}-${route.examId}`;
+  if (route.name === 'exam-take') return `exam-take-${route.recordId}`;
+  if (route.name === 'exam-grade') return `exam-grade-${route.recordId}`;
   return route.name;
 }
 
@@ -40,7 +40,7 @@ function escapeTarget(route: Route): Route | null {
   if (route.name === 'settings') return { name: 'home' };
   if (route.name === 'exams') return { name: 'walkthrough', courseId: route.courseId };
   if (route.name === 'exam-take') return { name: 'exams', courseId: route.courseId };
-  if (route.name === 'exam-grade') return { name: 'exam-take', courseId: route.courseId, examId: route.examId };
+  if (route.name === 'exam-grade') return { name: 'exam-take', courseId: route.courseId, recordId: route.recordId };
   return null;
 }
 
@@ -89,8 +89,8 @@ function MathIQApp() {
         {route.name === 'history'     && <History onNavigate={setRoute} />}
         {route.name === 'settings'    && <Settings onNavigate={setRoute} />}
         {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={setRoute} />}
-        {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} examId={route.examId} onNavigate={setRoute} />}
-        {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} examId={route.examId} onNavigate={setRoute} />}
+        {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} recordId={route.recordId} onNavigate={setRoute} />}
+        {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} recordId={route.recordId} onNavigate={setRoute} />}
       </Page>
       <InstallPrompt />
     </>

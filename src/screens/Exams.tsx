@@ -2,7 +2,12 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
-import { generateExam, ExamError } from '../walkthroughs/exam';
+import {
+  generateExam,
+  listExams,
+  ExamError,
+  type ExamListEntry,
+} from '../walkthroughs/exam';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
 import { isPro } from '../walkthroughs/tier';
 import { NotFound } from './NotFound';
@@ -54,6 +59,7 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
   const [tierLoaded, setTierLoaded] = useState(false);
   const [pendingExam, setPendingExam] = useState<ExamId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pastExams, setPastExams] = useState<ExamListEntry[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +74,19 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
       cancelled = true;
     };
   }, [getToken]);
+
+  // Load past exams for this course (Pro only — endpoint 403s otherwise).
+  useEffect(() => {
+    if (!tierLoaded || !isPro(tier)) return;
+    let cancelled = false;
+    void (async () => {
+      const items = await listExams({ courseId, getToken });
+      if (!cancelled) setPastExams(items);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tierLoaded, tier, courseId, getToken]);
 
   if (!course) {
     return (
@@ -85,11 +104,10 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
       const record = await generateExam({ courseId, exam: examId, getToken });
       try {
         sessionStorage.setItem(`exam:${record.examId}`, JSON.stringify(record));
-        sessionStorage.setItem(`exam-current:${courseId}:${examId}`, record.examId);
       } catch {
         // ignore quota
       }
-      onNavigate({ name: 'exam-take', courseId, examId });
+      onNavigate({ name: 'exam-take', courseId, recordId: record.examId });
     } catch (err) {
       if (err instanceof ExamError) {
         setError(err.message);
@@ -153,7 +171,8 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
         }}
       >
         Generate a professional, print-ready exam for {course.title}. No hints, no
-        freebies — just problems.
+        freebies — just problems. Complete it on paper, then upload a photo to have
+        Iris grade your attempt.
       </p>
 
       {tierLoaded && !isPro(tier) && <UpgradeStrip onUpgrade={() => onNavigate({ name: 'settings' })} />}
@@ -207,9 +226,120 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
           letterSpacing: '0.05em',
         }}
       >
-        Each exam costs 1 of your 70 daily Pro slots.
+        Each exam costs 1 of your 70 daily Pro slots. Exams are stored for 30 days
+        so you can grade your attempt later.
       </p>
+
+      {pastExams && pastExams.length > 0 && (
+        <section style={{ marginTop: 36 }}>
+          <h2
+            style={{
+              fontFamily: T.sans,
+              fontSize: 18,
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              margin: '0 0 12px',
+            }}
+          >
+            Past attempts
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pastExams.map((p) => (
+              <PastAttemptRow
+                key={p.examId}
+                entry={p}
+                onOpen={() => onNavigate({ name: 'exam-take', courseId, recordId: p.examId })}
+                onGrade={() => onNavigate({ name: 'exam-grade', courseId, recordId: p.examId })}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </main>
+  );
+}
+
+function PastAttemptRow({
+  entry,
+  onOpen,
+  onGrade,
+}: {
+  entry: ExamListEntry;
+  onOpen: () => void;
+  onGrade: () => void;
+}) {
+  const created = new Date(entry.createdAt).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const pct =
+    entry.graded && typeof entry.totalScore === 'number' && typeof entry.totalMax === 'number' && entry.totalMax > 0
+      ? Math.round((entry.totalScore / entry.totalMax) * 100)
+      : null;
+  return (
+    <article
+      style={{
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        padding: '12px 16px',
+        display: 'flex',
+        gap: 16,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 200 }}>
+        <span style={{ fontSize: 11, fontFamily: T.mono, letterSpacing: '0.12em', textTransform: 'uppercase', color: T.muted }}>
+          {entry.examTitle} · {entry.problemCount} problems · {created}
+        </span>
+        <span style={{ fontSize: 14, color: T.ink }}>
+          {entry.graded ? (
+            <>
+              Graded · {entry.totalScore} / {entry.totalMax} ({pct}%)
+            </>
+          ) : (
+            <em style={{ color: T.muted }}>Not yet graded</em>
+          )}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="btn-press"
+          style={{
+            background: 'transparent',
+            border: `1px solid ${T.ink}`,
+            padding: '6px 12px',
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          View / print
+        </button>
+        <button
+          type="button"
+          onClick={onGrade}
+          className="btn-press"
+          style={{
+            background: entry.graded ? 'transparent' : T.accent,
+            color: entry.graded ? T.ink : T.paper,
+            border: entry.graded ? `1px solid ${T.ink}` : 'none',
+            padding: '6px 12px',
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          {entry.graded ? 'View grades' : 'Grade attempt →'}
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -283,7 +413,8 @@ function UpgradeStrip({ onUpgrade }: { onUpgrade: () => void }) {
         color: T.ink,
       }}
     >
-      Exam mode is a <strong>MathIQ Pro</strong> feature ($29.99/mo, $19.99/mo annual).{' '}
+      Exam mode is a <strong>MathIQ Pro</strong> feature ($29.99/mo, $19.99/mo annual). Pro adds
+      generated exams, photo grading, and PDF downloads of every walkthrough.{' '}
       <button
         type="button"
         onClick={onUpgrade}

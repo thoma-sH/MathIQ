@@ -50,7 +50,15 @@ import {
 } from './history';
 import { extractProblemFromImage } from './ocr';
 import { verifyAnswer } from './verify';
-import { generateExam, getExam, gradeExam, type ExamId } from './exam';
+import {
+  generateExam,
+  getExam,
+  getGrade,
+  gradeExam,
+  listExamsForUser,
+  saveGrade,
+  type ExamId,
+} from './exam';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -189,6 +197,14 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/exam/grade') {
       return handleExamGrade(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/exam/list') {
+      return handleExamList(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/exam/get') {
+      return handleExamGet(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -1086,7 +1102,7 @@ async function handleExamGrade(
     return json({ error: 'image too large', limit: MAX_OCR_BASE64_CHARS }, 413, cors);
   }
 
-  const record = await getExam(env.USAGE, body.examId);
+  const record = await getExam(env.USAGE, authState.userId, body.examId);
   if (!record) {
     return json(
       {
@@ -1096,9 +1112,6 @@ async function handleExamGrade(
       404,
       cors,
     );
-  }
-  if (record.userId !== authState.userId) {
-    return json({ error: 'not_yours' }, 403, cors);
   }
 
   // Grading counts against the user's daily Pro quota (1 slot).
@@ -1137,7 +1150,56 @@ async function handleExamGrade(
     return json({ error: 'upstream_error', message }, 502, cors);
   }
 
+  // Persist the grade so the user can revisit results later (and so the
+  // exam list endpoint can show graded state).
+  await saveGrade(env.USAGE, authState.userId, result.result);
+
   return json(result.result, 200, cors);
+}
+
+async function handleExamList(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'pro') {
+    return json({ error: 'upgrade_required' }, 403, cors);
+  }
+  const url = new URL(request.url);
+  const courseId = url.searchParams.get('courseId') ?? undefined;
+  const items = await listExamsForUser(env.USAGE, authState.userId, courseId);
+  return json({ items }, 200, cors);
+}
+
+async function handleExamGet(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'pro') {
+    return json({ error: 'upgrade_required' }, 403, cors);
+  }
+  const url = new URL(request.url);
+  const examId = url.searchParams.get('examId');
+  if (!examId) {
+    return json({ error: 'examId required' }, 400, cors);
+  }
+  const record = await getExam(env.USAGE, authState.userId, examId);
+  if (!record) {
+    return json({ error: 'exam_not_found' }, 404, cors);
+  }
+  const grade = await getGrade(env.USAGE, authState.userId, examId);
+  return json({ record, grade }, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {

@@ -1,42 +1,62 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useAuth } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
-import type { ExamRecord } from '../walkthroughs/exam';
+import { getExam, type ExamRecord } from '../walkthroughs/exam';
 import { NotFound } from './NotFound';
-import type { Route, ExamId } from '../router';
+import type { Route } from '../router';
 
 interface ExamTakeProps {
   courseId: string;
-  examId: ExamId;
+  recordId: string;
   onNavigate: (route: Route) => void;
 }
 
-export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
+export function ExamTake({ courseId, recordId, onNavigate }: ExamTakeProps) {
   const course = COURSES_BY_ID[courseId];
+  const { getToken } = useAuth();
   const [record, setRecord] = useState<ExamRecord | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
-    // Pick up the freshly-generated exam from sessionStorage. The Exams
-    // screen caches the record under:
-    //   exam-current:<courseId>:<examId> → the most recent record id for this slot
-    //   exam:<recordId>                  → the full record
-    try {
-      const currentId = sessionStorage.getItem(`exam-current:${courseId}:${examId}`);
-      if (currentId) {
-        const raw = sessionStorage.getItem(`exam:${currentId}`);
-        if (raw) setRecord(JSON.parse(raw) as ExamRecord);
+    let cancelled = false;
+    void (async () => {
+      // Try sessionStorage first (just-generated exams are cached there).
+      try {
+        const raw = sessionStorage.getItem(`exam:${recordId}`);
+        if (raw) {
+          const r = JSON.parse(raw) as ExamRecord;
+          if (!cancelled) {
+            setRecord(r);
+            setLoaded(true);
+          }
+          return;
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-    setLoaded(true);
-  }, [courseId, examId]);
+      // Fall back to the worker so past attempts work after a session reset.
+      const result = await getExam({ examId: recordId, getToken });
+      if (cancelled) return;
+      if (result?.record) {
+        setRecord(result.record);
+        try {
+          sessionStorage.setItem(`exam:${recordId}`, JSON.stringify(result.record));
+        } catch {
+          // ignore quota
+        }
+      }
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [recordId, getToken]);
 
   useEffect(() => {
     if (!printing) return;
@@ -48,7 +68,12 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
   }, [printing]);
 
   if (!course) {
-    return <NotFound message="That course doesn't exist." onNavigate={onNavigate} />;
+    return (
+      <NotFound
+        message="That course doesn't exist."
+        onNavigate={onNavigate}
+      />
+    );
   }
 
   if (!loaded) {
@@ -63,13 +88,19 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
     return (
       <main
         className="responsive-pad"
-        style={{ maxWidth: 760, margin: '0 auto', paddingTop: 24, paddingBottom: 96 }}
+        style={{
+          maxWidth: 760,
+          margin: '0 auto',
+          paddingTop: 24,
+          paddingBottom: 96,
+        }}
       >
         <h1 style={{ fontSize: 'clamp(28px, 6vw, 38px)', fontWeight: 700, margin: '0 0 12px' }}>
           Exam not loaded.
         </h1>
         <p style={{ fontSize: 16, color: T.muted, lineHeight: 1.55, margin: '0 0 24px' }}>
-          We couldn't find this exam in this browser session. Go back and start a fresh exam.
+          We couldn't find this exam in this browser session. Go back and start a fresh exam — each
+          exam is generated on demand.
         </p>
         <button
           onClick={() => onNavigate({ name: 'exams', courseId })}
@@ -94,7 +125,12 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
   return (
     <main
       className="responsive-pad"
-      style={{ maxWidth: 760, margin: '0 auto', paddingTop: 24, paddingBottom: 96 }}
+      style={{
+        maxWidth: 760,
+        margin: '0 auto',
+        paddingTop: 24,
+        paddingBottom: 96,
+      }}
     >
       <button
         onClick={() => onNavigate({ name: 'exams', courseId })}
@@ -133,7 +169,14 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
         </h1>
       </div>
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: 12,
+          flexWrap: 'wrap',
+          marginBottom: 24,
+        }}
+      >
         <button
           type="button"
           onClick={() => setPrinting(true)}
@@ -153,7 +196,7 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
         </button>
         <button
           type="button"
-          onClick={() => onNavigate({ name: 'exam-grade', courseId, examId })}
+          onClick={() => onNavigate({ name: 'exam-grade', courseId, recordId })}
           className="btn-press chamfer"
           style={{
             background: 'transparent',
@@ -198,6 +241,7 @@ export function ExamTake({ courseId, examId, onNavigate }: ExamTakeProps) {
           <li>Show all work on each problem.</li>
           <li>Scientific calculator allowed. No graphing calculators or outside resources.</li>
           <li>Number your work to match each problem.</li>
+          <li>Upload a photo of your full attempt when finished.</li>
         </ul>
       </section>
 

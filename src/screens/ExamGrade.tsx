@@ -4,16 +4,17 @@ import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import {
   ExamError,
+  getExam,
   gradeExam,
   type ExamGradeResult,
   type ExamRecord,
 } from '../walkthroughs/exam';
 import { NotFound } from './NotFound';
-import type { Route, ExamId } from '../router';
+import type { Route } from '../router';
 
 interface ExamGradeProps {
   courseId: string;
-  examId: ExamId;
+  recordId: string;
   onNavigate: (route: Route) => void;
 }
 
@@ -23,7 +24,7 @@ type GradeState =
   | { kind: 'graded'; result: ExamGradeResult }
   | { kind: 'error'; message: string };
 
-export function ExamGrade({ courseId, examId, onNavigate }: ExamGradeProps) {
+export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
   const course = COURSES_BY_ID[courseId];
   const { getToken } = useAuth();
   const [record, setRecord] = useState<ExamRecord | null>(null);
@@ -31,16 +32,35 @@ export function ExamGrade({ courseId, examId, onNavigate }: ExamGradeProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    try {
-      const currentId = sessionStorage.getItem(`exam-current:${courseId}:${examId}`);
-      if (currentId) {
-        const raw = sessionStorage.getItem(`exam:${currentId}`);
-        if (raw) setRecord(JSON.parse(raw) as ExamRecord);
+    let cancelled = false;
+    void (async () => {
+      // Cache hit?
+      try {
+        const raw = sessionStorage.getItem(`exam:${recordId}`);
+        if (raw) {
+          const r = JSON.parse(raw) as ExamRecord;
+          if (!cancelled) setRecord(r);
+        }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
-    }
-  }, [courseId, examId]);
+      // Always also fetch from worker so we get any existing grade.
+      const result = await getExam({ examId: recordId, getToken });
+      if (cancelled || !result) return;
+      setRecord(result.record);
+      try {
+        sessionStorage.setItem(`exam:${recordId}`, JSON.stringify(result.record));
+      } catch {
+        // ignore
+      }
+      if (result.grade) {
+        setState({ kind: 'graded', result: result.grade });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [recordId, getToken]);
 
   async function onFile(file: File | null) {
     if (!file || !record) return;
@@ -56,16 +76,23 @@ export function ExamGrade({ courseId, examId, onNavigate }: ExamGradeProps) {
   }
 
   if (!course) {
-    return <NotFound message="That course doesn't exist." onNavigate={onNavigate} />;
+    return (
+      <NotFound message="That course doesn't exist." onNavigate={onNavigate} />
+    );
   }
 
   return (
     <main
       className="responsive-pad"
-      style={{ maxWidth: 760, margin: '0 auto', paddingTop: 24, paddingBottom: 96 }}
+      style={{
+        maxWidth: 760,
+        margin: '0 auto',
+        paddingTop: 24,
+        paddingBottom: 96,
+      }}
     >
       <button
-        onClick={() => onNavigate({ name: 'exam-take', courseId, examId })}
+        onClick={() => onNavigate({ name: 'exam-take', courseId, recordId })}
         className="btn-press"
         style={{
           background: 'transparent',
@@ -95,7 +122,15 @@ export function ExamGrade({ courseId, examId, onNavigate }: ExamGradeProps) {
       >
         Grade my attempt.
       </h1>
-      <p style={{ fontSize: 16, color: T.muted, lineHeight: 1.55, margin: '0 0 24px', maxWidth: 560 }}>
+      <p
+        style={{
+          fontSize: 16,
+          color: T.muted,
+          lineHeight: 1.55,
+          margin: '0 0 24px',
+          maxWidth: 560,
+        }}
+      >
         Upload one photo of your completed attempt — multi-page or compact, as long as
         each problem's work is legible and numbered. Iris will score each problem,
         flag the topics you missed, and recommend what to review.
@@ -162,7 +197,12 @@ export function ExamGrade({ courseId, examId, onNavigate }: ExamGradeProps) {
       )}
 
       {state.kind === 'graded' && (
-        <GradeResultView result={state.result} onNavigate={onNavigate} courseId={courseId} />
+        <GradeResultView
+          result={state.result}
+          onNavigate={onNavigate}
+          courseId={courseId}
+          onRegrade={() => setState({ kind: 'idle' })}
+        />
       )}
     </main>
   );
@@ -178,7 +218,13 @@ function IdleCard({
   onFile: (f: File | null) => void;
 }) {
   return (
-    <section style={{ padding: '24px', border: `1px solid ${T.ink}`, background: T.paper2 }}>
+    <section
+      style={{
+        padding: '24px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+      }}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -204,7 +250,9 @@ function IdleCard({
         Choose photo →
       </button>
       <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
-        JPEG, PNG, or WebP. Up to 6 MB. Take the photo straight-on with good light.
+        JPEG, PNG, or WebP. Up to 6 MB. Take the photo straight-on with good light. If
+        your attempt spans multiple pages, lay them side by side or arrange them in a
+        single shot before snapping.
       </p>
     </section>
   );
@@ -235,10 +283,12 @@ function GradeResultView({
   result,
   onNavigate,
   courseId,
+  onRegrade,
 }: {
   result: ExamGradeResult;
   onNavigate: (route: Route) => void;
   courseId: string;
+  onRegrade: () => void;
 }) {
   const pct = result.totalMax === 0 ? 0 : Math.round((result.totalScore / result.totalMax) * 100);
   const letter = pct >= 90 ? 'A' : pct >= 80 ? 'B' : pct >= 70 ? 'C' : pct >= 60 ? 'D' : 'F';
@@ -254,6 +304,7 @@ function GradeResultView({
           display: 'flex',
           gap: 24,
           alignItems: 'center',
+          justifyContent: 'space-between',
           flexWrap: 'wrap',
         }}
       >
@@ -276,6 +327,23 @@ function GradeResultView({
             {pct}% · {letter}
           </span>
         </div>
+        <button
+          type="button"
+          onClick={onRegrade}
+          className="btn-press chamfer"
+          style={{
+            background: 'transparent',
+            color: T.ink,
+            border: `1px solid ${T.ink}`,
+            padding: '9px 16px',
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          Upload a new attempt →
+        </button>
       </section>
 
       {result.topicBreakdown.length > 0 && (

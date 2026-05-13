@@ -1,5 +1,5 @@
 /**
- * Client helper for /api/exam/generate.
+ * Client helper for /api/exam/generate (and /api/exam/grade once that lands).
  */
 import type { ExamId } from '../router';
 
@@ -101,6 +101,55 @@ export interface ExamGradeResult {
   topicBreakdown: ExamTopicBreakdown[];
   studyRecommendations: string[];
   gradedAt: number;
+}
+
+export interface ExamListEntry {
+  examId: string;
+  courseId: string;
+  courseTitle: string;
+  examTitle: string;
+  exam: ExamId;
+  problemCount: number;
+  createdAt: number;
+  graded: boolean;
+  totalScore?: number;
+  totalMax?: number;
+  gradedAt?: number;
+}
+
+interface ListOpts {
+  courseId?: string;
+  getToken: () => Promise<string | null>;
+}
+
+export async function listExams(opts: ListOpts): Promise<ExamListEntry[]> {
+  const token = await opts.getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const qs = opts.courseId ? `?courseId=${encodeURIComponent(opts.courseId)}` : '';
+  const resp = await fetch(`${WORKER_URL}/api/exam/list${qs}`, { headers });
+  if (!resp.ok) return [];
+  const data = (await resp.json()) as { items: ExamListEntry[] };
+  return data.items;
+}
+
+interface GetOpts {
+  examId: string;
+  getToken: () => Promise<string | null>;
+}
+
+export async function getExam(
+  opts: GetOpts,
+): Promise<{ record: ExamRecord; grade: ExamGradeResult | null } | null> {
+  const token = await opts.getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const resp = await fetch(
+    `${WORKER_URL}/api/exam/get?examId=${encodeURIComponent(opts.examId)}`,
+    { headers },
+  );
+  if (!resp.ok) return null;
+  return (await resp.json()) as { record: ExamRecord; grade: ExamGradeResult | null };
 }
 
 interface GradeOpts {

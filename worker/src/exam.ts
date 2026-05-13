@@ -1,15 +1,26 @@
 /**
- * Exam generation. Pro-only feature.
+ * Exam generation + grading. Pro-only feature.
  *
- * Generate: Opus 4.6 produces 10 problems for a given exam range (topics
- * 1-4, 5-8, 9-12, or all 12 for Final). Result is stored in KV under
- * `exam:<examId>` with a 30-day TTL so we can look it up later.
+ * KV layout (mirrors history.ts pattern):
+ *   exam:user:<userId>:<examId>        → ExamRecord (the generated problems)
+ *   exam-grade:user:<userId>:<examId>  → ExamGradeResult (when graded)
+ *
+ * Both have a 30-day TTL.
  */
 import type { Course, Topic } from './courses';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const GENERATE_MODEL = 'claude-opus-4-6';
 const EXAM_KV_TTL_SECONDS = 30 * 24 * 60 * 60;
+const EXAM_KEY_PREFIX = 'exam:user:';
+const GRADE_KEY_PREFIX = 'exam-grade:user:';
+
+function examKey(userId: string, examId: string): string {
+  return `${EXAM_KEY_PREFIX}${userId}:${examId}`;
+}
+function gradeKey(userId: string, examId: string): string {
+  return `${GRADE_KEY_PREFIX}${userId}:${examId}`;
+}
 
 export type ExamId = 'exam1' | 'exam2' | 'exam3' | 'final';
 
@@ -167,21 +178,99 @@ export async function generateExam(
     userId,
   };
 
-  await kv.put(`exam:${record.examId}`, JSON.stringify(record), {
+  await kv.put(examKey(userId, record.examId), JSON.stringify(record), {
     expirationTtl: EXAM_KV_TTL_SECONDS,
   });
 
   return { ok: true, status: 200, record };
 }
 
-export async function getExam(kv: KVNamespace, examId: string): Promise<ExamRecord | null> {
-  const raw = await kv.get(`exam:${examId}`);
+export async function getExam(
+  kv: KVNamespace,
+  userId: string,
+  examId: string,
+): Promise<ExamRecord | null> {
+  const raw = await kv.get(examKey(userId, examId));
   if (!raw) return null;
   try {
     return JSON.parse(raw) as ExamRecord;
   } catch {
     return null;
   }
+}
+
+export async function getGrade(
+  kv: KVNamespace,
+  userId: string,
+  examId: string,
+): Promise<ExamGradeResult | null> {
+  const raw = await kv.get(gradeKey(userId, examId));
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as ExamGradeResult;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveGrade(
+  kv: KVNamespace,
+  userId: string,
+  result: ExamGradeResult,
+): Promise<void> {
+  await kv.put(gradeKey(userId, result.examId), JSON.stringify(result), {
+    expirationTtl: EXAM_KV_TTL_SECONDS,
+  });
+}
+
+export interface ExamListEntry {
+  examId: string;
+  courseId: string;
+  courseTitle: string;
+  examTitle: string;
+  exam: ExamId;
+  problemCount: number;
+  createdAt: number;
+  graded: boolean;
+  totalScore?: number;
+  totalMax?: number;
+  gradedAt?: number;
+}
+
+export async function listExamsForUser(
+  kv: KVNamespace,
+  userId: string,
+  courseId?: string,
+): Promise<ExamListEntry[]> {
+  const prefix = `${EXAM_KEY_PREFIX}${userId}:`;
+  const result = await kv.list({ prefix, limit: 100 });
+  const entries: ExamListEntry[] = [];
+  for (const k of result.keys) {
+    const raw = await kv.get(k.name);
+    if (!raw) continue;
+    try {
+      const rec = JSON.parse(raw) as ExamRecord;
+      if (courseId && rec.courseId !== courseId) continue;
+      const grade = await getGrade(kv, userId, rec.examId);
+      entries.push({
+        examId: rec.examId,
+        courseId: rec.courseId,
+        courseTitle: rec.courseTitle,
+        examTitle: rec.examTitle,
+        exam: rec.exam,
+        problemCount: rec.problems.length,
+        createdAt: rec.createdAt,
+        graded: !!grade,
+        totalScore: grade?.totalScore,
+        totalMax: grade?.totalMax,
+        gradedAt: grade?.gradedAt,
+      });
+    } catch {
+      // skip malformed
+    }
+  }
+  entries.sort((a, b) => b.createdAt - a.createdAt);
+  return entries;
 }
 
 function buildUserMessage(course: Course, exam: ExamId, topics: Topic[], count: number): string {
