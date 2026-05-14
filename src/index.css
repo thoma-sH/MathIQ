@@ -79,7 +79,7 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   );
 }
 
-/* ─── Landing CTA cards (Browse Lessons / Handwritten to PDF) ──────── */
+/* ─── Landing CTA cards (Pick a subject / Handwritten to PDF) ──────── */
 .landing-cta-card {
   flex: 1 1 280px;
   min-width: 260px;

@@ -5,7 +5,7 @@ import { getDailyContent } from '../state/dailyScribe';
 import { useTypedString } from '../state/useTypedString';
 import type { Route } from '../router';
 
-interface LessonsProps {
+interface SubjectsProps {
   onNavigate: (route: Route) => void;
 }
 
@@ -86,7 +86,7 @@ function CourseCard({ title, blurb, onClick }: CourseCardProps) {
   );
 }
 
-export function Lessons({ onNavigate }: LessonsProps) {
+export function Subjects({ onNavigate }: SubjectsProps) {
   const { dayLabel, tagline, scribeSrc } = useMemo(() => getDailyContent(), []);
   const typedLabel = useTypedString(dayLabel, 40, 180);
 
@@ -157,7 +157,7 @@ export function Lessons({ onNavigate }: LessonsProps) {
               maxWidth: 16 * 38,
             }}
           >
-            Lessons.
+            Subjects.
           </h1>
 
           <p

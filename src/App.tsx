@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
-import { Lessons } from './screens/Lessons';
+import { Subjects } from './screens/Subjects';
 import { WalkthroughCourse } from './screens/WalkthroughCourse';
 import { TopicScreen } from './screens/Topic';
 import { History } from './screens/History';
@@ -36,8 +36,8 @@ function pageKey(route: Route): string {
 
 function escapeTarget(route: Route): Route | null {
   if (route.name === 'topic') return { name: 'walkthrough', courseId: route.courseId };
-  if (route.name === 'walkthrough') return { name: 'lessons' };
-  if (route.name === 'lessons') return { name: 'home' };
+  if (route.name === 'walkthrough') return { name: 'subjects' };
+  if (route.name === 'subjects') return { name: 'home' };
   if (route.name === 'history') return { name: 'settings' };
   if (route.name === 'settings') return { name: 'home' };
   if (route.name === 'exams') return { name: 'walkthrough', courseId: route.courseId };
@@ -86,7 +86,7 @@ function MathIQApp() {
       <Header route={route} onNavigate={setRoute} />
       <Page routeKey={pageKey(route)}>
         {route.name === 'home'        && <Landing onNavigate={setRoute} />}
-        {route.name === 'lessons'     && <Lessons onNavigate={setRoute} />}
+        {route.name === 'subjects'    && <Subjects onNavigate={setRoute} />}
         {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={setRoute} />}
         {route.name === 'topic'       && <TopicScreen courseId={route.courseId} topicId={route.topicId} initialProblem={route.problem} onNavigate={setRoute} />}
         {route.name === 'history'     && <History onNavigate={setRoute} />}

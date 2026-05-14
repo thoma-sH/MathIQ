@@ -385,10 +385,10 @@ export function Landing({ onNavigate }: LandingProps) {
                 lineHeight: 1.5,
               }}
             >
-              Couldn't place that one — try rephrasing, or browse{' '}
+              Couldn't place that one — try rephrasing, or{' '}
               <button
                 type="button"
-                onClick={() => onNavigate({ name: 'lessons' })}
+                onClick={() => onNavigate({ name: 'subjects' })}
                 style={{
                   background: 'transparent',
                   border: 'none',
@@ -400,7 +400,7 @@ export function Landing({ onNavigate }: LandingProps) {
                   fontSize: 'inherit',
                 }}
               >
-                Lessons
+                pick a subject
               </button>{' '}
               instead.
             </p>
@@ -425,13 +425,13 @@ export function Landing({ onNavigate }: LandingProps) {
       >
         <button
           type="button"
-          onClick={() => onNavigate({ name: 'lessons' })}
+          onClick={() => onNavigate({ name: 'subjects' })}
           className="landing-cta-card"
         >
           <span className="cta-kicker">Explore</span>
-          <span className="cta-title">Browse Lessons</span>
+          <span className="cta-title">Pick a subject</span>
           <span className="cta-sub">
-            Eight college courses, walked through one line at a time.
+            Nine college subjects, walked through one line at a time.
           </span>
           <span className="cta-arrow" aria-hidden>→</span>
         </button>

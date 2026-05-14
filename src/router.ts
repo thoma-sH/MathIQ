@@ -1,12 +1,12 @@
 /**
- * Routes: landing (home), course picker (lessons), course detail
+ * Routes: landing (home), course picker (subjects), course detail
  * (walkthrough), topic detail, history, settings, and exam mode (Pro).
  */
 export type ExamId = 'exam1' | 'exam2' | 'exam3' | 'final';
 
 export type Route =
   | { name: 'home' }
-  | { name: 'lessons' }
+  | { name: 'subjects' }
   | { name: 'walkthrough'; courseId: string }
   | { name: 'topic'; courseId: string; topicId: string; problem?: string }
   | { name: 'history' }
