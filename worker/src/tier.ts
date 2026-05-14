@@ -4,8 +4,8 @@
  * Identifiers:
  *   'anonymous' — not signed in
  *   'free'      — signed in, no paid plan
- *   'plus'      — MathIQ+   ($7.99/mo or $4.99/mo annual): 20 Opus + 50 Sonnet daily
- *   'pro'       — MathIQ Pro ($29.99/mo or $19.99/mo annual): 70 Opus daily
+ *   'plus'      — MathIQ+   ($7.99/mo or $3.99/mo annual): 15 Opus + 40 Sonnet daily
+ *   'pro'       — MathIQ Pro ($19.99/mo or $8.99/mo annual): 40 Opus daily
  *
  * Resolution order:
  *   1. Anonymous if not signed in.
@@ -61,9 +61,9 @@ export interface TierDecision {
 
 const ANONYMOUS_LIMIT = 1;
 const FREE_LIMIT = 5;
-const PLUS_OPUS_LIMIT = 20;
-const PLUS_TOTAL_LIMIT = 70;
-const PRO_LIMIT = 70;
+const PLUS_OPUS_LIMIT = 15;
+const PLUS_TOTAL_LIMIT = 55;
+const PRO_LIMIT = 40;
 
 const HAIKU: ModelKey = { provider: 'anthropic', id: 'claude-haiku-4-5' };
 const OPUS: ModelKey = { provider: 'anthropic', id: 'claude-opus-4-6' };
@@ -85,7 +85,7 @@ export function decideTier(tier: Tier, alreadyUsedToday: number): TierDecision {
     };
   }
   if (tier === 'pro') {
-    // MathIQ Pro: 70 Opus calls daily, no degradation.
+    // MathIQ Pro: 40 Opus calls daily, no degradation.
     return {
       ceiling: PRO_LIMIT,
       model: alreadyUsedToday < PRO_LIMIT ? OPUS : null,
@@ -93,7 +93,7 @@ export function decideTier(tier: Tier, alreadyUsedToday: number): TierDecision {
       premiumAllotment: PRO_LIMIT,
     };
   }
-  // MathIQ+ ('plus'): 20 Opus then 50 Sonnet, total 70.
+  // MathIQ+ ('plus'): 15 Opus then 40 Sonnet, total 55.
   if (alreadyUsedToday < PLUS_OPUS_LIMIT) {
     return {
       ceiling: PLUS_TOTAL_LIMIT,

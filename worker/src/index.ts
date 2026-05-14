@@ -1571,8 +1571,37 @@ async function handleHomeworkLatexPdf(
     );
   }
 
-  // Compile the .mmd → .tex → PDF. No counter increment — this is a
-  // follow-up render of an already-billed transcription, not a new OCR.
+  const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined;
+
+  // Cache keyed by hashed (mmd + title). Identical re-renders are free
+  // (no Claude call, no slot charged). Editing the homework changes the
+  // mmd → cache miss → fresh call → fresh slot.
+  const cacheKey = await latexCacheKey(record.mmd, title);
+  const cacheKvKey = `latex:user:${authState.userId}:${body.hwId}:${cacheKey}`;
+  const cached = await env.USAGE.get(cacheKvKey);
+  if (cached) {
+    return json({ pdfBase64: cached }, 200, cors);
+  }
+
+  // First render for this (hwId, mmd, title) — counts as 1 Pro slot.
+  const counter = userCounter(env.USAGE_DO, authState.userId);
+  const usedToday = await peek(counter);
+  const decision = decideTier(tier, usedToday);
+  if (decision.model === null) {
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've used all ${decision.ceiling} Pro slots today.`,
+        limit: decision.ceiling,
+        used: usedToday,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      { ...cors, ...buildRateLimitHeaders(tier, usedToday, decision) },
+    );
+  }
+
+  // Compile the .mmd → .tex → PDF.
   //
   // Primary path: ask Claude to convert the cleaned .mmd to publication-
   // quality LaTeX. This produces proper enumerate/section environments,
@@ -1580,9 +1609,8 @@ async function handleHomeworkLatexPdf(
   //
   // Fallback path: the hand-rolled mmdToTex + wrapTexSource if Claude's
   // call fails or returns malformed output. Less polished but reliable.
-  const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined;
-
   let tex: string;
+  let claudeSucceeded = false;
   const latexGen = await generateLatexFromMmd({
     apiKey: env.ANTHROPIC_API_KEY,
     mmd: record.mmd,
@@ -1590,6 +1618,7 @@ async function handleHomeworkLatexPdf(
   });
   if (latexGen.ok && latexGen.tex) {
     tex = latexGen.tex;
+    claudeSucceeded = true;
   } else {
     if (latexGen.detail) {
       console.error('[homework-latex] Claude generation failed, falling back to mmdToTex:', latexGen.detail);
@@ -1613,7 +1642,31 @@ async function handleHomeworkLatexPdf(
     );
   }
 
-  return json({ pdfBase64: result.pdfBase64 }, 200, cors);
+  // Only charge a slot when Claude actually ran. Fallback path used the
+  // hand-rolled converter — no Anthropic spend, so no slot charged.
+  let postCount = usedToday;
+  let postDecision = decision;
+  if (claudeSucceeded) {
+    postCount = await increment(counter);
+    postDecision = decideTier(tier, postCount);
+    // 7-day TTL — long enough that a student revisiting their homework
+    // later in the week still gets a free re-render.
+    await env.USAGE.put(cacheKvKey, result.pdfBase64, { expirationTtl: 7 * 24 * 60 * 60 });
+  }
+
+  return json(
+    { pdfBase64: result.pdfBase64 },
+    200,
+    { ...cors, ...buildRateLimitHeaders(tier, postCount, postDecision) },
+  );
+}
+
+async function latexCacheKey(mmd: string, title: string | undefined): Promise<string> {
+  const enc = new TextEncoder().encode(`${mmd} ${title ?? ''}`);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function validatePriceConfig(env: Env): string | null {

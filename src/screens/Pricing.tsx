@@ -46,15 +46,15 @@ const FEATURES: FeatureRow[] = [
     label: 'Daily walkthroughs',
     detail: 'Type a problem; Iris walks you through every move',
     free: '5 / day',
-    plus: '70 / day',
-    pro: '70 / day',
+    plus: '55 / day',
+    pro: '40 / day',
   },
   {
     label: 'Premium model',
     detail: 'Claude Opus 4.6 — best for hard problems',
     free: false,
-    plus: '20 / day',
-    pro: '70 / day',
+    plus: '15 / day',
+    pro: '40 / day',
   },
   {
     label: 'Why & how reflection',
@@ -279,7 +279,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.plus[interval].sub}
           blurb="The premium model, photo input, why-how, and Handwritten to PDF."
           highlights={[
-            '70 walkthroughs / day (20 on Opus, 50 on Sonnet)',
+            '55 walkthroughs / day (15 on Opus, 40 on Sonnet)',
             'Why & how reflection',
             'Photo input',
             'Handwritten to PDF',
@@ -300,7 +300,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.pro[interval].sub}
           blurb="Everything in Plus, plus LaTeX Mode, Exam Mode, and grading."
           highlights={[
-            '70 Opus walkthroughs / day (no degradation)',
+            '40 Opus walkthroughs / day (no degradation)',
             'LaTeX Mode — typeset PDFs',
             'Exam Mode — generate full exams',
             'Exam grading',

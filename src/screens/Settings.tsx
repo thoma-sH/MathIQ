@@ -503,8 +503,8 @@ const PLAN_PRICES: Record<BillingTier, Record<Interval, { display: string; tagli
 };
 
 const PLAN_BLURBS: Record<BillingTier, string> = {
-  plus: '20 Opus 4.6 walkthroughs, then 50 Sonnet 4.6. Why & how on every step.',
-  pro: '70 Opus 4.6 walkthroughs daily, no degradation. Why & how on every step.',
+  plus: '15 Opus 4.6 walkthroughs, then 40 Sonnet 4.6. Why & how on every step.',
+  pro: '40 Opus 4.6 walkthroughs daily, no degradation. Why & how on every step.',
 };
 
 const PLAN_LABELS: Record<BillingTier, string> = {
