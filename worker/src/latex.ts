@@ -361,7 +361,9 @@ export async function generateLatexFromMmd(params: {
     body: JSON.stringify({
       model: LATEX_MODEL,
       max_tokens: 8192,
-      system: LATEX_GENERATION_PROMPT,
+      system: [
+        { type: 'text', text: LATEX_GENERATION_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
       messages: [
         {
           role: 'user',
