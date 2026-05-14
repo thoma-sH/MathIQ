@@ -51,8 +51,17 @@ export interface TranscribeResult {
 const ALLOWED_MEDIA = new Set([
   'application/pdf',
   'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+  // iOS default photo format. We re-encode to JPEG in the canvas pipeline
+  // before sending, so Mathpix never sees raw HEIC.
+  'image/heic', 'image/heif',
 ]);
 const MAX_BYTES = 15 * 1024 * 1024;
+
+// Mathpix /v3/text caps at ~5000px on the long edge. iPhone Pro cameras
+// can shoot above that. Resize anything past this threshold so Mathpix
+// always sees a decodable image.
+const MAX_IMAGE_LONG_EDGE = 4000;
+const RESIZE_JPEG_QUALITY = 0.85;
 
 /** iOS Safari sometimes hands back a File with empty `type` for items
  *  picked from Files.app. Fall back to the filename extension. */
@@ -63,10 +72,12 @@ function inferMediaType(file: File): string {
   if (ext === 'png') return 'image/png';
   if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
   if (ext === 'webp') return 'image/webp';
+  if (ext === 'heic') return 'image/heic';
+  if (ext === 'heif') return 'image/heif';
   return '';
 }
 
-function fileToBase64(file: File): Promise<string> {
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new HomeworkError('other', 'Failed to read the file.'));
@@ -75,8 +86,98 @@ function fileToBase64(file: File): Promise<string> {
       const commaIdx = url.indexOf(',');
       resolve(commaIdx >= 0 ? url.slice(commaIdx + 1) : url);
     };
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
+}
+
+/**
+ * Decode an image File using the most EXIF-aware path available. The
+ * iPhone landscape-flag problem (photo bytes are landscape, EXIF says
+ * "rotate 90°") only resolves correctly when the decoder honours the
+ * orientation tag — `createImageBitmap` with `imageOrientation: 'from-image'`
+ * does, and modern Safari/Chrome's `<img>` element does by default since
+ * around 2020. We try the bitmap path first because it's also the only one
+ * that gives us a deterministic ImageBitmap (no layout-side effects).
+ */
+async function decodeImage(file: File): Promise<ImageBitmap | HTMLImageElement> {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+      // Some older Safari builds throw on the option, and some decoders
+      // (HEIC on certain iOS versions) bail here. Fall through to <img>.
+    }
+  }
+  return loadViaImgElement(file);
+}
+
+function loadViaImgElement(file: File): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(
+        new HomeworkError(
+          'bad_request',
+          "Couldn't read that image. Try a JPEG or PNG photo.",
+        ),
+      );
+    };
+    img.src = url;
+  });
+}
+
+/**
+ * Normalize a homework upload before it hits Mathpix.
+ *
+ *  - PDFs pass through (Mathpix's /v3/pdf endpoint has its own dimension
+ *    handling and accepts the file directly).
+ *  - Images are decoded with EXIF orientation applied, downscaled to
+ *    {@link MAX_IMAGE_LONG_EDGE} if larger, and re-encoded as JPEG. The
+ *    re-encode also strips the EXIF rotation tag — pixels are already in
+ *    display-orientation, so Mathpix sees them right-way-up regardless of
+ *    whether it honours EXIF.
+ *
+ * Returns the (possibly rewritten) blob and the media type to advertise
+ * to the worker. Images always come back as `image/jpeg` so callers can
+ * stop caring about HEIC/HEIF/PNG/WebP source formats.
+ */
+async function prepareImageForUpload(file: File): Promise<{ blob: Blob; mediaType: string }> {
+  if (file.type === 'application/pdf') {
+    return { blob: file, mediaType: 'application/pdf' };
+  }
+
+  const source = await decodeImage(file);
+  const sourceW = 'naturalWidth' in source ? source.naturalWidth : source.width;
+  const sourceH = 'naturalHeight' in source ? source.naturalHeight : source.height;
+  const longEdge = Math.max(sourceW, sourceH);
+  const scale = longEdge > MAX_IMAGE_LONG_EDGE ? MAX_IMAGE_LONG_EDGE / longEdge : 1;
+  const targetW = Math.max(1, Math.round(sourceW * scale));
+  const targetH = Math.max(1, Math.round(sourceH * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new HomeworkError('other', 'Your browser cannot prepare images for upload.');
+  }
+  ctx.drawImage(source, 0, 0, targetW, targetH);
+
+  if ('close' in source) source.close();
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, 'image/jpeg', RESIZE_JPEG_QUALITY);
+  });
+  if (!blob) {
+    throw new HomeworkError('other', 'Failed to encode the photo for upload.');
+  }
+  return { blob, mediaType: 'image/jpeg' };
 }
 
 interface TranscribeOpts {
@@ -85,11 +186,11 @@ interface TranscribeOpts {
 }
 
 export async function transcribeHomework(opts: TranscribeOpts): Promise<TranscribeResult> {
-  const mediaType = inferMediaType(opts.file);
-  if (!ALLOWED_MEDIA.has(mediaType)) {
+  const inputMediaType = inferMediaType(opts.file);
+  if (!ALLOWED_MEDIA.has(inputMediaType)) {
     throw new HomeworkError(
       'bad_request',
-      'Use a PDF or a JPEG/PNG/WebP photo of your work.',
+      'Use a PDF or a JPEG/PNG/WebP/HEIC photo of your work.',
     );
   }
   if (opts.file.size > MAX_BYTES) {
@@ -99,7 +200,8 @@ export async function transcribeHomework(opts: TranscribeOpts): Promise<Transcri
     );
   }
 
-  const base64 = await fileToBase64(opts.file);
+  const { blob, mediaType } = await prepareImageForUpload(opts.file);
+  const base64 = await blobToBase64(blob);
   const token = await opts.getToken();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
