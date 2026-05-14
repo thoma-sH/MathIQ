@@ -408,67 +408,45 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </div>
 
-      {/* Pitch + secondary CTA — fade back when the search has focus */}
+      {/* Secondary CTAs — fade back when the search has focus */}
       <div
+        className="reveal reveal-5"
         style={{
+          marginTop: 'clamp(40px, 8vh, 72px)',
           display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 12,
+          justifyContent: 'center',
+          width: '100%',
+          maxWidth: 640,
           opacity: expanded ? 0.35 : 1,
           transition: 'opacity 240ms ease-out',
         }}
       >
-        <p
-          className="reveal reveal-4"
-          style={{
-            marginTop: 'clamp(40px, 8vh, 72px)',
-            fontSize: 17,
-            color: T.muted,
-            lineHeight: 1.55,
-            maxWidth: 520,
-          }}
-        >
-          Iris reads your problem, routes it to the right technique, and walks you through every move — not just the answer.
-        </p>
-
         <button
           type="button"
           onClick={() => onNavigate({ name: 'lessons' })}
-          className="reveal reveal-5 btn-press"
-          style={{
-            marginTop: 28,
-            background: 'transparent',
-            border: 'none',
-            padding: '4px 8px',
-            fontFamily: T.mono,
-            fontSize: 12,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            color: T.muted,
-            cursor: 'pointer',
-          }}
+          className="landing-cta-card"
         >
-          or browse Lessons →
+          <span className="cta-kicker">Explore</span>
+          <span className="cta-title">Browse Lessons</span>
+          <span className="cta-sub">
+            Eight college courses, walked through one line at a time.
+          </span>
+          <span className="cta-arrow" aria-hidden>→</span>
         </button>
 
         <button
           type="button"
           onClick={onHomeworkClick}
-          className="reveal reveal-5 btn-press"
-          style={{
-            marginTop: 8,
-            background: 'transparent',
-            border: 'none',
-            padding: '4px 8px',
-            fontFamily: T.mono,
-            fontSize: 12,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            color: T.muted,
-            cursor: 'pointer',
-          }}
+          className="landing-cta-card"
         >
-          Handwritten to PDF · LaTeX Mode →
+          <span className="cta-kicker">Plus · Pro</span>
+          <span className="cta-title">Handwritten to PDF · LaTeX Mode</span>
+          <span className="cta-sub">
+            Snap your work. Pro adds a typeset LaTeX render.
+          </span>
+          <span className="cta-arrow" aria-hidden>→</span>
         </button>
       </div>
 

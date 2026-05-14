@@ -79,6 +79,100 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   );
 }
 
+/* ─── Landing CTA cards (Browse Lessons / Handwritten to PDF) ──────── */
+.landing-cta-card {
+  flex: 1 1 280px;
+  min-width: 260px;
+  max-width: 320px;
+  background: transparent;
+  border: 1px solid var(--hair);
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto;
+  column-gap: 14px;
+  row-gap: 4px;
+  align-items: center;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink);
+  text-align: left;
+  transition:
+    border-color 220ms var(--ease-out-quart),
+    background 220ms var(--ease-out-quart),
+    transform 260ms var(--ease-out-expo);
+}
+.landing-cta-card:hover {
+  border-color: var(--ink);
+  background: var(--paper-2);
+  transform: translateY(-1px);
+}
+.landing-cta-card:active {
+  transform: translateY(0);
+}
+.landing-cta-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--ink);
+}
+.landing-cta-card .cta-kicker {
+  grid-column: 1;
+  grid-row: 1;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  transition: color 200ms;
+}
+.landing-cta-card:hover .cta-kicker {
+  color: var(--accent);
+}
+.landing-cta-card .cta-title {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.landing-cta-card .cta-sub {
+  grid-column: 1;
+  grid-row: 3;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.landing-cta-card .cta-arrow {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  font-size: 22px;
+  color: var(--muted);
+  align-self: center;
+  display: inline-block;
+  transition:
+    transform 260ms var(--ease-out-expo),
+    color 200ms;
+}
+.landing-cta-card:hover .cta-arrow {
+  transform: translateX(6px);
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-cta-card,
+  .landing-cta-card .cta-arrow,
+  .landing-cta-card .cta-kicker {
+    transition: none;
+  }
+  .landing-cta-card:hover {
+    transform: none;
+  }
+  .landing-cta-card:hover .cta-arrow {
+    transform: none;
+  }
+}
+
 /* ─── Disclosure cards (per-problem grading breakdown) ─────────────── */
 .disclosure {
   transition: background-color 180ms var(--ease-out-quart);
