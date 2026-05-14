@@ -6,7 +6,7 @@ A guided AI tutor for nine college math courses. Iris (the tutor) reads your
 problem, picks the right technique, and walks through every move — not just
 the answer.
 
-**Live**: [math-iq.vercel.app](https://math-iq.vercel.app/)
+**Live**: [mathiq.io](https://mathiq.io/)
 
 ---
 

@@ -303,7 +303,7 @@ function ExamPrintHost({ record }: { record: ExamRecord }) {
             <div className="exam-workspace" aria-hidden></div>
           </section>
         ))}
-        <div className="print-footer">MathIQ · math-iq.vercel.app · Exam {record.examId}</div>
+        <div className="print-footer">MathIQ · mathiq.io · Exam {record.examId}</div>
       </article>
     </div>,
     document.body,

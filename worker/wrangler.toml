@@ -29,7 +29,7 @@ new_sqlite_classes = ["UsageCounter"]
 
 [vars]
 # Allowed origins for CORS. Comma-separated.
-ALLOWED_ORIGINS = "https://math-iq.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:5175"
+ALLOWED_ORIGINS = "https://mathiq.io,https://www.mathiq.io,https://math-iq.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:5175"
 
 # Clerk publishable key — safe to commit (client-visible by design).
 # After Clerk setup, paste your `pk_test_...` or `pk_live_...` here.
@@ -52,6 +52,6 @@ STRIPE_PRICE_PRO_ANNUAL   = "price_1TW78YHJHOfcH2xm35zn1EKi"
 
 # Where Stripe redirects after Checkout success/cancel and Portal exit.
 # Use your client origin + the Settings route.
-STRIPE_SUCCESS_URL       = "https://math-iq.vercel.app/?billing=success"
-STRIPE_CANCEL_URL        = "https://math-iq.vercel.app/?billing=cancelled"
-STRIPE_PORTAL_RETURN_URL = "https://math-iq.vercel.app/"
+STRIPE_SUCCESS_URL       = "https://mathiq.io/?billing=success"
+STRIPE_CANCEL_URL        = "https://mathiq.io/?billing=cancelled"
+STRIPE_PORTAL_RETURN_URL = "https://mathiq.io/"

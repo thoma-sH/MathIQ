@@ -713,7 +713,7 @@ function HomeworkPrintHost({ mmd, title }: { mmd: string; title: string }) {
             {mmd}
           </ReactMarkdown>
         </div>
-        <div className="print-footer">MathIQ · math-iq.vercel.app</div>
+        <div className="print-footer">MathIQ · mathiq.io</div>
       </article>
     </div>,
     document.body,

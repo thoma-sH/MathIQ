@@ -235,7 +235,7 @@ function PrintHost({ record }: { record: HistoryRecord }) {
             {record.walkthrough}
           </ReactMarkdown>
         </div>
-        <div className="print-footer">MathIQ · math-iq.vercel.app</div>
+        <div className="print-footer">MathIQ · mathiq.io</div>
       </article>
     </div>,
     document.body,
