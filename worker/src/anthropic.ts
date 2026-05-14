@@ -75,10 +75,17 @@ export async function callAnthropicStream(
     signal,
   } = params;
   // why-how is bounded by the prompt at "2-4 short paragraphs" (~1-1.5K
-  // tokens). Capping at 2048 leaves headroom for unusually dense steps
-  // without paying for 8K of slack the model can't fill anyway.
+  // tokens). Haiku (anonymous + free tiers) almost never fills more than
+  // 3-4K on a single walkthrough; capping at 4096 halves worst-case free
+  // COGS, and a truncation here is the natural moment to upgrade. Opus and
+  // Sonnet (paid) keep the full 8192 budget for dense walkthroughs.
   const maxTokens =
-    params.maxTokens ?? (action === 'why-how' ? 2048 : 8192);
+    params.maxTokens ??
+    (action === 'why-how'
+      ? 2048
+      : model === 'claude-haiku-4-5'
+        ? 4096
+        : 8192);
 
   const problemText = problem?.trim() || topic.exampleProblem;
   const initialUserText = problem
