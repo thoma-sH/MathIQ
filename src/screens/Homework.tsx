@@ -42,6 +42,7 @@ type Resolution =
   | { kind: 'edited'; value: string };
 
 type Mode = 'plain' | 'latex';
+type OutputKind = 'formatted' | 'raw';
 
 type LatexState =
   | { kind: 'idle' }
@@ -55,6 +56,7 @@ export function Homework({ onNavigate }: HomeworkProps) {
   const [tier, setTier] = useState<Tier | null>(null);
   const [tierLoaded, setTierLoaded] = useState(false);
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
+  const [output, setOutput] = useState<OutputKind>('formatted');
   const [mode, setMode] = useState<Mode>('plain');
   const [latex, setLatex] = useState<LatexState>({ kind: 'idle' });
   const [printing, setPrinting] = useState(false);
@@ -196,11 +198,18 @@ export function Homework({ onNavigate }: HomeworkProps) {
       </p>
 
       {state.kind === 'idle' && (
-        <IdleCard
-          fileInputRef={fileInputRef}
-          onChoose={() => fileInputRef.current?.click()}
-          onFile={onFile}
-        />
+        <>
+          <OutputToggle output={output} onChange={setOutput} />
+          {output === 'formatted' ? (
+            <IdleCard
+              fileInputRef={fileInputRef}
+              onChoose={() => fileInputRef.current?.click()}
+              onFile={onFile}
+            />
+          ) : (
+            <RawUploadCard />
+          )}
+        </>
       )}
 
       {state.kind === 'transcribing' && <TranscribingCard />}
@@ -322,6 +331,504 @@ function IdleCard({
       </p>
     </section>
   );
+}
+
+function OutputToggle({
+  output,
+  onChange,
+}: {
+  output: OutputKind;
+  onChange: (o: OutputKind) => void;
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: T.mono,
+          letterSpacing: '0.14em',
+          color: T.muted,
+          textTransform: 'uppercase',
+          marginBottom: 8,
+        }}
+      >
+        Output
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <OutputChip
+          active={output === 'formatted'}
+          onClick={() => onChange('formatted')}
+          label="Formatted"
+          sublabel="Iris transcribes + typesets"
+        />
+        <OutputChip
+          active={output === 'raw'}
+          onClick={() => onChange('raw')}
+          label="Raw scan"
+          sublabel="Photos → PDF, no AI"
+        />
+      </div>
+    </div>
+  );
+}
+
+function OutputChip({
+  active,
+  onClick,
+  label,
+  sublabel,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  sublabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="btn-press"
+      style={{
+        flex: 1,
+        background: active ? T.ink : 'transparent',
+        color: active ? T.paper : T.ink,
+        border: `1px solid ${T.ink}`,
+        padding: '10px 14px',
+        textAlign: 'left',
+        cursor: 'pointer',
+        fontFamily: T.sans,
+      }}
+    >
+      <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 11, fontFamily: T.mono, letterSpacing: '0.06em', opacity: 0.75 }}>
+        {sublabel}
+      </div>
+    </button>
+  );
+}
+
+interface RawPage {
+  id: string;
+  file: File;
+  objectUrl: string;
+}
+
+function RawUploadCard() {
+  const [pages, setPages] = useState<RawPage[]>([]);
+  const [title, setTitle] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Revoke object URLs on unmount so the browser releases memory.
+  useEffect(() => {
+    return () => {
+      pages.forEach((p) => URL.revokeObjectURL(p.objectUrl));
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function addFiles(files: FileList | null) {
+    if (!files) return;
+    const next: RawPage[] = [];
+    for (const f of Array.from(files)) {
+      if (!f.type.startsWith('image/')) continue;
+      next.push({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        file: f,
+        objectUrl: URL.createObjectURL(f),
+      });
+    }
+    if (next.length === 0) {
+      setError('Pick image files (JPG, PNG, WebP, or HEIC).');
+      return;
+    }
+    setError(null);
+    setPages((p) => [...p, ...next]);
+    // Default title from the first file if user hasn't set one.
+    if (!title && next[0]) {
+      const cleaned = next[0].file.name
+        .replace(/\.(jpe?g|png|webp|heic)$/i, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .trim();
+      setTitle(cleaned || 'Homework');
+    }
+  }
+
+  function removePage(id: string) {
+    setPages((p) => {
+      const target = p.find((x) => x.id === id);
+      if (target) URL.revokeObjectURL(target.objectUrl);
+      return p.filter((x) => x.id !== id);
+    });
+  }
+
+  function movePage(id: string, dir: -1 | 1) {
+    setPages((p) => {
+      const idx = p.findIndex((x) => x.id === id);
+      if (idx < 0) return p;
+      const swap = idx + dir;
+      if (swap < 0 || swap >= p.length) return p;
+      const next = [...p];
+      [next[idx], next[swap]] = [next[swap], next[idx]];
+      return next;
+    });
+  }
+
+  async function generate() {
+    if (pages.length === 0) return;
+    setError(null);
+    setGenerating(true);
+    try {
+      // Dynamic import keeps jspdf out of the initial bundle.
+      const { jsPDF } = await import('jspdf');
+      const doc = new jsPDF({ format: 'letter', unit: 'pt', compress: true });
+      // Letter page is 612pt × 792pt; reserve 0.5in margin on each side.
+      const pageW = 612;
+      const pageH = 792;
+      const margin = 36;
+      const usableW = pageW - 2 * margin;
+      const usableH = pageH - 2 * margin;
+
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        const dataUrl = await fileToDataUrl(page.file);
+        const dims = await imageDims(dataUrl);
+        // Fit image into usable area, preserving aspect ratio.
+        const scale = Math.min(usableW / dims.w, usableH / dims.h);
+        const drawW = dims.w * scale;
+        const drawH = dims.h * scale;
+        const x = (pageW - drawW) / 2;
+        const y = (pageH - drawH) / 2;
+        if (i > 0) doc.addPage();
+        const fmt = page.file.type === 'image/png' ? 'PNG' : 'JPEG';
+        doc.addImage(dataUrl, fmt, x, y, drawW, drawH);
+      }
+
+      const filename = (title.trim() || 'Homework').replace(/[^a-z0-9 _.-]/gi, '') + '.pdf';
+      doc.save(filename);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'PDF generation failed');
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <section
+      style={{
+        padding: '20px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+      }}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp,image/heic"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          addFiles(e.target.files);
+          if (e.target) e.target.value = '';
+        }}
+      />
+
+      {pages.length === 0 ? (
+        <>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="btn-press chamfer"
+            style={{
+              background: T.accent,
+              color: T.paper,
+              border: 'none',
+              padding: '12px 22px',
+              fontSize: 15,
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: T.sans,
+            }}
+          >
+            Pick photos →
+          </button>
+          <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
+            Snap each page of your handwritten work. We'll combine them into a
+            single PDF you can submit — no AI, no transcription, just your
+            actual work. Pick multiple files at once or add them one at a time.
+          </p>
+        </>
+      ) : (
+        <>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'baseline',
+              marginBottom: 12,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontFamily: T.mono,
+                letterSpacing: '0.14em',
+                color: T.muted,
+                textTransform: 'uppercase',
+              }}
+            >
+              {pages.length} page{pages.length === 1 ? '' : 's'}
+            </div>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="btn-press"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                fontSize: 12,
+                fontFamily: T.mono,
+                letterSpacing: '0.06em',
+                color: T.accent,
+                cursor: 'pointer',
+              }}
+            >
+              + Add more
+            </button>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: 10,
+              marginBottom: 16,
+            }}
+          >
+            {pages.map((p, i) => (
+              <PageThumbnail
+                key={p.id}
+                page={p}
+                index={i}
+                total={pages.length}
+                onMoveUp={() => movePage(p.id, -1)}
+                onMoveDown={() => movePage(p.id, 1)}
+                onRemove={() => removePage(p.id)}
+              />
+            ))}
+          </div>
+
+          <label
+            style={{
+              display: 'block',
+              fontSize: 11,
+              fontFamily: T.mono,
+              letterSpacing: '0.14em',
+              color: T.muted,
+              textTransform: 'uppercase',
+              marginBottom: 6,
+            }}
+          >
+            Filename
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Homework"
+            style={{
+              width: '100%',
+              background: T.paper,
+              border: `1px solid ${T.ink}`,
+              padding: '8px 12px',
+              fontSize: 14,
+              fontFamily: T.sans,
+              color: T.ink,
+              marginBottom: 14,
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => void generate()}
+            disabled={generating}
+            className="btn-press chamfer"
+            style={{
+              background: T.accent,
+              color: T.paper,
+              border: 'none',
+              padding: '12px 22px',
+              fontSize: 15,
+              fontWeight: 600,
+              cursor: generating ? 'wait' : 'pointer',
+              fontFamily: T.sans,
+              opacity: generating ? 0.7 : 1,
+            }}
+          >
+            {generating ? 'Building PDF…' : 'Generate PDF →'}
+          </button>
+        </>
+      )}
+
+      {error && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 12,
+            padding: '8px 12px',
+            border: `1px solid ${T.ink}`,
+            background: T.paper,
+            fontSize: 13,
+            fontFamily: T.mono,
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PageThumbnail({
+  page,
+  index,
+  total,
+  onMoveUp,
+  onMoveDown,
+  onRemove,
+}: {
+  page: RawPage;
+  index: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        border: `1px solid ${T.ink}`,
+        background: T.paper,
+        overflow: 'hidden',
+      }}
+    >
+      <img
+        src={page.objectUrl}
+        alt={`Page ${index + 1}`}
+        style={{
+          width: '100%',
+          height: 160,
+          objectFit: 'cover',
+          display: 'block',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          top: 6,
+          left: 6,
+          background: T.ink,
+          color: T.paper,
+          padding: '2px 8px',
+          fontSize: 11,
+          fontFamily: T.mono,
+          letterSpacing: '0.04em',
+        }}
+      >
+        {index + 1}
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label="Remove page"
+        className="btn-press"
+        style={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          background: T.paper,
+          color: T.ink,
+          border: `1px solid ${T.ink}`,
+          width: 24,
+          height: 24,
+          padding: 0,
+          fontSize: 14,
+          lineHeight: 1,
+          cursor: 'pointer',
+        }}
+      >
+        ×
+      </button>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          padding: 4,
+          borderTop: `1px solid ${T.hair}`,
+        }}
+      >
+        <button
+          type="button"
+          onClick={onMoveUp}
+          disabled={index === 0}
+          aria-label="Move page up"
+          className="btn-press"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: '2px 8px',
+            fontSize: 14,
+            cursor: index === 0 ? 'default' : 'pointer',
+            color: index === 0 ? T.muted : T.ink,
+            opacity: index === 0 ? 0.4 : 1,
+          }}
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          onClick={onMoveDown}
+          disabled={index === total - 1}
+          aria-label="Move page down"
+          className="btn-press"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: '2px 8px',
+            fontSize: 14,
+            cursor: index === total - 1 ? 'default' : 'pointer',
+            color: index === total - 1 ? T.muted : T.ink,
+            opacity: index === total - 1 ? 0.4 : 1,
+          }}
+        >
+          ↓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+    reader.onload = () => resolve(reader.result as string);
+    reader.readAsDataURL(file);
+  });
+}
+
+function imageDims(dataUrl: string): Promise<{ w: number; h: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => reject(new Error('Failed to load image dimensions'));
+    img.src = dataUrl;
+  });
 }
 
 /** Apply user resolutions to the cleaned transcription. Each accepted fix
@@ -924,7 +1431,9 @@ function LatexView({
           Compiling your LaTeX PDF…
         </div>
         <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.55 }}>
-          TeXLive.net is typesetting your work. This usually takes 10–20 seconds.
+          Two steps: Iris drafts a publication-quality LaTeX document from
+          your transcription, then TeXLive.net typesets it into a PDF.
+          Usually 20–40 seconds total.
         </div>
       </section>
     );

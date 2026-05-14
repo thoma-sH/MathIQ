@@ -58,7 +58,7 @@ import {
   newHomeworkId,
   type HomeworkRecord,
 } from './homework';
-import { mmdToTex, wrapTexSource, compileLatex } from './latex';
+import { mmdToTex, wrapTexSource, compileLatex, generateLatexFromMmd } from './latex';
 import { verifyAnswer } from './verify';
 import {
   generateExam,
@@ -1522,10 +1522,31 @@ async function handleHomeworkLatexPdf(
 
   // Compile the .mmd → .tex → PDF. No counter increment — this is a
   // follow-up render of an already-billed transcription, not a new OCR.
-  const texBody = mmdToTex(record.mmd);
-  const tex = wrapTexSource(texBody, {
-    title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined,
+  //
+  // Primary path: ask Claude to convert the cleaned .mmd to publication-
+  // quality LaTeX. This produces proper enumerate/section environments,
+  // preserved math, and overall "human typeset it" structure.
+  //
+  // Fallback path: the hand-rolled mmdToTex + wrapTexSource if Claude's
+  // call fails or returns malformed output. Less polished but reliable.
+  const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined;
+
+  let tex: string;
+  const latexGen = await generateLatexFromMmd({
+    apiKey: env.ANTHROPIC_API_KEY,
+    mmd: record.mmd,
+    title,
   });
+  if (latexGen.ok && latexGen.tex) {
+    tex = latexGen.tex;
+  } else {
+    if (latexGen.detail) {
+      console.error('[homework-latex] Claude generation failed, falling back to mmdToTex:', latexGen.detail);
+    }
+    const texBody = mmdToTex(record.mmd);
+    tex = wrapTexSource(texBody, { title });
+  }
+
   const result = await compileLatex(tex);
 
   if (!result.ok || !result.pdfBase64) {

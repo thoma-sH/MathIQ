@@ -224,6 +224,139 @@ ${titleBlock}${body}
 `;
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// Claude-based mmd → LaTeX conversion (the premium path)
+// ──────────────────────────────────────────────────────────────────────────
+
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+const LATEX_MODEL = 'claude-sonnet-4-6';
+
+const LATEX_GENERATION_PROMPT = `You are converting cleaned Mathpix Markdown of a student's handwritten math notes into a publication-quality LaTeX document. The output goes to pdflatex — it must compile cleanly the first time, no manual fixups.
+
+## What you receive
+
+A single body of Mathpix Markdown text. It has already been cleaned:
+- English typos already corrected
+- Section breaks already inserted as \`##\` / \`###\` markdown headers
+- Math wrapped in \`$...$\` (inline) and \`$$...$$\` (display) delimiters
+- Lists marked with \`1.\` or \`-\` (markdown style)
+
+You also receive a document title.
+
+## What you return
+
+A COMPLETE LaTeX document. The very first character must be \`\\\` (the backslash starting \`\\documentclass\`). The very last character must be \`}\` (the closing brace of \`\\end{document}\`). NO preamble like "Here is the LaTeX:". NO trailing prose. NO markdown code fences. Just the .tex source, raw.
+
+## Document structure
+
+\\documentclass[11pt]{article}
+% Required packages — assume nothing extra is installed
+\\usepackage[a4paper,margin=1in]{geometry}
+\\usepackage{amsmath,amssymb,amsfonts}
+\\usepackage{enumerate}
+\\usepackage{graphicx}
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{0.5em}
+% Optional but encouraged for nicer typography:
+\\usepackage{microtype}
+
+\\title{<the provided title, escaped>}
+\\date{}
+\\begin{document}
+\\maketitle
+
+<converted content>
+
+\\end{document}
+
+## Conversion rules
+
+- **Math content**: pass through EVERY \`$...$\` and \`$$...$$\` block unchanged. The math is the student's; the cleanup pass already validated it. Do not "improve" math, do not rewrite \`\\lim_{x \\to a}\` as \`\\lim_{x\\to a}\`, do not change which side of an equation a term is on. If the cleaned mmd has \`$\\lim_{x \\to a} f(x)$\` your output has \`$\\lim_{x \\to a} f(x)$\` byte-for-byte.
+- **Markdown headers**: \`## X\` → \`\\section*{X}\`, \`### X\` → \`\\subsection*{X}\`, \`#### X\` → \`\\subsubsection*{X}\`. Always starred so they're unnumbered (the student's notes aren't a real article).
+- **Ordered lists**: a run of \`1. item\` / \`2. item\` / etc. → \`\\begin{enumerate}\\item ... \\item ... \\end{enumerate}\`. Sequential items belong in ONE enumerate environment regardless of how many blank lines Mathpix put between them.
+- **Unordered lists**: \`-\` / \`*\` / \`+\` markers → \`\\begin{itemize}\\item ... \\end{itemize}\`.
+- **Inline emphasis**: \`**bold**\` → \`\\textbf{bold}\`, \`*italic*\` → \`\\textit{italic}\`, \`__bold__\` → \`\\textbf{bold}\`, \`_italic_\` → \`\\textit{italic}\`.
+- **Display equations** between paragraphs (\`$$...$$\` on its own line): keep as \`$$...$$\` OR upgrade to \`\\[...\\]\` — both compile.
+- **Multi-line aligned blocks** inside \`$$\` (using \`\\begin{aligned}\`): keep as-is. amsmath handles them.
+- **Special characters in text mode**: escape \`&\`, \`%\`, \`#\`, \`_\`, \`{\`, \`}\` outside math. Unicode arrows / Greek letters that appear OUTSIDE math should also stay literal — pdflatex with inputenc handles modern UTF-8 fine.
+- **Empty content**: if a section in the mmd has no body, still emit the section header — just leave the section empty.
+
+## Quality bar
+
+This output is the premium-tier promise. It should look like a competent grad student typeset it in Overleaf — proper environments, real LaTeX spacing, clean section structure. NOT like a mechanical Markdown → LaTeX dump.
+
+If the cleaned mmd is empty or unreadable, emit a minimal valid document with the title and an "(empty)" body. Never throw.`;
+
+/**
+ * Convert cleaned Mathpix Markdown to a complete LaTeX document via Claude.
+ * Premium-tier path — produces real typeset structure (enumerate, sections,
+ * theorem-style environments where applicable) instead of the mechanical
+ * 1:1 substitution our hand-rolled converter does.
+ *
+ * Returns `{ ok: true, tex: '...' }` on success. Callers should fall back
+ * to the hand-rolled `mmdToTex() + wrapTexSource()` path on any failure.
+ */
+export async function generateLatexFromMmd(params: {
+  apiKey: string;
+  mmd: string;
+  title?: string;
+}): Promise<{ ok: boolean; tex?: string; detail?: string }> {
+  const { apiKey, mmd, title } = params;
+
+  const resp = await fetch(ANTHROPIC_URL, {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: LATEX_MODEL,
+      max_tokens: 8192,
+      system: LATEX_GENERATION_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: `Title: ${title ?? 'Homework'}\n\nCleaned Mathpix Markdown:\n\n---\n${mmd}\n---\n\nReturn the complete LaTeX document only.`,
+        },
+      ],
+    }),
+  });
+
+  if (!resp.ok) {
+    const detail = (await resp.text().catch(() => '')).slice(0, 500);
+    return { ok: false, detail: `latex-gen http ${resp.status}: ${detail}` };
+  }
+
+  const data = (await resp.json()) as {
+    content?: Array<{ type: string; text?: string }>;
+    error?: { message?: string };
+  };
+  if (data.error) {
+    return { ok: false, detail: data.error.message ?? 'latex-gen error' };
+  }
+
+  const text = (data.content ?? [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text ?? '')
+    .join('')
+    .trim();
+  if (!text) return { ok: false, detail: 'latex-gen returned empty text' };
+
+  // Strip defensive prose: find the first \documentclass and the last
+  // \end{document}, trim to that. Tolerates any wrapping fences or
+  // commentary Claude might add despite the prompt's instructions.
+  const startIdx = text.indexOf('\\documentclass');
+  const endMarker = '\\end{document}';
+  const endIdx = text.lastIndexOf(endMarker);
+  if (startIdx < 0 || endIdx <= startIdx) {
+    return { ok: false, detail: 'latex-gen output missing \\documentclass or \\end{document}' };
+  }
+  const tex = text.slice(startIdx, endIdx + endMarker.length);
+
+  return { ok: true, tex };
+}
+
 /**
  * Submit a complete .tex source to TeXLive.net and get back the compiled
  * PDF as base64. Returns a structured result so the caller can show a
