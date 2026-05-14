@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { SignedOut, useAuth, useUser } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { getDailyContent } from '../state/dailyScribe';
 import { useTypedString } from '../state/useTypedString';
@@ -450,6 +450,14 @@ export function Landing({ onNavigate }: LandingProps) {
         </button>
       </div>
 
+      {/* Features showcase — only renders for the marketing audience
+       *  (signed-out users). Signed-in users already have access to
+       *  these via tile/route navigation; cluttering their home doesn't
+       *  add value. */}
+      <SignedOut>
+        <FeaturesShowcase />
+      </SignedOut>
+
       <footer
         style={{
           marginTop: 64,
@@ -461,8 +469,11 @@ export function Landing({ onNavigate }: LandingProps) {
           letterSpacing: '0.14em',
           textTransform: 'uppercase',
           color: T.muted,
+          flexWrap: 'wrap',
         }}
       >
+        <a href="/pricing" style={{ color: T.muted, textDecoration: 'none' }}>Pricing</a>
+        <span aria-hidden>·</span>
         <a href="/terms" style={{ color: T.muted, textDecoration: 'none' }}>Terms</a>
         <span aria-hidden>·</span>
         <a href="/privacy" style={{ color: T.muted, textDecoration: 'none' }}>Privacy</a>
@@ -470,3 +481,129 @@ export function Landing({ onNavigate }: LandingProps) {
     </main>
   );
 }
+
+function FeaturesShowcase() {
+  return (
+    <section
+      style={{
+        marginTop: 'clamp(72px, 14vh, 120px)',
+        width: '100%',
+        maxWidth: 960,
+        alignSelf: 'center',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: T.mono,
+          letterSpacing: '0.18em',
+          color: T.muted,
+          textTransform: 'uppercase',
+          marginBottom: 10,
+          textAlign: 'center',
+        }}
+      >
+        What MathIQ does
+      </div>
+      <h2
+        style={{
+          fontFamily: T.sans,
+          fontSize: 'clamp(26px, 4.5vw, 36px)',
+          fontWeight: 700,
+          lineHeight: 1.1,
+          letterSpacing: '-0.02em',
+          margin: '0 auto 28px',
+          textAlign: 'center',
+          maxWidth: 560,
+        }}
+      >
+        Type a problem. Or upload your handwritten work.
+      </h2>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 12,
+        }}
+      >
+        {SHOWCASE.map((f) => (
+          <article key={f.title} className="landing-feature-card">
+            <div className="cta-kicker" style={{ color: f.tierColor }}>
+              {f.tier}
+            </div>
+            <h3 className="feature-card-title">{f.title}</h3>
+            <p className="feature-card-sub">{f.sub}</p>
+          </article>
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+        <a
+          href="/pricing"
+          className="btn-press"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'transparent',
+            border: `1px solid ${T.ink}`,
+            color: T.ink,
+            padding: '10px 18px',
+            fontSize: 14,
+            fontWeight: 500,
+            fontFamily: T.sans,
+            textDecoration: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          See the plans →
+        </a>
+      </div>
+    </section>
+  );
+}
+
+interface ShowcaseEntry {
+  tier: string;
+  tierColor: string;
+  title: string;
+  sub: string;
+}
+
+const SHOWCASE: ShowcaseEntry[] = [
+  {
+    tier: 'Free',
+    tierColor: 'var(--muted)',
+    title: 'Step-by-step walkthroughs',
+    sub: 'Iris explains every move — not just the answer. Five free per day across nine college subjects.',
+  },
+  {
+    tier: 'Plus',
+    tierColor: 'var(--accent)',
+    title: 'Why & how reflection',
+    sub: 'Tap any step to see the strategic reason behind it. The shift from "what to do" to "when this is the right move."',
+  },
+  {
+    tier: 'Plus',
+    tierColor: 'var(--accent)',
+    title: 'Photo input',
+    sub: 'Snap a problem from your textbook. Iris extracts the LaTeX and walks you through it.',
+  },
+  {
+    tier: 'Plus',
+    tierColor: 'var(--accent)',
+    title: 'Handwritten to PDF',
+    sub: 'Upload a photo or scan of your handwritten work. Mathpix transcribes it, Iris cleans it up, you print a submission-ready PDF.',
+  },
+  {
+    tier: 'Pro',
+    tierColor: 'var(--accent-2)',
+    title: 'LaTeX Mode',
+    sub: 'Same upload, but Pro compiles your handwriting into a Computer Modern-typeset PDF — indistinguishable from an Overleaf paper.',
+  },
+  {
+    tier: 'Pro',
+    tierColor: 'var(--accent-2)',
+    title: 'Exam Mode + grading',
+    sub: 'Generate full college exams, print them, upload your handwritten attempt. Per-problem scores with topic-level breakdown.',
+  },
+];

@@ -9,6 +9,7 @@ import { History } from './screens/History';
 import { Settings } from './screens/Settings';
 import { Terms } from './screens/Terms';
 import { Privacy } from './screens/Privacy';
+import { Pricing } from './screens/Pricing';
 import { Exams } from './screens/Exams';
 import { ExamTake } from './screens/ExamTake';
 import { ExamGrade } from './screens/ExamGrade';
@@ -47,20 +48,23 @@ function escapeTarget(route: Route): Route | null {
   return null;
 }
 
-// Legal pages are real URLs (Stripe Customer Portal links to them, so deep-
-// linking has to work). Everything else uses internal `route` state.
-function getLegalPath(): 'terms' | 'privacy' | null {
+// Legal / marketing pages are real URLs (Stripe Customer Portal + outside
+// links use them) so deep-linking has to work. Everything else uses
+// internal `route` state.
+function getRealUrlPath(): 'terms' | 'privacy' | 'pricing' | null {
   if (typeof window === 'undefined') return null;
   const p = window.location.pathname.replace(/\/$/, '');
   if (p === '/terms') return 'terms';
   if (p === '/privacy') return 'privacy';
+  if (p === '/pricing') return 'pricing';
   return null;
 }
 
 export default function App() {
-  const legalPath = getLegalPath();
-  if (legalPath === 'terms') return <Terms />;
-  if (legalPath === 'privacy') return <Privacy />;
+  const realPath = getRealUrlPath();
+  if (realPath === 'terms') return <Terms />;
+  if (realPath === 'privacy') return <Privacy />;
+  if (realPath === 'pricing') return <Pricing />;
   return <MathIQApp />;
 }
 
