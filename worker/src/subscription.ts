@@ -7,7 +7,7 @@
  */
 
 export type SubscriptionTier = 'plus' | 'pro';
-export type SubscriptionInterval = 'monthly' | 'annual';
+export type SubscriptionInterval = 'monthly' | 'annual' | 'semester';
 export type SubscriptionStatus =
   | 'active'
   | 'trialing'
@@ -23,6 +23,22 @@ export interface SubscriptionState {
   currentPeriodEnd: number;
   stripeCustomerId: string;
   stripeSubscriptionId: string;
+}
+
+/**
+ * One-time Semester purchase — Stripe `mode: 'payment'`, no recurring
+ * billing. The user gets 5 months of access from the purchase date.
+ * Stored separately from `SubscriptionState` so the two access paths can
+ * coexist (rare, but possible if a Semester holder later subscribes).
+ */
+export interface PassState {
+  kind: 'pass';
+  tier: SubscriptionTier;
+  purchasedAt: number; // seconds since epoch
+  expiresAt: number; // seconds since epoch
+  priceId: string;
+  stripeCustomerId: string;
+  stripeCheckoutSessionId: string;
 }
 
 // Minimum TTL allowed by Cloudflare KV is 60s.
@@ -76,6 +92,41 @@ export function isEntitled(state: SubscriptionState | null): boolean {
   if (!state) return false;
   if (state.status !== 'active' && state.status !== 'trialing') return false;
   return state.currentPeriodEnd * 1000 > Date.now();
+}
+
+// ─── Semester pass ────────────────────────────────────────────────────
+
+function passKey(userId: string): string {
+  return `pass:user:${userId}`;
+}
+
+// 5 months of access + 1 month buffer so the KV record survives long
+// enough for billing history / Settings to display "expired" cleanly.
+const PASS_BUFFER_SECONDS = 60 * 60 * 24 * 30;
+
+export async function getActivePass(
+  kv: KVNamespace,
+  userId: string,
+): Promise<PassState | null> {
+  const raw = await kv.get(passKey(userId));
+  if (!raw) return null;
+  try {
+    const state = JSON.parse(raw) as PassState;
+    if (state.expiresAt * 1000 <= Date.now()) return null;
+    return state;
+  } catch {
+    return null;
+  }
+}
+
+export async function setPass(
+  kv: KVNamespace,
+  userId: string,
+  state: PassState,
+): Promise<void> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const ttl = Math.max(MIN_TTL_SECONDS, state.expiresAt - nowSec + PASS_BUFFER_SECONDS);
+  await kv.put(passKey(userId), JSON.stringify(state), { expirationTtl: ttl });
 }
 
 /**

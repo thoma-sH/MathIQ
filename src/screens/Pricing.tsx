@@ -25,11 +25,13 @@ interface PricingProps {
 const PLAN_PRICES: Record<PaidTier, Record<Interval, { display: string; sub: string }>> = {
   plus: {
     monthly: { display: '$7.99', sub: 'per month' },
-    annual: { display: '$4.99', sub: '/ month · billed $59.88 annually' },
+    semester: { display: '$25.99', sub: 'one-time · 5 months · $5.19/mo · 35% off' },
+    annual: { display: '$3.99', sub: '/ month · billed $47.99 annually · save 50%' },
   },
   pro: {
-    monthly: { display: '$29.99', sub: 'per month' },
-    annual: { display: '$19.99', sub: '/ month · billed $239.88 annually' },
+    monthly: { display: '$19.99', sub: 'per month' },
+    semester: { display: '$64.99', sub: 'one-time · 5 months · $12.99/mo · 35% off' },
+    annual: { display: '$8.99', sub: '/ month · billed $107.99 annually · save 55%' },
   },
 };
 
@@ -210,7 +212,14 @@ export function Pricing({ onBack }: PricingProps) {
           current={interval}
           onSelect={setInterval}
           label="Annual"
-          badge="save ~37%"
+          badge="save 50%+"
+        />
+        <IntervalChip
+          value="semester"
+          current={interval}
+          onSelect={setInterval}
+          label="Semester"
+          badge="5 mo · 35% off"
         />
         <IntervalChip
           value="monthly"

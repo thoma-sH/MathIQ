@@ -25,18 +25,23 @@ import { normalizeLatexDelimiters } from './normalize';
 import {
   clearSubscription,
   findUserByCustomer,
+  getActivePass,
   getSubscription,
   isEventProcessed,
   markEventProcessed,
   rememberCustomer,
+  setPass,
   setSubscription,
+  type PassState,
   type SubscriptionInterval,
   type SubscriptionTier,
 } from './subscription';
 import {
   createCheckoutSession,
+  createOneTimeCheckoutSession,
   createPortalSession,
   makeStripe,
+  priceIdToTierInterval,
   subscriptionToState,
   verifyWebhook,
 } from './stripe';
@@ -88,6 +93,11 @@ interface Env {
   STRIPE_PRICE_PLUS_ANNUAL: string;
   STRIPE_PRICE_PRO_MONTHLY: string;
   STRIPE_PRICE_PRO_ANNUAL: string;
+  STRIPE_PRICE_PLUS_SEMESTER: string;
+  STRIPE_PRICE_PRO_SEMESTER: string;
+  STRIPE_PRICE_PRO_MONTHLY_OLD?: string;
+  STRIPE_PRICE_PLUS_ANNUAL_OLD?: string;
+  STRIPE_PRICE_PRO_ANNUAL_OLD?: string;
   STRIPE_SUCCESS_URL: string;
   STRIPE_CANCEL_URL: string;
   STRIPE_PORTAL_RETURN_URL: string;
@@ -609,6 +619,24 @@ async function handleBillingState(
   // not just Stripe state — so dev-granted Pro/Plus accounts are reflected.
   const effectiveTier = await resolveTier(authState, env);
   const state = await getSubscription(env.USAGE, authState.userId);
+  const pass = state ? null : await getActivePass(env.USAGE, authState.userId);
+
+  if (pass) {
+    return json(
+      {
+        tier: pass.tier,
+        interval: 'semester' as const,
+        status: 'active' as const,
+        currentPeriodEnd: pass.expiresAt,
+        manageable: false,
+        accessKind: 'pass' as const,
+        expiresAt: pass.expiresAt,
+      },
+      200,
+      cors,
+    );
+  }
+
   return json(
     {
       tier: effectiveTier === 'plus' || effectiveTier === 'pro' ? effectiveTier : null,
@@ -616,6 +644,7 @@ async function handleBillingState(
       status: state?.status ?? null,
       currentPeriodEnd: state?.currentPeriodEnd ?? null,
       manageable: !!state?.stripeCustomerId,
+      accessKind: state ? ('subscription' as const) : undefined,
     },
     200,
     cors,
@@ -646,14 +675,14 @@ async function handleBillingCheckout(
   if (body.tier !== 'plus' && body.tier !== 'pro') {
     return json({ error: 'invalid tier' }, 400, cors);
   }
-  if (body.interval !== 'monthly' && body.interval !== 'annual') {
+  if (body.interval !== 'monthly' && body.interval !== 'annual' && body.interval !== 'semester') {
     return json({ error: 'invalid interval' }, 400, cors);
   }
 
   // Refuse to start a Checkout session if the corresponding price id is a
   // placeholder. Better to fail loudly here than to send the user to Stripe
   // and have them see an invalid-price page.
-  const priceConfigErr = validatePriceConfig(env);
+  const priceConfigErr = validatePriceConfig(env, body.interval);
   if (priceConfigErr) {
     console.error('billing misconfigured:', priceConfigErr);
     return json({ error: 'billing_unavailable' }, 503, cors);
@@ -668,13 +697,20 @@ async function handleBillingCheckout(
     userEmail = await fetchClerkUserEmail(env, authState.userId);
   }
 
-  const session = await createCheckoutSession(stripe, env, {
+  const args = {
     userId: authState.userId,
     userEmail,
     tier: body.tier,
     interval: body.interval,
     existingCustomerId: existing?.stripeCustomerId,
-  });
+  };
+
+  // Semester is a one-time payment (Stripe `mode: 'payment'`), not a
+  // subscription — different Checkout endpoint, different webhook path.
+  const session =
+    body.interval === 'semester'
+      ? await createOneTimeCheckoutSession(stripe, env, args)
+      : await createCheckoutSession(stripe, env, args);
 
   if (!session.url) {
     return json({ error: 'checkout_failed' }, 500, cors);
@@ -740,6 +776,38 @@ async function processStripeEvent(
         typeof session.customer === 'string' ? session.customer : session.customer?.id;
       if (!userId || !customerId) return;
       await rememberCustomer(env.USAGE, customerId, userId);
+
+      // Subscription path: `customer.subscription.created` will follow and
+      // do the heavy lifting. Nothing more to do here.
+      if (session.mode !== 'payment') return;
+
+      // One-time Semester pass — no follow-up subscription event will fire.
+      // Resolve tier + create PassState now.
+      const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+        limit: 1,
+      });
+      const priceId = lineItems.data[0]?.price?.id;
+      if (!priceId) {
+        console.error('checkout payment session missing price', session.id);
+        return;
+      }
+      const mapping = priceIdToTierInterval(env, priceId);
+      if (!mapping || mapping.interval !== 'semester') {
+        console.error('unexpected price for payment session', priceId, session.id);
+        return;
+      }
+      const purchasedAt = Math.floor(Date.now() / 1000);
+      const expiresAt = purchasedAt + 5 * 30 * 24 * 60 * 60; // 5 months
+      const pass: PassState = {
+        kind: 'pass',
+        tier: mapping.tier,
+        purchasedAt,
+        expiresAt,
+        priceId,
+        stripeCustomerId: customerId,
+        stripeCheckoutSessionId: session.id,
+      };
+      await setPass(env.USAGE, userId, pass);
       return;
     }
     case 'customer.subscription.created':
@@ -1669,13 +1737,18 @@ async function latexCacheKey(mmd: string, title: string | undefined): Promise<st
     .join('');
 }
 
-function validatePriceConfig(env: Env): string | null {
-  const ids = [
-    env.STRIPE_PRICE_PLUS_MONTHLY,
-    env.STRIPE_PRICE_PLUS_ANNUAL,
-    env.STRIPE_PRICE_PRO_MONTHLY,
-    env.STRIPE_PRICE_PRO_ANNUAL,
-  ];
+function validatePriceConfig(env: Env, interval: SubscriptionInterval): string | null {
+  // Only validate the price IDs relevant to the requested interval so that
+  // an unconfigured Semester product doesn't block Monthly/Annual checkout.
+  const ids =
+    interval === 'semester'
+      ? [env.STRIPE_PRICE_PLUS_SEMESTER, env.STRIPE_PRICE_PRO_SEMESTER]
+      : [
+          env.STRIPE_PRICE_PLUS_MONTHLY,
+          env.STRIPE_PRICE_PLUS_ANNUAL,
+          env.STRIPE_PRICE_PRO_MONTHLY,
+          env.STRIPE_PRICE_PRO_ANNUAL,
+        ];
   for (const id of ids) {
     if (!id || !id.startsWith('price_') || id.includes('REPLACE')) {
       return 'stripe price ids are not configured';

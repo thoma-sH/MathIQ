@@ -13,7 +13,12 @@
  *   3. Stripe-granted subscription state from KV (paying customers).
  *   4. Free otherwise.
  */
-import { getSubscription, isEntitled, type SubscriptionState } from './subscription';
+import {
+  getActivePass,
+  getSubscription,
+  isEntitled,
+  type SubscriptionState,
+} from './subscription';
 
 export type Tier = 'anonymous' | 'free' | 'plus' | 'pro';
 
@@ -38,6 +43,11 @@ export async function resolveTier(
 
   const sub: SubscriptionState | null = await getSubscription(env.USAGE, authState.userId);
   if (isEntitled(sub) && sub) return sub.tier;
+
+  // Semester one-time pass. Subscription wins if both exist (handled by the
+  // early return above) — we only fall through here if no active sub.
+  const pass = await getActivePass(env.USAGE, authState.userId);
+  if (pass) return pass.tier;
 
   return 'free';
 }

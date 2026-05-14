@@ -494,11 +494,13 @@ function AccountCard() {
 const PLAN_PRICES: Record<BillingTier, Record<Interval, { display: string; tagline: string }>> = {
   plus: {
     monthly: { display: '$7.99 / mo', tagline: '' },
-    annual: { display: '$4.99 / mo', tagline: 'billed $59.88 / year · save 37%' },
+    semester: { display: '$25.99', tagline: 'one-time · 5 months · save 35%' },
+    annual: { display: '$3.99 / mo', tagline: 'billed $47.99 / year · save 50%' },
   },
   pro: {
-    monthly: { display: '$29.99 / mo', tagline: '' },
-    annual: { display: '$19.99 / mo', tagline: 'billed $239.88 / year · save 33%' },
+    monthly: { display: '$19.99 / mo', tagline: '' },
+    semester: { display: '$64.99', tagline: 'one-time · 5 months · save 35%' },
+    annual: { display: '$8.99 / mo', tagline: 'billed $107.99 / year · save 55%' },
   },
 };
 
@@ -572,8 +574,10 @@ function BillingSection() {
   // Active or granted plan — Stripe sub OR dev/comp whitelist
   if (state?.tier) {
     const stripeActive = state.status === 'active' || state.status === 'trialing';
-    const renew = stripeActive && state.currentPeriodEnd
-      ? new Date(state.currentPeriodEnd * 1000).toLocaleDateString(undefined, {
+    const isPass = state.accessKind === 'pass';
+    const expiry = (isPass ? state.expiresAt : stripeActive ? state.currentPeriodEnd : null);
+    const expiryText = expiry
+      ? new Date(expiry * 1000).toLocaleDateString(undefined, {
           month: 'short',
           day: 'numeric',
           year: 'numeric',
@@ -583,16 +587,17 @@ function BillingSection() {
       <>
         <div style={kicker()}>CURRENT PLAN</div>
         <div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>
-          {PLAN_LABELS[state.tier]}{state.interval ? ` (${state.interval})` : ''}
+          {PLAN_LABELS[state.tier]}
+          {isPass ? ' · Semester access' : state.interval ? ` (${state.interval})` : ''}
         </div>
-        {!stripeActive && (
+        {!stripeActive && !isPass && (
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4, fontFamily: T.mono, letterSpacing: '0.1em' }}>
             GRANTED · NO BILLING
           </div>
         )}
-        {renew && (
+        {expiryText && (
           <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
-            Renews {renew}
+            {isPass ? `Expires ${expiryText} · no auto-renew` : `Renews ${expiryText}`}
           </div>
         )}
         {state.manageable && stripeActive && (
@@ -629,8 +634,9 @@ function BillingSection() {
   return (
     <>
       <div style={kicker()}>PAID PLANS</div>
-      <div style={{ display: 'flex', gap: 4, marginTop: 8, marginBottom: 18 }}>
-        <IntervalChip current={interval} value="annual" label="Annual" badge="−37%" onSelect={setInterval} />
+      <div style={{ display: 'flex', gap: 4, marginTop: 8, marginBottom: 18, flexWrap: 'wrap' }}>
+        <IntervalChip current={interval} value="annual" label="Annual" badge="−50%+" onSelect={setInterval} />
+        <IntervalChip current={interval} value="semester" label="Semester" badge="5 mo" onSelect={setInterval} />
         <IntervalChip current={interval} value="monthly" label="Monthly" onSelect={setInterval} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

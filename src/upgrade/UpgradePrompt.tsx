@@ -123,11 +123,13 @@ const FEATURE_META: Record<LockedFeature, FeatureMeta> = {
 const PLAN_PRICES: Record<PaidTier, Record<Interval, { display: string; tagline: string }>> = {
   plus: {
     monthly: { display: '$7.99 / mo', tagline: 'billed monthly' },
-    annual: { display: '$4.99 / mo', tagline: 'billed $59.88 / year' },
+    semester: { display: '$25.99', tagline: '5 months · one-time' },
+    annual: { display: '$3.99 / mo', tagline: 'billed $47.99 / year' },
   },
   pro: {
-    monthly: { display: '$29.99 / mo', tagline: 'billed monthly' },
-    annual: { display: '$19.99 / mo', tagline: 'billed $239.88 / year' },
+    monthly: { display: '$19.99 / mo', tagline: 'billed monthly' },
+    semester: { display: '$64.99', tagline: '5 months · one-time' },
+    annual: { display: '$8.99 / mo', tagline: 'billed $107.99 / year' },
   },
 };
 
@@ -136,9 +138,9 @@ const PLAN_LABEL: Record<PaidTier, string> = {
   pro: 'MathIQ Pro',
 };
 
-const SAVINGS_BADGE: Record<PaidTier, string> = {
-  plus: 'save 37%',
-  pro: 'save 33%',
+const SAVINGS_BADGE: Record<PaidTier, Partial<Record<Interval, string>>> = {
+  plus: { annual: 'save 50%', semester: 'save 35%' },
+  pro: { annual: 'save 55%', semester: 'save 35%' },
 };
 
 // ── Context ─────────────────────────────────────────────────────────────────
@@ -387,15 +389,22 @@ function UpgradeModal({ feature, onClose }: { feature: LockedFeature; onClose: (
               label="Monthly"
             />
             <IntervalChip
+              value="semester"
+              current={interval}
+              onSelect={setIntervalChoice}
+              label="Semester"
+              badge={SAVINGS_BADGE[pitchTier].semester}
+            />
+            <IntervalChip
               value="annual"
               current={interval}
               onSelect={setIntervalChoice}
               label="Annual"
-              badge={SAVINGS_BADGE[pitchTier]}
+              badge={SAVINGS_BADGE[pitchTier].annual}
             />
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 11, fontFamily: T.mono, letterSpacing: '0.06em' }}>
-              cancel anytime
+              {interval === 'semester' ? 'no auto-renew' : 'cancel anytime'}
             </span>
           </div>
 

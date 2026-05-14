@@ -5,7 +5,8 @@
 const WORKER_URL = import.meta.env.VITE_WORKER_URL ?? 'http://localhost:8787';
 
 export type Tier = 'plus' | 'pro';
-export type Interval = 'monthly' | 'annual';
+export type Interval = 'monthly' | 'annual' | 'semester';
+export type AccessKind = 'subscription' | 'pass';
 
 export interface SubscriptionStateResponse {
   tier: Tier | null;
@@ -13,6 +14,10 @@ export interface SubscriptionStateResponse {
   status: string | null;
   currentPeriodEnd: number | null;
   manageable: boolean;
+  /** 'pass' means a one-time Semester purchase; 'subscription' means recurring. */
+  accessKind?: AccessKind;
+  /** Seconds since epoch. Present for Semester passes; for subscriptions read `currentPeriodEnd`. */
+  expiresAt?: number;
 }
 
 interface AuthOpts {
