@@ -418,6 +418,7 @@ async function handleWalkthrough(
           problem,
           action: walkAction,
           walkthroughSoFar: walkthroughSoFarClean,
+          signal: request.signal,
         })
       : await callOpenRouterStream({
           apiKey: env.OPENROUTER_API_KEY,
@@ -428,6 +429,7 @@ async function handleWalkthrough(
           problem,
           action: walkAction,
           walkthroughSoFar: walkthroughSoFarClean,
+          signal: request.signal,
         });
 
   if (!upstream.ok || !upstream.body) {

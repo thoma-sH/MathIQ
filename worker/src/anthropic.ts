@@ -45,6 +45,10 @@ export interface AnthropicCallParams {
   /** For action='why-how': the walkthrough text shown to the student so far,
    *  ending with the step we want explained. */
   walkthroughSoFar?: string;
+  /** When the client disconnects mid-stream, this signal aborts both the
+   *  initial POST and the in-flight body read so Anthropic stops generating
+   *  (and billing) tokens nobody will see. */
+  signal?: AbortSignal;
 }
 
 export interface AnthropicCallResult {
@@ -69,6 +73,7 @@ export async function callAnthropicStream(
     maxTokens = 8192,
     action = 'walkthrough',
     walkthroughSoFar,
+    signal,
   } = params;
 
   const problemText = problem?.trim() || topic.exampleProblem;
@@ -99,6 +104,7 @@ export async function callAnthropicStream(
       messages,
       stream: true,
     }),
+    signal,
   });
 
   if (!resp.ok || !resp.body) {
@@ -142,10 +148,11 @@ function transformAnthropicSse(
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reader = body.getReader();
+      reader = body.getReader();
       let buffer = '';
       try {
         while (true) {
@@ -177,6 +184,17 @@ function transformAnthropicSse(
         return;
       }
       controller.close();
+    },
+    async cancel(reason) {
+      // Client disconnected mid-stream — stop reading from Anthropic so
+      // they stop generating (and billing) tokens nobody will see.
+      if (reader) {
+        try {
+          await reader.cancel(reason);
+        } catch {
+          // Reader may already be closed/errored — nothing more to do.
+        }
+      }
     },
   });
 }

@@ -23,6 +23,10 @@ export interface OpenRouterCallParams {
   appName?: string;
   action?: WalkthroughAction;
   walkthroughSoFar?: string;
+  /** When the client disconnects mid-stream, this signal aborts both the
+   *  initial POST and the in-flight body read so the upstream stops
+   *  generating (and billing) tokens nobody will see. */
+  signal?: AbortSignal;
 }
 
 export interface OpenRouterCallResult {
@@ -47,6 +51,7 @@ export async function callOpenRouterStream(
     appName = 'MathIQ',
     action = 'walkthrough',
     walkthroughSoFar,
+    signal,
   } = params;
 
   const systemPrompt = buildSystemPromptFlat(prompts, course, topic);
@@ -77,6 +82,7 @@ export async function callOpenRouterStream(
         ...conversation,
       ],
     }),
+    signal,
   });
 
   if (!resp.ok || !resp.body) {
@@ -123,10 +129,11 @@ function transformOpenAiSse(
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   return new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reader = body.getReader();
+      reader = body.getReader();
       let buffer = '';
       try {
         while (true) {
@@ -153,6 +160,17 @@ function transformOpenAiSse(
         return;
       }
       controller.close();
+    },
+    async cancel(reason) {
+      // Client disconnected mid-stream — stop reading from upstream so it
+      // stops generating (and billing) tokens nobody will see.
+      if (reader) {
+        try {
+          await reader.cancel(reason);
+        } catch {
+          // Reader may already be closed/errored — nothing more to do.
+        }
+      }
     },
   });
 }
