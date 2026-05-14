@@ -43,18 +43,18 @@ PRO_USER_IDS = ""
 # Set to empty string if no manual grants.
 MAX_USER_IDS = "user_3DYnEzyeFI36j2JWovhFyBEvRPe"
 
-# Stripe price IDs — create products + prices in the Stripe Dashboard, then
-# paste the `price_...` IDs here. Test-mode IDs for dev, live-mode for prod.
-#
-# To roll out the reshape: create new Price objects in Stripe for Pro
-# Monthly $19.99, Plus Annual $47.99, Pro Annual $107.99 (live mode),
-# then swap each of the three vars below to the new id. The `_OLD` vars
-# right after must keep pointing at the original ids so existing
-# subscribers' webhook events still resolve to their tier.
+# Stripe price IDs. Current pricing: Plus $7.99/mo or $47.99/yr (50% off)
+# or $25.99 one-time Semester (5 months). Pro $19.99/mo or $107.99/yr
+# (55% off) or $64.99 one-time Semester. The `_OLD` block below holds the
+# pre-reshape monthly/annual price IDs so existing subscribers' webhooks
+# still resolve to their tier — leave those alone unless you're sure no
+# grandfathered subs remain.
 STRIPE_PRICE_PLUS_MONTHLY = "price_1TW78XHJHOfcH2xmkZFDsdtz"
-STRIPE_PRICE_PLUS_ANNUAL  = "price_1TW78XHJHOfcH2xm3ofmLa2b"
-STRIPE_PRICE_PRO_MONTHLY  = "price_1TW78WHJHOfcH2xmEiMUYsWn"
-STRIPE_PRICE_PRO_ANNUAL   = "price_1TW78YHJHOfcH2xm35zn1EKi"
+STRIPE_PRICE_PLUS_ANNUAL  = "price_1TX50oHJHOfcH2xmCrYGV8RP"
+STRIPE_PRICE_PLUS_SEMESTER = "price_1TX51ZHJHOfcH2xm5wCInQW8"
+STRIPE_PRICE_PRO_MONTHLY  = "price_1TX54pHJHOfcH2xmZXBafXCc"
+STRIPE_PRICE_PRO_ANNUAL   = "price_1TX55OHJHOfcH2xmd9uhWcVp"
+STRIPE_PRICE_PRO_SEMESTER = "price_1TX55qHJHOfcH2xmPkffVYOu"
 
 # Grandfathered (deactivated-in-Stripe) price IDs. Pre-populated with the
 # current live IDs so that once the three above are swapped to new IDs,
@@ -64,13 +64,6 @@ STRIPE_PRICE_PRO_ANNUAL   = "price_1TW78YHJHOfcH2xm35zn1EKi"
 STRIPE_PRICE_PRO_MONTHLY_OLD = "price_1TW78WHJHOfcH2xmEiMUYsWn"
 STRIPE_PRICE_PLUS_ANNUAL_OLD = "price_1TW78XHJHOfcH2xm3ofmLa2b"
 STRIPE_PRICE_PRO_ANNUAL_OLD  = "price_1TW78YHJHOfcH2xm35zn1EKi"
-
-# Semester one-time prices ($25.99 Plus, $64.99 Pro). Create as
-# `mode: payment` (one-time) Price objects in the Stripe Dashboard, not
-# recurring. Until these are filled in, /api/billing/checkout will return
-# 503 for any checkout request (validatePriceConfig blocks placeholders).
-STRIPE_PRICE_PLUS_SEMESTER = "price_REPLACE_PLUS_SEMESTER"
-STRIPE_PRICE_PRO_SEMESTER  = "price_REPLACE_PRO_SEMESTER"
 
 # Where Stripe redirects after Checkout success/cancel and Portal exit.
 # Use your client origin + the Settings route.
