@@ -6,6 +6,9 @@ import { useTypedString } from '../state/useTypedString';
 import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
+import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { isPaid } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import type { Route } from '../router';
 
 interface LandingProps {
@@ -38,6 +41,27 @@ export function Landing({ onNavigate }: LandingProps) {
   const [problem, setProblem] = useState('');
   const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
+  const [tier, setTier] = useState<Tier | null>(null);
+  const { requireUpgrade } = useUpgradePrompt();
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const sub = await fetchSubscriptionState({ getToken });
+      if (!cancelled) setTier(sub?.tier ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  function onHomeworkClick() {
+    if (!isPaid(tier)) {
+      requireUpgrade('homework-plain');
+      return;
+    }
+    onNavigate({ name: 'homework' });
+  }
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scribeTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -422,7 +446,7 @@ export function Landing({ onNavigate }: LandingProps) {
 
         <button
           type="button"
-          onClick={() => onNavigate({ name: 'homework' })}
+          onClick={onHomeworkClick}
           className="reveal reveal-5 btn-press"
           style={{
             marginTop: 8,

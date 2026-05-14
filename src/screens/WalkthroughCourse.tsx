@@ -1,9 +1,14 @@
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import { useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import { NotFound } from './NotFound';
+import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { isPro } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import type { Topic } from '../walkthroughs/types';
 import type { Route } from '../router';
 
@@ -92,6 +97,20 @@ function TopicCard({
 
 export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCourseProps) {
   const course = COURSES_BY_ID[courseId];
+  const { getToken } = useAuth();
+  const { requireUpgrade } = useUpgradePrompt();
+  const [tier, setTier] = useState<Tier | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const sub = await fetchSubscriptionState({ getToken });
+      if (!cancelled) setTier(sub?.tier ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
   if (!course) {
     return (
@@ -100,6 +119,14 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
         onNavigate={onNavigate}
       />
     );
+  }
+
+  function onExamsClick() {
+    if (!isPro(tier)) {
+      requireUpgrade('exam-mode');
+      return;
+    }
+    onNavigate({ name: 'exams', courseId: course!.id });
   }
 
   return (
@@ -158,7 +185,7 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
       </p>
 
       <button
-        onClick={() => onNavigate({ name: 'exams', courseId: course.id })}
+        onClick={onExamsClick}
         className="lift btn-press"
         aria-label={`Open ${course.title} exam mode`}
         style={{

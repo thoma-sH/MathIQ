@@ -13,6 +13,7 @@ import { Exams } from './screens/Exams';
 import { ExamTake } from './screens/ExamTake';
 import { ExamGrade } from './screens/ExamGrade';
 import { Homework } from './screens/Homework';
+import { UpgradeProvider } from './upgrade/UpgradePrompt';
 import type { Route } from './router';
 
 interface PageProps {
@@ -81,7 +82,7 @@ function MathIQApp() {
   }, [route]);
 
   return (
-    <>
+    <UpgradeProvider>
       <Header route={route} onNavigate={setRoute} />
       <Page routeKey={pageKey(route)}>
         {route.name === 'home'        && <Landing onNavigate={setRoute} />}
@@ -96,6 +97,6 @@ function MathIQApp() {
         {route.name === 'homework'    && <Homework onNavigate={setRoute} />}
       </Page>
       <InstallPrompt />
-    </>
+    </UpgradeProvider>
   );
 }

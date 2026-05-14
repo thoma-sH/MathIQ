@@ -14,6 +14,7 @@ import {
 } from '../walkthroughs/history';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
 import { isPaid } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import type { Route } from '../router';
 
 interface HistoryProps {
@@ -85,6 +86,7 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [tier, setTier] = useState<Tier | null>(null);
   const [printRecord, setPrintRecord] = useState<HistoryRecord | null>(null);
+  const { requireUpgrade } = useUpgradePrompt();
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +192,7 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
                 onToggle={() => void openDetail(it.id)}
                 onDelete={() => void remove(it.id)}
                 onPrint={() => expandedRecord && handlePrint(expandedRecord)}
-                onUpgrade={() => onNavigate({ name: 'settings' })}
+                onUpgrade={() => requireUpgrade('walkthrough-pdf')}
                 onOpenTopic={() =>
                   onNavigate({
                     name: 'topic',

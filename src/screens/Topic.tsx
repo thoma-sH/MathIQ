@@ -16,6 +16,7 @@ import { saveHistoryRecord } from '../walkthroughs/history';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { verifyWalkthrough, type Verdict } from '../walkthroughs/verify';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
@@ -95,6 +96,7 @@ export function TopicScreen({
   const course = COURSES_BY_ID[courseId];
   const topic = course?.topics.find((t) => t.id === topicId);
   const { getToken, isSignedIn } = useAuth();
+  const { requireUpgrade } = useUpgradePrompt();
 
   const [buffer, setBuffer] = useState('');
   const [streamDone, setStreamDone] = useState(false);
@@ -346,6 +348,16 @@ export function TopicScreen({
     const file = e.target.files?.[0];
     if (file) void handleImageFile(file);
     if (imageInputRef.current) imageInputRef.current.value = '';
+  }
+
+  function onImageButtonClick() {
+    // Photo input is Plus+. Show the upgrade modal instead of letting the
+    // worker reject with a 403 the user has to decode.
+    if (rateInfo && rateInfo.tier !== 'plus' && rateInfo.tier !== 'pro') {
+      requireUpgrade('photo-input');
+      return;
+    }
+    imageInputRef.current?.click();
   }
 
   function onCustomTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -702,11 +714,15 @@ export function TopicScreen({
           key={i}
           index={i}
           text={stepText}
-          showWhyHow={isPaid}
+          showWhyHow={true}
           whyHowText={whyHow[i]}
           whyHowExpanded={!!expanded[i]}
           whyHowStreaming={whyHowStream?.index === i ? whyHowStream.text : null}
           onToggleWhyHow={() => {
+            if (!isPaid) {
+              requireUpgrade('why-how');
+              return;
+            }
             if (whyHow[i] !== undefined) {
               setExpanded((p) => ({ ...p, [i]: !p[i] }));
               return;
@@ -949,7 +965,7 @@ export function TopicScreen({
           </button>
           <button
             type="button"
-            onClick={() => imageInputRef.current?.click()}
+            onClick={onImageButtonClick}
             disabled={ocrState === 'reading' || classifying || isStreamingAnything}
             aria-label="Upload an image of a problem"
             className="btn-press"

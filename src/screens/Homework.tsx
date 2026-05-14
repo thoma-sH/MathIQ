@@ -7,6 +7,7 @@ import rehypeKatex from 'rehype-katex';
 import { T } from '../design/tokens';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
 import { isPaid, isPro } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import {
   HomeworkError,
   transcribeHomework,
@@ -34,6 +35,7 @@ type LatexState =
 
 export function Homework({ onNavigate }: HomeworkProps) {
   const { getToken } = useAuth();
+  const { requireUpgrade } = useUpgradePrompt();
   const [tier, setTier] = useState<Tier | null>(null);
   const [tierLoaded, setTierLoaded] = useState(false);
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
@@ -87,7 +89,7 @@ export function Homework({ onNavigate }: HomeworkProps) {
 
   async function onCompileLatex(hwId: string, title: string) {
     if (!isPro(tier)) {
-      onNavigate({ name: 'settings' });
+      requireUpgrade('homework-latex');
       return;
     }
     setLatex({ kind: 'compiling' });
@@ -103,10 +105,16 @@ export function Homework({ onNavigate }: HomeworkProps) {
     }
   }
 
-  // Tier-gated entry. Plus+ can use Plain; only Pro can use LaTeX.
-  if (tierLoaded && !isPaid(tier)) {
-    return <UpgradeWall onNavigate={onNavigate} />;
-  }
+  // Tier-gated entry. Direct route access by a non-Plus user → bounce to
+  // home and surface the upgrade modal.
+  useEffect(() => {
+    if (tierLoaded && !isPaid(tier)) {
+      requireUpgrade('homework-plain');
+      onNavigate({ name: 'home' });
+    }
+  }, [tierLoaded, tier, requireUpgrade, onNavigate]);
+
+  if (tierLoaded && !isPaid(tier)) return null;
 
   return (
     <main
@@ -195,7 +203,7 @@ export function Homework({ onNavigate }: HomeworkProps) {
             setState({ kind: 'idle' });
             setLatex({ kind: 'idle' });
           }}
-          onUpgrade={() => onNavigate({ name: 'settings' })}
+          onUpgrade={() => requireUpgrade('homework-latex')}
         />
       )}
 
@@ -649,50 +657,6 @@ function downloadText(text: string, filename: string) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function UpgradeWall({ onNavigate }: { onNavigate: (r: Route) => void }) {
-  return (
-    <main
-      className="responsive-pad"
-      style={{ maxWidth: 640, margin: '0 auto', paddingTop: 24, paddingBottom: 96 }}
-    >
-      <h1
-        style={{
-          fontFamily: T.sans,
-          fontSize: 'clamp(28px, 6vw, 38px)',
-          fontWeight: 700,
-          lineHeight: 1.05,
-          letterSpacing: '-0.02em',
-          margin: '0 0 12px',
-        }}
-      >
-        Homework Helper.
-      </h1>
-      <p style={{ fontSize: 16, color: T.muted, lineHeight: 1.55, margin: '0 0 20px' }}>
-        Turn your handwritten work into a clean PDF you can submit. Available
-        with MathIQ+ ($7.99/mo) — includes Pro for the full LaTeX-typeset
-        treatment.
-      </p>
-      <button
-        type="button"
-        onClick={() => onNavigate({ name: 'settings' })}
-        className="btn-press chamfer"
-        style={{
-          background: T.accent,
-          color: T.paper,
-          border: 'none',
-          padding: '12px 22px',
-          fontSize: 15,
-          fontWeight: 500,
-          cursor: 'pointer',
-          fontFamily: T.sans,
-        }}
-      >
-        See plans →
-      </button>
-    </main>
-  );
 }
 
 function HomeworkPrintHost({ mmd, title }: { mmd: string; title: string }) {

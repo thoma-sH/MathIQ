@@ -9,7 +9,8 @@ import {
   type ExamListEntry,
 } from '../walkthroughs/exam';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
-import { isPro } from '../walkthroughs/tier';
+import { isPro, isPaid } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { NotFound } from './NotFound';
 import type { Route, ExamId } from '../router';
 
@@ -55,11 +56,20 @@ const EXAMS: ExamSpec[] = [
 export function Exams({ courseId, onNavigate }: ExamsProps) {
   const course = COURSES_BY_ID[courseId];
   const { getToken } = useAuth();
+  const { requireUpgrade } = useUpgradePrompt();
   const [tier, setTier] = useState<Tier | null>(null);
   const [tierLoaded, setTierLoaded] = useState(false);
   const [pendingExam, setPendingExam] = useState<ExamId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pastExams, setPastExams] = useState<ExamListEntry[] | null>(null);
+
+  function onHomeworkClick() {
+    if (!isPaid(tier)) {
+      requireUpgrade('homework-plain');
+      return;
+    }
+    onNavigate({ name: 'homework' });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -175,7 +185,7 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
         Iris grade your attempt.
       </p>
 
-      {tierLoaded && !isPro(tier) && <UpgradeStrip onUpgrade={() => onNavigate({ name: 'settings' })} />}
+      {tierLoaded && !isPro(tier) && <UpgradeStrip onUpgrade={() => requireUpgrade('exam-mode')} />}
 
       <div
         className="stagger-children"
@@ -244,7 +254,7 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
         </h2>
         <button
           type="button"
-          onClick={() => onNavigate({ name: 'homework' })}
+          onClick={onHomeworkClick}
           className="btn-press chamfer"
           style={{
             display: 'block',
