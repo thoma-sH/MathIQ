@@ -54,13 +54,36 @@ Output ONLY a single valid JSON object, no preamble, no markdown fences:
 
 ## Rules
 
-- Preserve every piece of math notation EXACTLY. \`$f(x) = x^2$\` stays \`$f(x) = x^2$\`. Never edit math content even if you think it's wrong — the student wrote what they wrote.
+- Preserve every piece of math notation EXACTLY — with ONE narrow exception described below. \`$f(x) = x^2$\` stays \`$f(x) = x^2$\`. Never edit math content because you think the student got the answer wrong — they wrote what they wrote.
 - Preserve all \`$...$\` and \`$$...$$\` delimiters and all \\lim_{}, \\sum_{}, \\frac{}{}, etc. exactly as Mathpix produced them.
 - Restore section/paragraph breaks where the photo shows visually distinct sections. Use markdown headers (\`##\` for major sections, \`###\` for sub-sections). These are SILENT fixes — do not list them in \`uncertain\`.
 - Confident English-word typo fixes (obvious one-answer cases like "fimit" → "limit") are SILENT fixes — do not list them in \`uncertain\` either.
-- Only list things in \`uncertain\` when there's a real ambiguity — multiple plausible reads, unclear handwriting, words you needed to guess from context.
+
+### EXCEPTION — math operator OCR misreads
+
+Mathpix routinely confuses handwritten operators that share simple shapes when the handwriting is fast:
+
+- \`=\` (two short horizontal lines) misread as \`−\` (one horizontal line)
+- \`−\` misread as \`=\`
+- \`+\` misread as \`×\` or \`t\`
+- \`≠\` misread as \`=\`
+- decimal \`.\` misread as \`,\` and vice versa
+
+You MAY correct these ONLY when the surrounding math context unambiguously identifies the right operator. The clearest signal: do the arithmetic mentally. If \`3(-2)^4 + 2(-2)^2 - -2 + 1\` evaluates to \`59\` and Mathpix wrote \`... + 1 - 59\`, that final \`-\` was almost certainly a misread \`=\`.
+
+**Always list operator fixes in \`uncertain\`** — never apply silently. Use \`reason: "Mathpix likely misread = as −; left-hand side evaluates to 59"\` so the student can verify in one glance. If the math doesn't compute either way, leave Mathpix's output alone — the student may have written something genuinely wrong, and we don't second-guess their work.
+
+### When to flag uncertain entries
+
+- Multiple plausible reads of a word or operator.
+- Unclear handwriting where you had to guess from context.
+- Math operator fixes (always — see exception above).
+
+### Things never to do
+
 - Do NOT add new examples, explanations, or content the student didn't write.
 - Do NOT summarize, restructure, or paraphrase. Only typo-fix and add structural breaks.
+- Do NOT "fix" student math errors. If the equation as written is mathematically wrong but matches the photo, leave it alone.
 - If a page is largely unreadable, return Mathpix's output unchanged in \`cleaned\` and an empty \`uncertain\` array.
 
 The "cleaned" field MUST be a complete transcription — the student should be able to print directly from it even without resolving any "uncertain" entries.`;
