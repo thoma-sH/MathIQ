@@ -13,7 +13,7 @@ import {
   type HistoryRecord,
 } from '../walkthroughs/history';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
-import { isPro } from '../walkthroughs/tier';
+import { isPaid } from '../walkthroughs/tier';
 import type { Route } from '../router';
 
 interface HistoryProps {
@@ -186,7 +186,7 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
                 record={expandedId === it.id ? expandedRecord : null}
                 loading={expandedId === it.id && loadingDetail}
                 deleting={deletingId === it.id}
-                isPro={isPro(tier)}
+                canExportPdf={isPaid(tier)}
                 onToggle={() => void openDetail(it.id)}
                 onDelete={() => void remove(it.id)}
                 onPrint={() => expandedRecord && handlePrint(expandedRecord)}
@@ -248,7 +248,7 @@ function HistoryEntry({
   record,
   loading,
   deleting,
-  isPro,
+  canExportPdf,
   onToggle,
   onDelete,
   onPrint,
@@ -260,7 +260,7 @@ function HistoryEntry({
   record: HistoryRecord | null;
   loading: boolean;
   deleting: boolean;
-  isPro: boolean;
+  canExportPdf: boolean;
   onToggle: () => void;
   onDelete: () => void;
   onPrint: () => void;
@@ -332,7 +332,7 @@ function HistoryEntry({
                 >
                   Open topic →
                 </button>
-                {isPro ? (
+                {canExportPdf ? (
                   <button
                     type="button"
                     onClick={onPrint}
@@ -355,7 +355,7 @@ function HistoryEntry({
                     type="button"
                     onClick={onUpgrade}
                     className="btn-press"
-                    aria-label="Upgrade to MathIQ Pro to download walkthroughs as PDF"
+                    aria-label="Upgrade to MathIQ+ to download walkthroughs as PDF"
                     style={{
                       background: 'transparent',
                       border: `1px dashed ${T.hair}`,
@@ -367,7 +367,7 @@ function HistoryEntry({
                       cursor: 'pointer',
                     }}
                   >
-                    Save as PDF — Pro only →
+                    Save as PDF — Plus →
                   </button>
                 )}
                 <button
