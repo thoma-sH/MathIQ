@@ -260,9 +260,16 @@ export function Landing({ onNavigate }: LandingProps) {
             alt=""
             aria-hidden
             style={{
-              height: 'clamp(140px, 22vh, 220px)',
+              // Hold the image to its natural aspect ratio. Forcing an
+              // explicit height alongside max-width: 100% lets narrow
+              // viewports horizontally-squish the figure (the visual
+              // "cropping" you'd see on mobile). Bounding both dimensions
+              // and letting the image size itself keeps it crisp.
+              maxHeight: 'clamp(160px, 26vh, 260px)',
+              maxWidth: 'min(100%, 420px)',
               width: 'auto',
-              maxWidth: '100%',
+              height: 'auto',
+              objectFit: 'contain',
               display: 'block',
             }}
           />
