@@ -230,6 +230,44 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
         so you can grade your attempt later.
       </p>
 
+      <section style={{ marginTop: 32 }}>
+        <h2
+          style={{
+            fontFamily: T.sans,
+            fontSize: 18,
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
+            margin: '0 0 12px',
+          }}
+        >
+          Homework Helper
+        </h2>
+        <button
+          type="button"
+          onClick={() => onNavigate({ name: 'homework' })}
+          className="btn-press chamfer"
+          style={{
+            display: 'block',
+            width: '100%',
+            textAlign: 'left',
+            padding: '16px 18px',
+            background: T.paper2,
+            border: `1px solid ${T.ink}`,
+            color: T.ink,
+            fontFamily: T.sans,
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>
+            Turn your handwritten work into a PDF →
+          </div>
+          <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.5 }}>
+            Snap a photo or upload a scan. Iris transcribes it; Pro adds a full
+            LaTeX-typeset version for the cleanest possible turn-in.
+          </div>
+        </button>
+      </section>
+
       {pastExams && pastExams.length > 0 && (
         <section style={{ marginTop: 36 }}>
           <h2

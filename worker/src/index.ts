@@ -50,6 +50,13 @@ import {
 } from './history';
 import { extractProblemFromImage } from './ocr';
 import { extractStudentWork, extractStudentWorkFromPdf } from './mathpix';
+import {
+  saveHomework,
+  getHomework,
+  newHomeworkId,
+  type HomeworkRecord,
+} from './homework';
+import { mmdToTex, wrapTexSource, compileLatex } from './latex';
 import { verifyAnswer } from './verify';
 import {
   generateExam,
@@ -212,6 +219,14 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/api/exam/get') {
       return handleExamGet(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
+      return handleHomeworkTranscribe(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/homework/latex-pdf') {
+      return handleHomeworkLatexPdf(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -1263,6 +1278,201 @@ async function handleExamGet(
   }
   const grade = await getGrade(env.USAGE, authState.userId, examId);
   return json({ record, grade }, 200, cors);
+}
+
+// ─── Homework Helper ──────────────────────────────────────────────────────
+
+interface HomeworkTranscribeBody {
+  image?: string;
+  mediaType?: string;
+  sourceFilename?: string;
+}
+
+async function handleHomeworkTranscribe(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
+  }
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'plus' && tier !== 'pro') {
+    return json(
+      { error: 'upgrade_required', message: 'Homework Helper is a MathIQ+ feature.' },
+      403,
+      cors,
+    );
+  }
+
+  let body: HomeworkTranscribeBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.image || typeof body.image !== 'string') {
+    return json({ error: 'image required' }, 400, cors);
+  }
+  if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
+    return json({ error: 'unsupported media type' }, 400, cors);
+  }
+  if (body.image.length > MAX_GRADE_BASE64_CHARS) {
+    return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
+  }
+
+  // Counts as one walkthrough slot. Plus has the 70/day total, Pro has the
+  // 70/day Opus pool. Increment after Mathpix succeeds so OCR failures
+  // don't burn the user's slot.
+  const counter = userCounter(env.USAGE_DO, authState.userId);
+  const usedToday = await peek(counter);
+  const decision = decideTier(tier, usedToday);
+  if (decision.model === null) {
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've used all ${decision.ceiling} slots today.`,
+        limit: decision.ceiling,
+        used: usedToday,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
+  if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    console.error('[homework-transcribe] Mathpix credentials missing');
+    return json(
+      { error: 'service_unavailable', message: 'Homework transcription is temporarily unavailable. Try again shortly.' },
+      503,
+      cors,
+    );
+  }
+
+  const ocr =
+    body.mediaType === 'application/pdf'
+      ? await extractStudentWorkFromPdf({
+          appId: env.MATHPIX_APP_ID,
+          appKey: env.MATHPIX_APP_KEY,
+          pdfBase64: body.image,
+        })
+      : await extractStudentWork({
+          appId: env.MATHPIX_APP_ID,
+          appKey: env.MATHPIX_APP_KEY,
+          imageBase64: body.image,
+          mediaType: body.mediaType,
+        });
+  if (!ocr.ok || !ocr.text) {
+    console.error('[homework-transcribe] Mathpix failed', ocr.status, ocr.detail);
+    const detailLower = (ocr.detail ?? '').toLowerCase();
+    const isPdf = body.mediaType === 'application/pdf';
+    const noun = isPdf ? 'PDF' : 'photo';
+    const message =
+      ocr.status === 401
+        ? 'Homework transcription is temporarily unavailable. Try again shortly.'
+        : ocr.status === 504
+          ? `Your ${noun} took too long to transcribe. Try a shorter file or split it across two uploads.`
+          : detailLower.includes('content not found') || detailLower.includes('no content')
+            ? `Couldn't find any work in the ${noun}. Make sure your handwriting is visible and the file isn't blank.`
+            : detailLower.includes('decode') || detailLower.includes('not supported')
+              ? `That file format could not be read. Upload a PDF or a PNG/JPEG image.`
+              : `Could not read the ${noun}. Try a clearer, better-lit scan with the whole page visible.`;
+    return json({ error: 'ocr_failed', message }, 502, cors);
+  }
+
+  await increment(counter);
+
+  const record: HomeworkRecord = {
+    hwId: newHomeworkId(),
+    userId: authState.userId,
+    mmd: ocr.text,
+    mediaType: body.mediaType,
+    sourceFilename:
+      typeof body.sourceFilename === 'string' ? body.sourceFilename.slice(0, 120) : undefined,
+    createdAt: Date.now(),
+  };
+  await saveHomework(env.USAGE, record);
+
+  return json({ hwId: record.hwId, mmd: record.mmd }, 200, cors);
+}
+
+interface HomeworkLatexBody {
+  hwId?: string;
+  title?: string;
+}
+
+async function handleHomeworkLatexPdf(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
+  }
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'pro') {
+    return json(
+      { error: 'upgrade_required', message: 'LaTeX Mode is a MathIQ Pro feature.' },
+      403,
+      cors,
+    );
+  }
+
+  let body: HomeworkLatexBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.hwId || typeof body.hwId !== 'string') {
+    return json({ error: 'hwId required' }, 400, cors);
+  }
+
+  const record = await getHomework(env.USAGE, authState.userId, body.hwId);
+  if (!record) {
+    return json(
+      {
+        error: 'homework_not_found',
+        message: "That homework transcription has expired or wasn't found. Upload it again.",
+      },
+      404,
+      cors,
+    );
+  }
+
+  // Compile the .mmd → .tex → PDF. No counter increment — this is a
+  // follow-up render of an already-billed transcription, not a new OCR.
+  const texBody = mmdToTex(record.mmd);
+  const tex = wrapTexSource(texBody, {
+    title: typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined,
+  });
+  const result = await compileLatex(tex);
+
+  if (!result.ok || !result.pdfBase64) {
+    console.error('[homework-latex] compile failed', result.status, (result.detail ?? '').slice(0, 400));
+    return json(
+      {
+        error: 'compile_failed',
+        message: 'The LaTeX compile service is having trouble. Download the .tex source below and compile locally, or try again in a few minutes.',
+        texSource: tex,
+      },
+      502,
+      cors,
+    );
+  }
+
+  return json({ pdfBase64: result.pdfBase64 }, 200, cors);
 }
 
 function validatePriceConfig(env: Env): string | null {

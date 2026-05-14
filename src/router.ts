@@ -13,6 +13,7 @@ export type Route =
   | { name: 'settings' }
   | { name: 'exams'; courseId: string }
   | { name: 'exam-take'; courseId: string; recordId: string }
-  | { name: 'exam-grade'; courseId: string; recordId: string };
+  | { name: 'exam-grade'; courseId: string; recordId: string }
+  | { name: 'homework' };
 
 export type RouteName = Route['name'];

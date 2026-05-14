@@ -12,6 +12,7 @@ import { Privacy } from './screens/Privacy';
 import { Exams } from './screens/Exams';
 import { ExamTake } from './screens/ExamTake';
 import { ExamGrade } from './screens/ExamGrade';
+import { Homework } from './screens/Homework';
 import type { Route } from './router';
 
 interface PageProps {
@@ -41,6 +42,7 @@ function escapeTarget(route: Route): Route | null {
   if (route.name === 'exams') return { name: 'walkthrough', courseId: route.courseId };
   if (route.name === 'exam-take') return { name: 'exams', courseId: route.courseId };
   if (route.name === 'exam-grade') return { name: 'exam-take', courseId: route.courseId, recordId: route.recordId };
+  if (route.name === 'homework') return { name: 'home' };
   return null;
 }
 
@@ -91,6 +93,7 @@ function MathIQApp() {
         {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={setRoute} />}
         {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} recordId={route.recordId} onNavigate={setRoute} />}
         {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} recordId={route.recordId} onNavigate={setRoute} />}
+        {route.name === 'homework'    && <Homework onNavigate={setRoute} />}
       </Page>
       <InstallPrompt />
     </>

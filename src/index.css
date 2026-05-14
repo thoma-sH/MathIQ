@@ -472,4 +472,48 @@ img, svg { max-width: 100%; }
     color: #777;
     text-align: center;
   }
+
+  /* Homework document — clean academic transcription of student work */
+  .homework-doc {
+    color: #000;
+    background: #fff;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-size: 12pt;
+    line-height: 1.55;
+    padding: 0.6in 0.7in;
+  }
+  .homework-doc .homework-header {
+    border-bottom: 1.5px solid #000;
+    padding-bottom: 10pt;
+    margin-bottom: 16pt;
+  }
+  .homework-doc .homework-title {
+    font-size: 22pt;
+    font-weight: 700;
+    margin: 0 0 4pt;
+    letter-spacing: -0.02em;
+  }
+  .homework-doc .homework-meta {
+    font-size: 10pt;
+    color: #666;
+    letter-spacing: 0.04em;
+  }
+  .homework-doc .homework-body { color: #000; font-size: 12pt; }
+  .homework-doc .homework-body p,
+  .homework-doc .homework-body li,
+  .homework-doc .homework-body .katex-display {
+    page-break-inside: avoid;
+  }
+  .homework-doc .homework-body .katex { font-size: 1.05em; }
+  .homework-doc .homework-body h1 { font-size: 14pt; margin: 14pt 0 6pt; }
+  .homework-doc .homework-body h2 { font-size: 13pt; margin: 12pt 0 6pt; }
+  .homework-doc .homework-body h3 { font-size: 12pt; margin: 10pt 0 4pt; }
+  .homework-doc .print-footer {
+    margin-top: 24pt;
+    padding-top: 8pt;
+    border-top: 1px solid #ccc;
+    font-size: 8pt;
+    color: #777;
+    text-align: center;
+  }
 }

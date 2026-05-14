@@ -419,6 +419,26 @@ export function Landing({ onNavigate }: LandingProps) {
         >
           or browse Lessons →
         </button>
+
+        <button
+          type="button"
+          onClick={() => onNavigate({ name: 'homework' })}
+          className="reveal reveal-5 btn-press"
+          style={{
+            marginTop: 8,
+            background: 'transparent',
+            border: 'none',
+            padding: '4px 8px',
+            fontFamily: T.mono,
+            fontSize: 12,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: T.muted,
+            cursor: 'pointer',
+          }}
+        >
+          Homework Helper · Plus →
+        </button>
       </div>
 
       <footer
