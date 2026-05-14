@@ -274,8 +274,9 @@ function TranscribingCard() {
     >
       <div style={{ fontSize: 16, fontWeight: 600 }}>Iris is reading your work…</div>
       <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.55 }}>
-        Takes 5–20 seconds depending on length. Mathpix transcribes every line,
-        preserves the math, and hands it to the renderer.
+        Two passes: Mathpix transcribes every line and preserves the math,
+        then Iris proofreads against the original page to fix typos and
+        restore section breaks. Usually 20–45 seconds.
       </div>
     </section>
   );

@@ -50,6 +50,7 @@ import {
 } from './history';
 import { extractProblemFromImage } from './ocr';
 import { extractStudentWork, extractStudentWorkFromPdf } from './mathpix';
+import { cleanupTranscription } from './cleanup';
 import {
   saveHomework,
   getHomework,
@@ -1388,10 +1389,29 @@ async function handleHomeworkTranscribe(
 
   await increment(counter);
 
+  // Cleanup pass — give Claude the original page + raw Mathpix output and
+  // let it fix English-word OCR misreads ("fimit"→"limit") and restore
+  // paragraph/section breaks that Mathpix's reading-order serialization
+  // flattens out of multi-column layouts. Falls back to raw Mathpix
+  // output on any failure so a transient Anthropic blip doesn't kill the
+  // whole transcription.
+  let finalText = ocr.text;
+  const cleanup = await cleanupTranscription({
+    apiKey: env.ANTHROPIC_API_KEY,
+    mediaType: body.mediaType,
+    sourceBase64: body.image,
+    rawMmd: ocr.text,
+  });
+  if (cleanup.ok && cleanup.cleaned) {
+    finalText = cleanup.cleaned;
+  } else if (cleanup.detail) {
+    console.error('[homework-cleanup] fell back to raw mathpix:', cleanup.detail);
+  }
+
   const record: HomeworkRecord = {
     hwId: newHomeworkId(),
     userId: authState.userId,
-    mmd: ocr.text,
+    mmd: finalText,
     mediaType: body.mediaType,
     sourceFilename:
       typeof body.sourceFilename === 'string' ? body.sourceFilename.slice(0, 120) : undefined,
