@@ -17,6 +17,7 @@ import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { verifyWalkthrough, type Verdict } from '../walkthroughs/verify';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
+import { openScanner } from '../scanner';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
@@ -119,7 +120,6 @@ export function TopicScreen({
   const walkthroughAbortRef = useRef<AbortController | null>(null);
   const whyHowAbortRef = useRef<AbortController | null>(null);
   const classifyAbortRef = useRef<AbortController | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
 
@@ -344,20 +344,17 @@ export function TopicScreen({
     }
   }
 
-  function onImageFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) void handleImageFile(file);
-    if (imageInputRef.current) imageInputRef.current.value = '';
-  }
-
-  function onImageButtonClick() {
+  async function onImageButtonClick() {
     // Photo input is Plus+. Show the upgrade modal instead of letting the
     // worker reject with a 403 the user has to decode.
     if (rateInfo && rateInfo.tier !== 'plus' && rateInfo.tier !== 'pro') {
       requireUpgrade('photo-input');
       return;
     }
-    imageInputRef.current?.click();
+    const out = await openScanner({ mode: 'single', output: 'image' });
+    if (out && out.kind === 'image') {
+      void handleImageFile(out.file);
+    }
   }
 
   function onCustomTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -965,9 +962,9 @@ export function TopicScreen({
           </button>
           <button
             type="button"
-            onClick={onImageButtonClick}
+            onClick={() => void onImageButtonClick()}
             disabled={ocrState === 'reading' || classifying || isStreamingAnything}
-            aria-label="Upload an image of a problem"
+            aria-label="Scan a problem with your camera"
             className="btn-press"
             style={{
               background: 'transparent',
@@ -981,15 +978,8 @@ export function TopicScreen({
               color: T.ink,
             }}
           >
-            {ocrState === 'reading' ? 'Reading…' : 'Image'}
+            {ocrState === 'reading' ? 'Reading…' : 'Scan'}
           </button>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/jpeg,image/jpg,image/png,image/webp"
-            style={{ display: 'none' }}
-            onChange={onImageFileChange}
-          />
           <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>
             If your problem fits a different topic, Iris will route you there.
           </span>

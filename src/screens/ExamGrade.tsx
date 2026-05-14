@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -12,6 +12,7 @@ import {
   type ExamGradeResult,
   type ExamRecord,
 } from '../walkthroughs/exam';
+import { openScanner } from '../scanner';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
@@ -32,7 +33,6 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
   const { getToken } = useAuth();
   const [record, setRecord] = useState<ExamRecord | null>(null);
   const [state, setState] = useState<GradeState>({ kind: 'idle' });
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,13 +139,7 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
         and recommend what to review.
       </p>
 
-      {state.kind === 'idle' && record && (
-        <IdleCard
-          onChoose={() => fileInputRef.current?.click()}
-          fileInputRef={fileInputRef}
-          onFile={onFile}
-        />
-      )}
+      {state.kind === 'idle' && record && <IdleCard onFile={onFile} />}
 
       {state.kind === 'idle' && !record && (
         <div
@@ -211,15 +205,15 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
   );
 }
 
-function IdleCard({
-  onChoose,
-  fileInputRef,
-  onFile,
-}: {
-  onChoose: () => void;
-  fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  onFile: (f: File | null) => void;
-}) {
+function IdleCard({ onFile }: { onFile: (f: File | null) => void }) {
+  async function onScan() {
+    const out = await openScanner({
+      mode: 'multi',
+      output: 'pdf',
+      filename: 'Attempt.pdf',
+    });
+    if (out && out.kind === 'pdf') onFile(out.file);
+  }
   return (
     <section
       style={{
@@ -228,16 +222,9 @@ function IdleCard({
         background: T.paper2,
       }}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
-        style={{ display: 'none' }}
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-      />
       <button
         type="button"
-        onClick={onChoose}
+        onClick={() => void onScan()}
         className="btn-press chamfer"
         style={{
           background: T.accent,
@@ -250,13 +237,11 @@ function IdleCard({
           fontFamily: T.sans,
         }}
       >
-        Choose file →
+        Scan pages →
       </button>
       <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
-        PDF (best for multi-page) or a PNG/JPEG photo. Up to 15&nbsp;MB. For photos,
-        shoot straight-on with good light. For PDFs, browser "Print → Save as PDF"
-        on the exam screen makes a clean copy in seconds — write on a printout,
-        scan or shoot each page, and combine into one PDF.
+        Snap each page of your attempt. Iris auto-crops, straightens, and
+        bundles everything into one PDF — then scores it problem-by-problem.
       </p>
     </section>
   );

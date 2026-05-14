@@ -152,7 +152,7 @@ function loadViaImgElement(file: File): Promise<HTMLImageElement> {
  * to the worker. Images always come back as `image/jpeg` so callers can
  * stop caring about HEIC/HEIF/PNG/WebP source formats.
  */
-async function prepareImageForUpload(file: File): Promise<{ blob: Blob; mediaType: string }> {
+export async function prepareImageForUpload(file: File): Promise<{ blob: Blob; mediaType: string }> {
   if (file.type === 'application/pdf') {
     return { blob: file, mediaType: 'application/pdf' };
   }

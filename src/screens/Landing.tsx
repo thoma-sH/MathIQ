@@ -9,6 +9,7 @@ import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
+import { openScanner } from '../scanner';
 import type { Route } from '../router';
 
 interface LandingProps {
@@ -65,7 +66,6 @@ export function Landing({ onNavigate }: LandingProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const scribeTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (searchState === 'expanded' || searchState === 'no_match') {
@@ -143,10 +143,11 @@ export function Landing({ onNavigate }: LandingProps) {
     }
   }
 
-  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) void handleImageFile(file);
-    if (imageInputRef.current) imageInputRef.current.value = '';
+  async function onScanClick() {
+    const out = await openScanner({ mode: 'single', output: 'image' });
+    if (out && out.kind === 'image') {
+      void handleImageFile(out.file);
+    }
   }
 
   function onTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -331,9 +332,9 @@ export function Landing({ onNavigate }: LandingProps) {
             </button>
             <button
               type="button"
-              onClick={() => imageInputRef.current?.click()}
+              onClick={() => void onScanClick()}
               disabled={ocrState === 'reading' || busy}
-              aria-label="Upload an image of a problem"
+              aria-label="Scan a problem with your camera"
               className="btn-press"
               style={{
                 background: 'transparent',
@@ -348,15 +349,8 @@ export function Landing({ onNavigate }: LandingProps) {
                 marginLeft: 10,
               }}
             >
-              {ocrState === 'reading' ? 'Reading…' : 'Image'}
+              {ocrState === 'reading' ? 'Reading…' : 'Scan'}
             </button>
-            <input
-              ref={imageInputRef}
-              type="file"
-              accept="image/jpeg,image/jpg,image/png,image/webp"
-              style={{ display: 'none' }}
-              onChange={onFileChange}
-            />
           </div>
 
           {ocrState === 'error' && ocrMessage && (

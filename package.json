@@ -13,13 +13,15 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
     "@clerk/clerk-react": "^5.61.6",
+    "jscanify": "^1.4.2",
     "jspdf": "^4.2.1",
     "katex": "^0.16.45",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "rehype-katex": "^7.0.1",
-    "remark-math": "^6.0.0"
+    "remark-math": "^6.0.0",
+    "vim": "^0.1.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

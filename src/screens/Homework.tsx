@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
@@ -18,6 +18,8 @@ import {
   type UncertainFix,
   type HomeworkListEntry,
 } from '../walkthroughs/homework';
+import { openScanner } from '../scanner';
+import { pagesToPdf, downloadFile } from '../scanner/scanToPdf';
 import type { Route } from '../router';
 
 interface HomeworkProps {
@@ -69,7 +71,6 @@ export function Homework({ onNavigate }: HomeworkProps) {
   );
   const [pastHomework, setPastHomework] = useState<HomeworkListEntry[] | null>(null);
   const [openingPast, setOpeningPast] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Listen for cross-screen changes to the Trust Iris setting (Settings
   // page updates the localStorage entry directly).
@@ -268,11 +269,7 @@ export function Homework({ onNavigate }: HomeworkProps) {
           <OutputToggle output={output} onChange={setOutput} />
           {output === 'formatted' ? (
             <>
-              <IdleCard
-                fileInputRef={fileInputRef}
-                onChoose={() => fileInputRef.current?.click()}
-                onFile={onFile}
-              />
+              <IdleCard onFile={onFile} />
               {!trustIris && !tipDismissed && (
                 <TrustIrisTip
                   onOpenSettings={() => onNavigate({ name: 'settings' })}
@@ -365,14 +362,18 @@ export function Homework({ onNavigate }: HomeworkProps) {
 }
 
 function IdleCard({
-  fileInputRef,
-  onChoose,
   onFile,
 }: {
-  fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
-  onChoose: () => void;
   onFile: (f: File | null) => void;
 }) {
+  async function onScan() {
+    const out = await openScanner({
+      mode: 'multi',
+      output: 'pdf',
+      filename: 'Homework.pdf',
+    });
+    if (out && out.kind === 'pdf') onFile(out.file);
+  }
   return (
     <section
       style={{
@@ -381,16 +382,9 @@ function IdleCard({
         background: T.paper2,
       }}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
-        style={{ display: 'none' }}
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-      />
       <button
         type="button"
-        onClick={onChoose}
+        onClick={() => void onScan()}
         className="btn-press chamfer"
         style={{
           background: T.accent,
@@ -403,12 +397,11 @@ function IdleCard({
           fontFamily: T.sans,
         }}
       >
-        Choose file →
+        Scan pages →
       </button>
       <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
-        PDF (best for multi-page) or a PNG/JPEG photo. Up to 15&nbsp;MB. Shoot
-        straight-on with good light, or scan multiple pages into a single PDF
-        from your phone's Files app.
+        Snap each page of your handwritten work. Iris auto-crops and
+        straightens, then bundles everything into one PDF for transcription.
       </p>
     </section>
   );
@@ -694,7 +687,6 @@ function RawUploadCard() {
   const [title, setTitle] = useState('');
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   // Revoke object URLs on unmount so the browser releases memory.
   useEffect(() => {
@@ -704,32 +696,17 @@ function RawUploadCard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function addFiles(files: FileList | null) {
-    if (!files) return;
-    const next: RawPage[] = [];
-    for (const f of Array.from(files)) {
-      if (!f.type.startsWith('image/')) continue;
-      next.push({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        file: f,
-        objectUrl: URL.createObjectURL(f),
-      });
-    }
-    if (next.length === 0) {
-      setError('Pick image files (JPG, PNG, WebP, or HEIC).');
-      return;
-    }
+  async function addFromScanner() {
     setError(null);
+    const out = await openScanner({ mode: 'multi', output: 'images' });
+    if (!out || out.kind !== 'images' || out.files.length === 0) return;
+    const next: RawPage[] = out.files.map((f) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      file: f,
+      objectUrl: URL.createObjectURL(f),
+    }));
     setPages((p) => [...p, ...next]);
-    // Default title from the first file if user hasn't set one.
-    if (!title && next[0]) {
-      const cleaned = next[0].file.name
-        .replace(/\.(jpe?g|png|webp|heic)$/i, '')
-        .replace(/[_-]+/g, ' ')
-        .replace(/([a-z])([A-Z])/g, '$1 $2')
-        .trim();
-      setTitle(cleaned || 'Homework');
-    }
+    if (!title) setTitle('Homework');
   }
 
   function removePage(id: string) {
@@ -757,33 +734,11 @@ function RawUploadCard() {
     setError(null);
     setGenerating(true);
     try {
-      // Dynamic import keeps jspdf out of the initial bundle.
-      const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ format: 'letter', unit: 'pt', compress: true });
-      // Letter page is 612pt × 792pt; reserve 0.5in margin on each side.
-      const pageW = 612;
-      const pageH = 792;
-      const margin = 36;
-      const usableW = pageW - 2 * margin;
-      const usableH = pageH - 2 * margin;
-
-      for (let i = 0; i < pages.length; i++) {
-        const page = pages[i];
-        const dataUrl = await fileToDataUrl(page.file);
-        const dims = await imageDims(dataUrl);
-        // Fit image into usable area, preserving aspect ratio.
-        const scale = Math.min(usableW / dims.w, usableH / dims.h);
-        const drawW = dims.w * scale;
-        const drawH = dims.h * scale;
-        const x = (pageW - drawW) / 2;
-        const y = (pageH - drawH) / 2;
-        if (i > 0) doc.addPage();
-        const fmt = page.file.type === 'image/png' ? 'PNG' : 'JPEG';
-        doc.addImage(dataUrl, fmt, x, y, drawW, drawH);
-      }
-
-      const filename = (title.trim() || 'Homework').replace(/[^a-z0-9 _.-]/gi, '') + '.pdf';
-      doc.save(filename);
+      const pdf = await pagesToPdf(
+        pages.map((p) => p.file),
+        { filename: title.trim() || 'Homework' },
+      );
+      downloadFile(pdf);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PDF generation failed');
     } finally {
@@ -799,23 +754,11 @@ function RawUploadCard() {
         background: T.paper2,
       }}
     >
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/jpg,image/png,image/webp,image/heic"
-        multiple
-        style={{ display: 'none' }}
-        onChange={(e) => {
-          addFiles(e.target.files);
-          if (e.target) e.target.value = '';
-        }}
-      />
-
       {pages.length === 0 ? (
         <>
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => void addFromScanner()}
             className="btn-press chamfer"
             style={{
               background: T.accent,
@@ -828,12 +771,12 @@ function RawUploadCard() {
               fontFamily: T.sans,
             }}
           >
-            Pick photos →
+            Scan pages →
           </button>
           <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
-            Snap each page of your handwritten work. We'll combine them into a
-            single PDF you can submit — no AI, no transcription, just your
-            actual work. Pick multiple files at once or add them one at a time.
+            Snap each page of your handwritten work. Iris auto-crops and
+            straightens, then bundles everything into one PDF — no AI, no
+            transcription, just your actual work.
           </p>
         </>
       ) : (
@@ -859,7 +802,7 @@ function RawUploadCard() {
             </div>
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
+              onClick={() => void addFromScanner()}
               className="btn-press"
               style={{
                 background: 'transparent',
@@ -872,7 +815,7 @@ function RawUploadCard() {
                 cursor: 'pointer',
               }}
             >
-              + Add more
+              + Scan more
             </button>
           </div>
 
@@ -1087,24 +1030,6 @@ function PageThumbnail({
       </div>
     </div>
   );
-}
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
-    reader.onload = () => resolve(reader.result as string);
-    reader.readAsDataURL(file);
-  });
-}
-
-function imageDims(dataUrl: string): Promise<{ w: number; h: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
-    img.onerror = () => reject(new Error('Failed to load image dimensions'));
-    img.src = dataUrl;
-  });
 }
 
 /** Apply user resolutions to the cleaned transcription. Each accepted fix
