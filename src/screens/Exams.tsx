@@ -250,7 +250,7 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
             margin: '0 0 12px',
           }}
         >
-          Homework Helper
+          Handwritten to PDF
         </h2>
         <button
           type="button"
@@ -272,8 +272,9 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
             Turn your handwritten work into a PDF →
           </div>
           <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.5 }}>
-            Snap a photo or upload a scan. Iris transcribes it; Pro adds a full
-            LaTeX-typeset version for the cleanest possible turn-in.
+            Plus: snap a photo, get a clean transcribed PDF. Pro includes that
+            plus LaTeX Mode — a real LaTeX-typeset PDF compiled from your
+            handwriting.
           </div>
         </button>
       </section>

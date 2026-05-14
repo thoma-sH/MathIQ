@@ -1304,7 +1304,7 @@ async function handleHomeworkTranscribe(
   const tier = await resolveTier(authState, env);
   if (tier !== 'plus' && tier !== 'pro') {
     return json(
-      { error: 'upgrade_required', message: 'Homework Helper is a MathIQ+ feature.' },
+      { error: 'upgrade_required', message: 'Handwritten to PDF is a MathIQ+ feature.' },
       403,
       cors,
     );

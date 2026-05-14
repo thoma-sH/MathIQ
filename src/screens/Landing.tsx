@@ -461,7 +461,7 @@ export function Landing({ onNavigate }: LandingProps) {
             cursor: 'pointer',
           }}
         >
-          Homework Helper · Plus →
+          Handwritten to PDF · LaTeX Mode →
         </button>
       </div>
 

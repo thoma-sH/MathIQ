@@ -89,17 +89,17 @@ const FEATURE_META: Record<LockedFeature, FeatureMeta> = {
     requiredTier: 'plus',
   },
   'homework-plain': {
-    kicker: 'HOMEWORK HELPER · PLUS',
+    kicker: 'HANDWRITTEN TO PDF · PLUS',
     title: 'Turn handwriting into a clean PDF.',
     blurb:
-      'Upload a photo or scan of your handwritten work. Iris transcribes the math, formats it neatly, and outputs a PDF you can actually turn in.',
+      'Upload a photo or scan of your handwritten work. Iris transcribes the math, formats it neatly, and outputs a PDF you can actually turn in. Pro includes this plus LaTeX Mode.',
     requiredTier: 'plus',
   },
   'homework-latex': {
     kicker: 'LATEX MODE · PRO',
     title: 'Typeset your homework in real LaTeX.',
     blurb:
-      'Same upload, but Pro compiles your handwriting into a Computer Modern-typeset PDF — formal, beautiful, indistinguishable from an Overleaf paper.',
+      'Pro includes Handwritten to PDF and adds LaTeX Mode on top — your handwriting compiled into a Computer Modern-typeset PDF, indistinguishable from an Overleaf paper.',
     requiredTier: 'pro',
   },
   'why-how': {

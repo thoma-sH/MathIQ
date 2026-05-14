@@ -103,10 +103,10 @@ export async function transcribeHomework(opts: TranscribeOpts): Promise<Transcri
   });
 
   if (resp.status === 401) {
-    throw new HomeworkError('sign_in_required', 'Sign in to use Homework Helper.');
+    throw new HomeworkError('sign_in_required', 'Sign in to use Handwritten to PDF.');
   }
   if (resp.status === 403) {
-    throw new HomeworkError('upgrade_required', 'Homework Helper is a MathIQ+ feature.');
+    throw new HomeworkError('upgrade_required', 'Handwritten to PDF is a MathIQ+ feature.');
   }
   if (resp.status === 429) {
     throw new HomeworkError('rate_limit', "You've used all your daily slots.");

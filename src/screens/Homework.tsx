@@ -155,7 +155,7 @@ export function Homework({ onNavigate }: HomeworkProps) {
           margin: '0 0 12px',
         }}
       >
-        Homework Helper.
+        Handwritten to PDF.
       </h1>
       <p
         style={{
