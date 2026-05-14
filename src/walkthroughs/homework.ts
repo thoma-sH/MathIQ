@@ -57,11 +57,16 @@ const ALLOWED_MEDIA = new Set([
 ]);
 const MAX_BYTES = 15 * 1024 * 1024;
 
-// Mathpix /v3/text caps at ~5000px on the long edge. iPhone Pro cameras
-// can shoot above that. Resize anything past this threshold so Mathpix
-// always sees a decodable image.
-const MAX_IMAGE_LONG_EDGE = 4000;
-const RESIZE_JPEG_QUALITY = 0.85;
+// Mathpix /v3/text caps at ~5000px on the long edge AND ~5 MB on the
+// request body. The body cap binds first for dense content like
+// handwritten math on lined paper — JPEG can't compress the high-frequency
+// strokes much, so a 4000×3000 q=0.85 page would still ship at 3-4 MB
+// pre-base64 and blow the 5 MB ceiling once data-URI wrapping inflates it
+// by ~33%. 3000px / q=0.80 keeps a typical page well under 2 MB while
+// preserving plenty of resolution for OCR (~1.5 pixels per pencil stroke
+// at letter-size paper).
+const MAX_IMAGE_LONG_EDGE = 3000;
+const RESIZE_JPEG_QUALITY = 0.8;
 
 /** iOS Safari sometimes hands back a File with empty `type` for items
  *  picked from Files.app. Fall back to the filename extension. */
