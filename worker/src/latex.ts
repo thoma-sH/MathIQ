@@ -209,13 +209,28 @@ function escapeLatex(text: string): string {
  */
 export function wrapTexSource(body: string, options: { title?: string } = {}): string {
   const titleBlock = options.title
-    ? `\\title{${escapeLatex(options.title)}}\n\\date{\\today}\n\\maketitle\n\n`
+    ? `\\title{\\color{mathiqInk}${escapeLatex(options.title)}}\n\\date{}\n\\maketitle\n\n`
     : '';
   return `\\documentclass[11pt]{article}
 \\usepackage[a4paper,margin=1in]{geometry}
 \\usepackage{amsmath,amssymb,amsfonts}
 \\usepackage{enumerate}
 \\usepackage{graphicx}
+\\usepackage[dvipsnames]{xcolor}
+\\usepackage{titlesec}
+\\usepackage{microtype}
+
+% MathIQ brand colors
+\\definecolor{mathiqInk}{HTML}{1A2B1A}
+\\definecolor{mathiqAccent}{HTML}{1A4D6E}
+\\definecolor{mathiqAccent2}{HTML}{3D6E5F}
+
+% Color section headers with the brand accent
+\\titleformat{\\section}{\\normalfont\\Large\\bfseries\\color{mathiqAccent}}{\\thesection}{1em}{}
+\\titleformat{name=\\section,numberless}{\\normalfont\\Large\\bfseries\\color{mathiqAccent}}{}{0em}{}
+\\titleformat{\\subsection}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{\\thesubsection}{1em}{}
+\\titleformat{name=\\subsection,numberless}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{}{0em}{}
+
 \\setlength{\\parindent}{0pt}
 \\setlength{\\parskip}{0.5em}
 \\begin{document}
@@ -249,18 +264,32 @@ A COMPLETE LaTeX document. The very first character must be \`\\\` (the backslas
 
 ## Document structure
 
+ALWAYS emit this exact preamble — no substitutions. The colors and titlesec calls are the MathIQ brand applied to the document.
+
 \\documentclass[11pt]{article}
-% Required packages — assume nothing extra is installed
 \\usepackage[a4paper,margin=1in]{geometry}
 \\usepackage{amsmath,amssymb,amsfonts}
 \\usepackage{enumerate}
 \\usepackage{graphicx}
-\\setlength{\\parindent}{0pt}
-\\setlength{\\parskip}{0.5em}
-% Optional but encouraged for nicer typography:
+\\usepackage[dvipsnames]{xcolor}
+\\usepackage{titlesec}
 \\usepackage{microtype}
 
-\\title{<the provided title, escaped>}
+% MathIQ brand colors
+\\definecolor{mathiqInk}{HTML}{1A2B1A}
+\\definecolor{mathiqAccent}{HTML}{1A4D6E}
+\\definecolor{mathiqAccent2}{HTML}{3D6E5F}
+
+% Apply the accent to every section/subsection header
+\\titleformat{\\section}{\\normalfont\\Large\\bfseries\\color{mathiqAccent}}{\\thesection}{1em}{}
+\\titleformat{name=\\section,numberless}{\\normalfont\\Large\\bfseries\\color{mathiqAccent}}{}{0em}{}
+\\titleformat{\\subsection}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{\\thesubsection}{1em}{}
+\\titleformat{name=\\subsection,numberless}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{}{0em}{}
+
+\\setlength{\\parindent}{0pt}
+\\setlength{\\parskip}{0.5em}
+
+\\title{\\color{mathiqInk}<the provided title, escaped>}
 \\date{}
 \\begin{document}
 \\maketitle

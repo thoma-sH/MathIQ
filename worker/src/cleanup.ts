@@ -69,9 +69,19 @@ Mathpix routinely confuses handwritten operators that share simple shapes when t
 - \`≠\` misread as \`=\`
 - decimal \`.\` misread as \`,\` and vice versa
 
-You MAY correct these ONLY when the surrounding math context unambiguously identifies the right operator. The clearest signal: do the arithmetic mentally. If \`3(-2)^4 + 2(-2)^2 - -2 + 1\` evaluates to \`59\` and Mathpix wrote \`... + 1 - 59\`, that final \`-\` was almost certainly a misread \`=\`.
+**Be ACTIVE about catching these — don't only fix the one obvious case.** For every line where Mathpix wrote a math statement that doesn't make arithmetic sense as written, run the calculation yourself and check whether flipping one operator (especially \`=\`↔\`−\`) would make it correct. If yes, apply the fix in \`cleaned\` and FLAG it in \`uncertain\` for the student to verify.
 
-**Always list operator fixes in \`uncertain\`** — never apply silently. Use \`reason: "Mathpix likely misread = as −; left-hand side evaluates to 59"\` so the student can verify in one glance. If the math doesn't compute either way, leave Mathpix's output alone — the student may have written something genuinely wrong, and we don't second-guess their work.
+Three concrete cases to actively look for:
+
+1. **Statement-with-result pattern.** \`a + b - c\` where \`c\` happens to equal \`a + b\`. Almost always means \`= c\`, not \`− c\`. Example: \`3(-2)^4 + 2(-2)^2 - -2 + 1 - 59\` evaluates to \`-58\` literally but \`= 59\` if the final \`-\` is \`=\`. Apply the fix.
+
+2. **Multi-step derivation.** Lines like \`(x + 2)(x - 2)/(x - 2) - lim(x + 2) = 4\` — the \`-\` between expressions in a chain of equivalent forms is almost certainly an \`=\`. The student is showing the steps lead to the same answer.
+
+3. **Sequential equation rewriting.** \`f(x) - x^2 - 4 - x - 2\` chained together — these are usually \`f(x) = x^2 - 4 = x - 2\` (or similar), not subtractions.
+
+**Always list operator fixes in \`uncertain\`** — never apply silently. Use \`reason: "Mathpix likely misread = as −; left-hand side evaluates to 59"\` so the student can verify in one glance.
+
+**Constraint**: if the math doesn't compute either way, leave Mathpix's output alone — the student may have written something genuinely wrong, and we don't second-guess their work. Only fix when one specific operator-flip makes the statement true and the original doesn't.
 
 ### When to flag uncertain entries
 
