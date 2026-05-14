@@ -797,7 +797,7 @@ async function processStripeEvent(
         return;
       }
       const purchasedAt = Math.floor(Date.now() / 1000);
-      const expiresAt = purchasedAt + 5 * 30 * 24 * 60 * 60; // 5 months
+      const expiresAt = addCalendarMonths(purchasedAt, 5);
       const pass: PassState = {
         kind: 'pass',
         tier: mapping.tier,
@@ -1735,6 +1735,26 @@ async function latexCacheKey(mmd: string, title: string | undefined): Promise<st
   return Array.from(new Uint8Array(buf))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+/**
+ * Add N calendar months to a unix timestamp (seconds), anchored on UTC so
+ * the result is consistent regardless of where the worker instance runs.
+ * If the source day-of-month doesn't exist in the target month (e.g. Aug 31
+ * + 6 months → Feb 31), JS's Date constructor rolls forward — Mar 3 in a
+ * common year. That's customer-favorable, which is the right default here.
+ */
+function addCalendarMonths(unixSeconds: number, months: number): number {
+  const d = new Date(unixSeconds * 1000);
+  const target = Date.UTC(
+    d.getUTCFullYear(),
+    d.getUTCMonth() + months,
+    d.getUTCDate(),
+    d.getUTCHours(),
+    d.getUTCMinutes(),
+    d.getUTCSeconds(),
+  );
+  return Math.floor(target / 1000);
 }
 
 function validatePriceConfig(env: Env, interval: SubscriptionInterval): string | null {
