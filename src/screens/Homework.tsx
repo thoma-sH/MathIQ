@@ -72,11 +72,7 @@ export function Homework({ onNavigate }: HomeworkProps) {
     setLatex({ kind: 'idle' });
     try {
       const result = await transcribeHomework({ file, getToken });
-      // Default title from filename: strip extension, replace separators with spaces.
-      const title = file.name
-        .replace(/\.(pdf|png|jpe?g|webp)$/i, '')
-        .replace(/[_-]+/g, ' ')
-        .trim() || 'Homework';
+      const title = titleFromFilename(file.name);
       setState({ kind: 'done', hwId: result.hwId, mmd: result.mmd, title });
     } catch (err) {
       const msg =
@@ -473,8 +469,10 @@ function PlainView({
         >
           Print / Save as PDF →
         </button>
-        <span style={{ fontSize: 12, color: T.muted, alignSelf: 'center' }}>
-          On iPhone: tap Print → pinch the preview → Save to Files.
+        <span style={{ fontSize: 12, color: T.muted, alignSelf: 'center', lineHeight: 1.5 }}>
+          iPhone: tap Print → pinch the preview → Save to Files. Chrome / Edge:
+          in the print dialog, turn off &ldquo;Headers and footers&rdquo; under
+          More settings for a cleaner page.
         </span>
       </div>
       <article
@@ -497,7 +495,7 @@ function PlainView({
         </h2>
         <div className="markdown-body" style={{ fontSize: 15, lineHeight: 1.6 }}>
           <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {mmd}
+            {normalizeMmdForReact(mmd)}
           </ReactMarkdown>
         </div>
       </article>
@@ -659,6 +657,63 @@ function downloadText(text: string, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/**
+ * Default printable title from the source filename.
+ *
+ *   "ThomasHamiltonHW5-1.pdf"  →  "Thomas Hamilton HW5 1"
+ *   "calc_problem_set_2.png"   →  "Calc Problem Set 2"
+ *
+ * Strip extension, split CamelCase, replace separator chars with spaces,
+ * trim, fall back to "Homework" if nothing's left.
+ */
+function titleFromFilename(name: string): string {
+  return (
+    name
+      .replace(/\.(pdf|png|jpe?g|webp)$/i, '')
+      // Split before any uppercase that follows a lowercase ("aB" → "a B")
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      // Normalize separator characters to single spaces.
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || 'Homework'
+  );
+}
+
+/**
+ * Coerce Mathpix Markdown into a shape react-markdown + remark-math can render.
+ *
+ * Mathpix's `.mmd` is a superset of markdown with two patterns that break
+ * the standard pipeline:
+ *
+ *   1. Display math `$$ ... $$` is emitted INLINE alongside prose with no
+ *      surrounding blank lines. remark-math then tokenizes it as inline
+ *      math, where `\begin{aligned}` is invalid — KaTeX dumps the source
+ *      in red text. Forcing display blocks onto their own paragraph fixes
+ *      ~80% of the rendering damage we saw on real handwriting submissions.
+ *
+ *   2. Mathpix-specific text commands (\section, \subsection) appear at the
+ *      document level (not inside math) and have no analogue in standard
+ *      markdown. Convert them to `##` / `###` headers.
+ */
+function normalizeMmdForReact(mmd: string): string {
+  let s = mmd;
+
+  // Mathpix text-mode commands → markdown headers.
+  s = s.replace(/\\subsubsection\*?\{([^}]+)\}/g, '\n\n#### $1\n\n');
+  s = s.replace(/\\subsection\*?\{([^}]+)\}/g, '\n\n### $1\n\n');
+  s = s.replace(/\\section\*?\{([^}]+)\}/g, '\n\n## $1\n\n');
+
+  // Wrap every $$ ... $$ block in blank lines so remark-math parses it as
+  // display math instead of inline. The `[\s\S]*?` is non-greedy so adjacent
+  // $$ pairs don't merge into one giant block.
+  s = s.replace(/\$\$([\s\S]*?)\$\$/g, (_m, body) => `\n\n$$\n${body.trim()}\n$$\n\n`);
+
+  // Collapse the runs of blank lines our inserts can create.
+  s = s.replace(/\n{3,}/g, '\n\n');
+
+  return s;
+}
+
 function HomeworkPrintHost({ mmd, title }: { mmd: string; title: string }) {
   const date = new Date().toLocaleDateString(undefined, {
     month: 'long',
@@ -674,7 +729,7 @@ function HomeworkPrintHost({ mmd, title }: { mmd: string; title: string }) {
         </header>
         <div className="markdown-body homework-body">
           <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {mmd}
+            {normalizeMmdForReact(mmd)}
           </ReactMarkdown>
         </div>
         <div className="print-footer">MathIQ · mathiq.io</div>
