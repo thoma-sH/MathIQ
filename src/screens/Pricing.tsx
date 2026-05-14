@@ -48,7 +48,7 @@ const FEATURES: FeatureRow[] = [
     label: 'Daily walkthroughs',
     detail: 'Type a problem; Iris walks you through every move',
     free: '5 / day',
-    plus: '55 / day',
+    plus: '40 / day',
     pro: '40 / day',
   },
   {
@@ -288,7 +288,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.plus[interval].sub}
           blurb="The premium model, photo input, why-how, and Handwritten to PDF."
           highlights={[
-            '55 walkthroughs / day (15 on Opus, 40 on Sonnet)',
+            '40 walkthroughs / day (15 on Opus, 25 on Sonnet)',
             'Why & how reflection',
             'Photo input',
             'Handwritten to PDF',
