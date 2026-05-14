@@ -132,7 +132,9 @@ export async function generateExam(
       model: GENERATE_MODEL,
       // 15-problem final needs more tokens than the 10-problem regular exams
       max_tokens: exam === 'final' ? 6144 : 4096,
-      system: EXAM_SYSTEM_PROMPT,
+      system: [
+        { type: 'text', text: EXAM_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
       messages: [{ role: 'user', content: userMessage }],
     }),
   });
@@ -408,7 +410,9 @@ Grade each problem.`;
     body: JSON.stringify({
       model: GRADE_MODEL,
       max_tokens: 4096,
-      system: gradePrompt,
+      system: [
+        { type: 'text', text: gradePrompt, cache_control: { type: 'ephemeral' } },
+      ],
       messages: [{ role: 'user', content: userText }],
     }),
   });
