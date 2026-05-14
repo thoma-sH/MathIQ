@@ -46,13 +46,17 @@ export async function callOpenRouterStream(
     course,
     topic,
     problem,
-    maxTokens = 8192,
     appUrl,
     appName = 'MathIQ',
     action = 'walkthrough',
     walkthroughSoFar,
     signal,
   } = params;
+  // why-how is bounded by the prompt at "2-4 short paragraphs" (~1-1.5K
+  // tokens). Capping at 2048 leaves headroom without paying for 8K of slack
+  // the model can't fill anyway.
+  const maxTokens =
+    params.maxTokens ?? (action === 'why-how' ? 2048 : 8192);
 
   const systemPrompt = buildSystemPromptFlat(prompts, course, topic);
 

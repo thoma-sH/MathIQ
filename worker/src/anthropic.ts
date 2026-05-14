@@ -70,11 +70,15 @@ export async function callAnthropicStream(
     course,
     topic,
     problem,
-    maxTokens = 8192,
     action = 'walkthrough',
     walkthroughSoFar,
     signal,
   } = params;
+  // why-how is bounded by the prompt at "2-4 short paragraphs" (~1-1.5K
+  // tokens). Capping at 2048 leaves headroom for unusually dense steps
+  // without paying for 8K of slack the model can't fill anyway.
+  const maxTokens =
+    params.maxTokens ?? (action === 'why-how' ? 2048 : 8192);
 
   const problemText = problem?.trim() || topic.exampleProblem;
   const initialUserText = problem
