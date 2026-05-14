@@ -94,7 +94,7 @@ export async function extractStudentWork(params: MathpixImageParams): Promise<Ma
   return {
     ok: true,
     status: 200,
-    text,
+    text: normalizeMathpixOutput(text),
     confidence: data.confidence,
   };
 }
@@ -143,6 +143,12 @@ export async function extractStudentWorkFromPdf(params: MathpixPdfParams): Promi
       math_inline_delimiters: ['$', '$'],
       math_display_delimiters: ['$$', '$$'],
       rm_spaces: false,
+      // Recover better aligned/multi-line equation structure from the OCR.
+      // Without this, equation columns in handwritten notes get flattened
+      // into individual lines that miss alignment cues.
+      idiomatic_eqn_arrays: true,
+      // Don't second-guess our handwriting transcription with autocorrect.
+      enable_spell_check: false,
     }),
   );
 
@@ -222,9 +228,113 @@ export async function extractStudentWorkFromPdf(params: MathpixPdfParams): Promi
     };
   }
 
-  return { ok: true, status: 200, text };
+  return { ok: true, status: 200, text: normalizeMathpixOutput(text) };
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Post-processing for handwriting OCR quirks
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Recover handwriting structure Mathpix's OCR flattens away.
+ *
+ * Mathpix transcribes WHAT IT SEES line by line — when handwritten math has
+ * a stacked subscript like
+ *
+ *     lim f(x)
+ *     x → a
+ *
+ * the .mmd output has those as two separate text lines, with no
+ * `\lim_{x \to a}` grouping. The same notation also sometimes comes back
+ * text-concatenated as `limx→a` (Mathpix collapsed the columns into one
+ * token but never wrapped it in subscript syntax). Both forms render
+ * wrong — the subscript drifts beside the operator instead of below it,
+ * or vanishes into the variable name.
+ *
+ * This function rewrites both patterns into proper LaTeX subscripts so
+ * downstream rendering (KaTeX in Plain mode, pdflatex in LaTeX Mode)
+ * stacks the subscript like a textbook.
+ *
+ * Applied to all the stacked-subscript operators that show up in college
+ * math notes: lim, sum, prod, int, max, min, sup, inf, argmax, argmin.
+ *
+ * Also fixes a Mathpix misread we see often: handwritten `lim` (with the
+ * dot over `i` reading as a serif crossbar) becomes `Vim`, `Iim`, or
+ * `1im` in the OCR.
+ */
+export function normalizeMathpixOutput(mmd: string): string {
+  let s = mmd;
+
+  // Operator name OCR misreads. Stay conservative — only replace when the
+  // misread is on its own word boundary.
+  s = s.replace(/\bVim\b/g, 'lim');
+  s = s.replace(/\bIim\b/g, 'lim');
+  s = s.replace(/\b1im\b/g, 'lim');
+  s = s.replace(/\blIm\b/g, 'lim');
+
+  const OPS = ['lim', 'sum', 'prod', 'int', 'max', 'min', 'sup', 'inf', 'argmax', 'argmin'];
+
+  // Pattern 1 — stacked subscript on the next line:
+  //
+  //     lim f(x)
+  //     x → a
+  //
+  // becomes
+  //
+  //     \lim_{x \to a} f(x)
+  //
+  // We walk line by line and look for "next-line is JUST a subscript
+  // expression" (variable, an arrow, a target). The conservative match
+  // avoids gluing two unrelated equations together.
+  const lines = s.split('\n');
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const next = lines[i + 1] ?? '';
+    const subMatch = next.match(/^\s*([a-zA-Z])\s*(?:→|\\to|->)\s*([^\s][^\n]*?)\s*$/);
+    if (subMatch) {
+      // Inject the subscript onto the first operator in the line that
+      // doesn't already have one.
+      const op = pickPendingOp(line, OPS);
+      if (op) {
+        const variable = subMatch[1];
+        const target = subMatch[2].trim();
+        const opRe = new RegExp(`\\\\?${op}(?![_a-zA-Z])`);
+        out.push(line.replace(opRe, `\\${op}_{${variable} \\to ${target}}`));
+        i++; // consume the subscript line
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  s = out.join('\n');
+
+  // Pattern 2 — text-concatenated subscript:
+  //
+  //     limx→a f(x)        becomes  \lim_{x \to a} f(x)
+  //
+  // Match the operator immediately followed by a single variable, an
+  // arrow (Unicode or LaTeX), and a target (letters, digits, \infty, etc).
+  for (const op of OPS) {
+    const re = new RegExp(
+      `\\\\?\\b${op}([a-zA-Z])\\s*(?:→|\\\\to|->)\\s*((?:\\\\infty|-?\\d+|[a-zA-Z]))`,
+      'g',
+    );
+    s = s.replace(re, (_full, v, target) => `\\${op}_{${v} \\to ${target}}`);
+  }
+
+  return s;
+}
+
+/** Find the first operator in a line that doesn't already carry a subscript. */
+function pickPendingOp(line: string, ops: string[]): string | null {
+  for (const op of ops) {
+    const re = new RegExp(`\\\\?\\b${op}(?![_a-zA-Z])`);
+    if (re.test(line)) return op;
+  }
+  return null;
 }
