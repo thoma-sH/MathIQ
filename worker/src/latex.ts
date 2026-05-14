@@ -231,6 +231,9 @@ export function wrapTexSource(body: string, options: { title?: string } = {}): s
 \\titleformat{\\subsection}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{\\thesubsection}{1em}{}
 \\titleformat{name=\\subsection,numberless}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{}{0em}{}
 
+% Defensive shim — see Claude-path preamble for context
+\\providecommand{\\circled}[1]{\\textcircled{#1}}
+
 \\setlength{\\parindent}{0pt}
 \\setlength{\\parskip}{0.5em}
 \\begin{document}
@@ -264,7 +267,7 @@ A COMPLETE LaTeX document. The very first character must be \`\\\` (the backslas
 
 ## Document structure
 
-ALWAYS emit this exact preamble — no substitutions. The colors and titlesec calls are the MathIQ brand applied to the document.
+ALWAYS emit this exact preamble — no substitutions. The colors and titlesec calls are the MathIQ brand applied to the document. The \\circled shim catches a common Claude habit of writing \\circled{X} instead of \\textcircled{X}; declaring it here means either form compiles.
 
 \\documentclass[11pt]{article}
 \\usepackage[a4paper,margin=1in]{geometry}
@@ -286,6 +289,9 @@ ALWAYS emit this exact preamble — no substitutions. The colors and titlesec ca
 \\titleformat{\\subsection}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{\\thesubsection}{1em}{}
 \\titleformat{name=\\subsection,numberless}{\\normalfont\\large\\bfseries\\color{mathiqAccent2}}{}{0em}{}
 
+% Defensive shim: alias common student-notebook patterns to standard commands
+\\providecommand{\\circled}[1]{\\textcircled{#1}}
+
 \\setlength{\\parindent}{0pt}
 \\setlength{\\parskip}{0.5em}
 
@@ -297,6 +303,19 @@ ALWAYS emit this exact preamble — no substitutions. The colors and titlesec ca
 <converted content>
 
 \\end{document}
+
+## Command discipline — ONLY use what the preamble declares
+
+The compile target is plain pdflatex with the preamble above. Do NOT emit:
+- \\newcommand or \\renewcommand definitions — the preamble already has what you need
+- Packages we didn't load (no \\usepackage for tikz, mathtools, mhchem, listings, hyperref, etc.)
+- Commands from non-loaded packages (no \\tcbox, \\mathbb without amssymb, \\circled without using the provided shim, etc.)
+- Bibliography commands (\\cite, \\bibliography) — none here
+- Hyperlinks (\\url, \\href) — keep URLs as plain text
+
+When the student writes a circled answer in their handwriting (a common "this is the final answer" marker), use \\textcircled{X} or \\boxed{X} from amsmath. The \\circled shim in the preamble accepts either spelling so you can't break compilation here.
+
+If you're tempted to invent a command, just use plain text or a more basic command that's guaranteed to work. Better to ship a less ornate document than one that fails to compile.
 
 ## Conversion rules
 

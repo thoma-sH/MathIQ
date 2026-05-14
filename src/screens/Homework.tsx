@@ -60,7 +60,24 @@ export function Homework({ onNavigate }: HomeworkProps) {
   const [mode, setMode] = useState<Mode>('plain');
   const [latex, setLatex] = useState<LatexState>({ kind: 'idle' });
   const [printing, setPrinting] = useState(false);
+  const [trustIris, setTrustIris] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('mathiq:trustIris') === '1';
+    } catch {
+      return false;
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  function setTrustIrisPersisted(next: boolean) {
+    setTrustIris(next);
+    try {
+      window.localStorage.setItem('mathiq:trustIris', next ? '1' : '0');
+    } catch {
+      // localStorage might be unavailable in private mode — ignore.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -91,7 +108,8 @@ export function Homework({ onNavigate }: HomeworkProps) {
     try {
       const result = await transcribeHomework({ file, getToken });
       const title = titleFromFilename(file.name);
-      if (result.uncertain.length > 0) {
+      const shouldReview = result.uncertain.length > 0 && !trustIris;
+      if (shouldReview) {
         setState({
           kind: 'reviewing',
           hwId: result.hwId,
@@ -102,6 +120,9 @@ export function Homework({ onNavigate }: HomeworkProps) {
           cursor: 0,
         });
       } else {
+        // No uncertain fixes, OR the user has flipped Trust Iris — all of
+        // Claude's suggestions are already applied to `result.mmd`, so we
+        // can go straight to done.
         setState({ kind: 'done', hwId: result.hwId, mmd: result.mmd, title });
       }
     } catch (err) {
@@ -201,11 +222,14 @@ export function Homework({ onNavigate }: HomeworkProps) {
         <>
           <OutputToggle output={output} onChange={setOutput} />
           {output === 'formatted' ? (
-            <IdleCard
-              fileInputRef={fileInputRef}
-              onChoose={() => fileInputRef.current?.click()}
-              onFile={onFile}
-            />
+            <>
+              <IdleCard
+                fileInputRef={fileInputRef}
+                onChoose={() => fileInputRef.current?.click()}
+                onFile={onFile}
+              />
+              <TrustIrisToggle value={trustIris} onChange={setTrustIrisPersisted} />
+            </>
           ) : (
             <RawUploadCard />
           )}
@@ -217,6 +241,8 @@ export function Homework({ onNavigate }: HomeworkProps) {
       {state.kind === 'reviewing' && (
         <ReviewView
           state={state}
+          trustIris={trustIris}
+          onTrustIrisChange={setTrustIrisPersisted}
           onResolve={(id, resolution) => {
             setState({
               ...state,
@@ -330,6 +356,44 @@ function IdleCard({
         from your phone's Files app.
       </p>
     </section>
+  );
+}
+
+function TrustIrisToggle({
+  value,
+  onChange,
+}: {
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        marginTop: 14,
+        padding: '10px 14px',
+        border: `1px dashed ${T.hair}`,
+        fontSize: 13,
+        color: T.muted,
+        lineHeight: 1.5,
+        cursor: 'pointer',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={value}
+        onChange={(e) => onChange(e.target.checked)}
+        style={{ marginTop: 3, cursor: 'pointer' }}
+      />
+      <span>
+        <strong style={{ color: T.ink }}>Trust Iris</strong> — skip the
+        &ldquo;Did you mean…?&rdquo; review and accept all suggested
+        corrections automatically. Faster, recommended after you&apos;ve
+        run a few uploads and seen the quality.
+      </span>
+    </label>
   );
 }
 
@@ -866,11 +930,15 @@ function applyResolutions(
 
 function ReviewView({
   state,
+  trustIris,
+  onTrustIrisChange,
   onResolve,
   onSkipRemaining,
   onFinish,
 }: {
   state: Extract<UploadState, { kind: 'reviewing' }>;
+  trustIris: boolean;
+  onTrustIrisChange: (v: boolean) => void;
   onResolve: (id: string, resolution: Resolution) => void;
   onSkipRemaining: () => void;
   onFinish: () => void | Promise<void>;
@@ -1154,6 +1222,34 @@ function ReviewView({
           >
             Continue →
           </button>
+          {!trustIris && (
+            <label
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start',
+                fontSize: 13,
+                color: T.muted,
+                lineHeight: 1.5,
+                cursor: 'pointer',
+                paddingTop: 8,
+                borderTop: `1px solid ${T.hair}`,
+                marginTop: 4,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={false}
+                onChange={() => onTrustIrisChange(true)}
+                style={{ marginTop: 3, cursor: 'pointer' }}
+              />
+              <span>
+                <strong style={{ color: T.ink }}>Trust Iris next time</strong> —
+                skip this review on future uploads. You can flip it back from the
+                upload screen if you want to verify again.
+              </span>
+            </label>
+          )}
         </div>
       )}
     </section>
