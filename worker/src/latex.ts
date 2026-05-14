@@ -132,7 +132,17 @@ function processTextBlock(text: string): string {
       continue;
     }
 
-    // Not a list line — close any open list first
+    // Blank line — Mathpix and ReactMarkdown allow blank lines between
+    // adjacent list items for visual spacing. Closing the list on every
+    // blank line would restart \enumerate from 1 for each item, which
+    // is why a 5-item list rendered as five "1." entries instead of
+    // 1-2-3-4-5. Pass the blank through and keep the list open.
+    if (rawLine.trim() === '') {
+      out.push('');
+      continue;
+    }
+
+    // Real content line — now close any open list.
     closeList();
 
     // Headers
@@ -142,8 +152,6 @@ function processTextBlock(text: string): string {
       out.push(`\\subsection*{${inlineFormat(rawLine.slice(3))}}`);
     } else if (rawLine.startsWith('# ')) {
       out.push(`\\section*{${inlineFormat(rawLine.slice(2))}}`);
-    } else if (rawLine.trim() === '') {
-      out.push('');
     } else {
       out.push(inlineFormat(rawLine));
     }
