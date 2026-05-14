@@ -166,6 +166,56 @@ export async function updateHomeworkMmd(opts: UpdateOpts): Promise<void> {
   }
 }
 
+export interface HomeworkListEntry {
+  hwId: string;
+  title: string;
+  mediaType: string;
+  createdAt: number;
+  mmdLength: number;
+}
+
+interface ListOpts {
+  getToken: () => Promise<string | null>;
+}
+
+/** Past 90 days of the user's transcriptions. Most recent first. */
+export async function listHomework(opts: ListOpts): Promise<HomeworkListEntry[]> {
+  const token = await opts.getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const resp = await fetch(`${WORKER_URL}/api/homework/list`, { headers });
+  if (!resp.ok) return [];
+  const data = (await resp.json()) as { items: HomeworkListEntry[] };
+  return data.items;
+}
+
+interface GetOpts {
+  hwId: string;
+  getToken: () => Promise<string | null>;
+}
+
+export interface FullHomeworkRecord {
+  hwId: string;
+  userId: string;
+  mmd: string;
+  mediaType: string;
+  sourceFilename?: string;
+  createdAt: number;
+}
+
+export async function getHomework(opts: GetOpts): Promise<FullHomeworkRecord | null> {
+  const token = await opts.getToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const resp = await fetch(
+    `${WORKER_URL}/api/homework/get?hwId=${encodeURIComponent(opts.hwId)}`,
+    { headers },
+  );
+  if (!resp.ok) return null;
+  const data = (await resp.json()) as { record: FullHomeworkRecord };
+  return data.record;
+}
+
 interface CompileLatexOpts {
   hwId: string;
   title?: string;

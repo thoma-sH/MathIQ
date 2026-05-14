@@ -13,7 +13,10 @@ import {
   transcribeHomework,
   compileLatexPdf,
   updateHomeworkMmd,
+  listHomework,
+  getHomework as fetchHomework,
   type UncertainFix,
+  type HomeworkListEntry,
 } from '../walkthroughs/homework';
 import type { Route } from '../router';
 
@@ -60,23 +63,32 @@ export function Homework({ onNavigate }: HomeworkProps) {
   const [mode, setMode] = useState<Mode>('plain');
   const [latex, setLatex] = useState<LatexState>({ kind: 'idle' });
   const [printing, setPrinting] = useState(false);
-  const [trustIris, setTrustIris] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    try {
-      return window.localStorage.getItem('mathiq:trustIris') === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [trustIris, setTrustIris] = useState<boolean>(() => readBoolPref('mathiq:trustIris'));
+  const [tipDismissed, setTipDismissed] = useState<boolean>(() =>
+    readBoolPref('mathiq:trustIrisTipDismissed'),
+  );
+  const [pastHomework, setPastHomework] = useState<HomeworkListEntry[] | null>(null);
+  const [openingPast, setOpeningPast] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  function setTrustIrisPersisted(next: boolean) {
-    setTrustIris(next);
-    try {
-      window.localStorage.setItem('mathiq:trustIris', next ? '1' : '0');
-    } catch {
-      // localStorage might be unavailable in private mode — ignore.
+  // Listen for cross-screen changes to the Trust Iris setting (Settings
+  // page updates the localStorage entry directly).
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === 'mathiq:trustIris') {
+        setTrustIris(e.newValue === '1');
+      }
+      if (e.key === 'mathiq:trustIrisTipDismissed') {
+        setTipDismissed(e.newValue === '1');
+      }
     }
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  function dismissTrustIrisTip() {
+    setTipDismissed(true);
+    writeBoolPref('mathiq:trustIrisTipDismissed', true);
   }
 
   useEffect(() => {
@@ -100,6 +112,39 @@ export function Homework({ onNavigate }: HomeworkProps) {
     }, 50);
     return () => clearTimeout(t);
   }, [printing]);
+
+  // Past homework — fetched when the user lands on the idle screen.
+  useEffect(() => {
+    if (!tierLoaded || !isPaid(tier)) return;
+    if (state.kind !== 'idle') return;
+    let cancelled = false;
+    void (async () => {
+      const items = await listHomework({ getToken });
+      if (!cancelled) setPastHomework(items);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tierLoaded, tier, state.kind, getToken]);
+
+  async function reopenPastHomework(entry: HomeworkListEntry) {
+    setOpeningPast(entry.hwId);
+    try {
+      const record = await fetchHomework({ hwId: entry.hwId, getToken });
+      if (record) {
+        setState({
+          kind: 'done',
+          hwId: record.hwId,
+          mmd: record.mmd,
+          title: entry.title,
+        });
+        setMode('plain');
+        setLatex({ kind: 'idle' });
+      }
+    } finally {
+      setOpeningPast(null);
+    }
+  }
 
   async function onFile(file: File | null) {
     if (!file) return;
@@ -228,10 +273,22 @@ export function Homework({ onNavigate }: HomeworkProps) {
                 onChoose={() => fileInputRef.current?.click()}
                 onFile={onFile}
               />
-              <TrustIrisToggle value={trustIris} onChange={setTrustIrisPersisted} />
+              {!trustIris && !tipDismissed && (
+                <TrustIrisTip
+                  onOpenSettings={() => onNavigate({ name: 'settings' })}
+                  onDismiss={dismissTrustIrisTip}
+                />
+              )}
             </>
           ) : (
             <RawUploadCard />
+          )}
+          {output === 'formatted' && pastHomework && pastHomework.length > 0 && (
+            <PastHomeworkSection
+              entries={pastHomework}
+              opening={openingPast}
+              onOpen={reopenPastHomework}
+            />
           )}
         </>
       )}
@@ -241,8 +298,6 @@ export function Homework({ onNavigate }: HomeworkProps) {
       {state.kind === 'reviewing' && (
         <ReviewView
           state={state}
-          trustIris={trustIris}
-          onTrustIrisChange={setTrustIrisPersisted}
           onResolve={(id, resolution) => {
             setState({
               ...state,
@@ -359,42 +414,199 @@ function IdleCard({
   );
 }
 
-function TrustIrisToggle({
-  value,
-  onChange,
+function readBoolPref(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeBoolPref(key: string, value: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // ignore — private mode etc.
+  }
+}
+
+/**
+ * Lightweight banner pointing users at the Trust Iris setting in
+ * Settings. Replaces the inline checkbox after we moved the setting
+ * out of this screen — keeps the discovery without cluttering the
+ * upload flow. Dismissed via "Don't show again", persisted to
+ * localStorage.
+ */
+function TrustIrisTip({
+  onOpenSettings,
+  onDismiss,
 }: {
-  value: boolean;
-  onChange: (v: boolean) => void;
+  onOpenSettings: () => void;
+  onDismiss: () => void;
 }) {
   return (
-    <label
+    <div
+      role="note"
       style={{
         display: 'flex',
-        gap: 10,
+        gap: 12,
         alignItems: 'flex-start',
+        justifyContent: 'space-between',
         marginTop: 14,
         padding: '10px 14px',
         border: `1px dashed ${T.hair}`,
         fontSize: 13,
         color: T.muted,
         lineHeight: 1.5,
-        cursor: 'pointer',
       }}
     >
-      <input
-        type="checkbox"
-        checked={value}
-        onChange={(e) => onChange(e.target.checked)}
-        style={{ marginTop: 3, cursor: 'pointer' }}
-      />
-      <span>
-        <strong style={{ color: T.ink }}>Trust Iris</strong> — skip the
-        &ldquo;Did you mean…?&rdquo; review and accept all suggested
-        corrections automatically. Faster, recommended after you&apos;ve
-        run a few uploads and seen the quality.
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <strong style={{ color: T.ink }}>Tip —</strong> seeing too many
+        &ldquo;Did you mean…?&rdquo; prompts?{' '}
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="btn-press"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            color: T.accent,
+            cursor: 'pointer',
+            textDecoration: 'underline',
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+          }}
+        >
+          Turn on Trust Iris in Settings
+        </button>{' '}
+        to skip the review and auto-accept Iris&apos;s suggestions.
       </span>
-    </label>
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Don't show this tip again"
+        className="btn-press"
+        style={{
+          background: 'transparent',
+          border: 'none',
+          padding: 4,
+          fontSize: 11,
+          fontFamily: T.mono,
+          letterSpacing: '0.06em',
+          color: T.muted,
+          cursor: 'pointer',
+          flexShrink: 0,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Don&apos;t show again
+      </button>
+    </div>
   );
+}
+
+function PastHomeworkSection({
+  entries,
+  opening,
+  onOpen,
+}: {
+  entries: HomeworkListEntry[];
+  opening: string | null;
+  onOpen: (entry: HomeworkListEntry) => void;
+}) {
+  return (
+    <section style={{ marginTop: 36 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 10,
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: T.sans,
+            fontSize: 17,
+            fontWeight: 700,
+            letterSpacing: '-0.01em',
+            margin: 0,
+          }}
+        >
+          Past homework
+        </h2>
+        <span
+          style={{
+            fontSize: 11,
+            fontFamily: T.mono,
+            letterSpacing: '0.08em',
+            color: T.muted,
+          }}
+        >
+          last 90 days
+        </span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {entries.map((e) => (
+          <button
+            key={e.hwId}
+            type="button"
+            onClick={() => onOpen(e)}
+            disabled={opening !== null}
+            className="btn-press"
+            style={{
+              background: 'transparent',
+              border: `1px solid ${T.hair}`,
+              padding: '10px 14px',
+              fontFamily: T.sans,
+              textAlign: 'left',
+              cursor: opening !== null ? 'wait' : 'pointer',
+              opacity: opening === e.hwId ? 0.5 : 1,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+            }}
+          >
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+              <span style={{ fontSize: 14, fontWeight: 500, color: T.ink }}>{e.title}</span>
+              <span
+                style={{
+                  fontSize: 12,
+                  color: T.muted,
+                  fontFamily: T.mono,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {relativeDate(e.createdAt)} ·{' '}
+                {e.mediaType === 'application/pdf' ? 'PDF' : 'photo'}
+              </span>
+            </span>
+            <span style={{ fontSize: 13, color: T.muted }} aria-hidden>
+              {opening === e.hwId ? '…' : '→'}
+            </span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function relativeDate(ms: number): string {
+  const diff = Date.now() - ms;
+  const day = 24 * 60 * 60 * 1000;
+  if (diff < day) return 'today';
+  if (diff < 2 * day) return 'yesterday';
+  const days = Math.floor(diff / day);
+  if (days < 14) return `${days} days ago`;
+  if (days < 60) {
+    const weeks = Math.floor(days / 7);
+    return `${weeks} week${weeks === 1 ? '' : 's'} ago`;
+  }
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function OutputToggle({
@@ -930,15 +1142,11 @@ function applyResolutions(
 
 function ReviewView({
   state,
-  trustIris,
-  onTrustIrisChange,
   onResolve,
   onSkipRemaining,
   onFinish,
 }: {
   state: Extract<UploadState, { kind: 'reviewing' }>;
-  trustIris: boolean;
-  onTrustIrisChange: (v: boolean) => void;
   onResolve: (id: string, resolution: Resolution) => void;
   onSkipRemaining: () => void;
   onFinish: () => void | Promise<void>;
@@ -1222,34 +1430,6 @@ function ReviewView({
           >
             Continue →
           </button>
-          {!trustIris && (
-            <label
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                fontSize: 13,
-                color: T.muted,
-                lineHeight: 1.5,
-                cursor: 'pointer',
-                paddingTop: 8,
-                borderTop: `1px solid ${T.hair}`,
-                marginTop: 4,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={false}
-                onChange={() => onTrustIrisChange(true)}
-                style={{ marginTop: 3, cursor: 'pointer' }}
-              />
-              <span>
-                <strong style={{ color: T.ink }}>Trust Iris next time</strong> —
-                skip this review on future uploads. You can flip it back from the
-                upload screen if you want to verify again.
-              </span>
-            </label>
-          )}
         </div>
       )}
     </section>

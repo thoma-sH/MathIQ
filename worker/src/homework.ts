@@ -10,11 +10,11 @@
  * KV layout (mirrors history.ts / exam.ts patterns):
  *   homework:user:<userId>:<hwId>  →  HomeworkRecord (JSON)
  *
- * 30-day TTL — long enough for a typical assignment window without bloating
- * the namespace.
+ * 90-day TTL — matches walkthrough history so a student can pull up
+ * anything they've transcribed across a full quarter / semester.
  */
 
-const TTL_SECONDS = 60 * 60 * 24 * 30;
+const TTL_SECONDS = 60 * 60 * 24 * 90;
 const KEY_PREFIX = 'homework:user:';
 
 export interface HomeworkRecord {
@@ -75,4 +75,51 @@ export async function updateHomeworkMmd(
   if (!existing) return false;
   await saveHomework(kv, { ...existing, mmd: newMmd });
   return true;
+}
+
+/** Compact row used by the Past homework list — no full mmd payload. */
+export interface HomeworkListEntry {
+  hwId: string;
+  title: string;
+  mediaType: string;
+  createdAt: number;
+  mmdLength: number;
+}
+
+export async function listHomeworkForUser(
+  kv: KVNamespace,
+  userId: string,
+): Promise<HomeworkListEntry[]> {
+  const prefix = `${KEY_PREFIX}${userId}:`;
+  const result = await kv.list({ prefix, limit: 100 });
+  const entries: HomeworkListEntry[] = [];
+  for (const k of result.keys) {
+    const raw = await kv.get(k.name);
+    if (!raw) continue;
+    try {
+      const rec = JSON.parse(raw) as HomeworkRecord;
+      entries.push({
+        hwId: rec.hwId,
+        title: titleFromRecord(rec),
+        mediaType: rec.mediaType,
+        createdAt: rec.createdAt,
+        mmdLength: rec.mmd.length,
+      });
+    } catch {
+      // Skip malformed.
+    }
+  }
+  entries.sort((a, b) => b.createdAt - a.createdAt);
+  return entries;
+}
+
+function titleFromRecord(rec: HomeworkRecord): string {
+  if (rec.sourceFilename) {
+    return rec.sourceFilename
+      .replace(/\.(pdf|png|jpe?g|webp|heic)$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .trim() || 'Homework';
+  }
+  return 'Homework';
 }

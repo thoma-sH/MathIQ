@@ -72,8 +72,102 @@ export function Settings({ onNavigate }: SettingsProps) {
       </SignedIn>
 
       <PromptFlowCard />
+
+      <SignedIn>
+        <TrustIrisCard />
+      </SignedIn>
     </main>
   );
+}
+
+function TrustIrisCard() {
+  const [trustIris, setTrustIris] = useState<boolean>(() => readBoolPref('mathiq:trustIris'));
+
+  function onChange(next: boolean) {
+    setTrustIris(next);
+    writeBoolPref('mathiq:trustIris', next);
+    // Notify the Homework screen if it's mounted on a different tab.
+    try {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'mathiq:trustIris',
+          newValue: next ? '1' : '0',
+        }),
+      );
+    } catch {
+      // Browsers vary on whether StorageEvent can be constructed manually;
+      // localStorage write alone is enough for the same-tab case.
+    }
+  }
+
+  return (
+    <section
+      className="reveal reveal-3"
+      style={{
+        padding: '18px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginTop: 14,
+      }}
+    >
+      <div style={kicker()}>HANDWRITTEN TO PDF</div>
+      <h2
+        style={{
+          fontFamily: T.sans,
+          fontSize: 18,
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          margin: '8px 0 6px',
+        }}
+      >
+        Trust Iris
+      </h2>
+      <p style={{ fontSize: 14, color: T.muted, lineHeight: 1.55, margin: '0 0 14px' }}>
+        Skip the &ldquo;Did you mean…?&rdquo; review on every upload and
+        auto-accept Iris&apos;s suggested corrections. Faster, recommended
+        after you&apos;ve run a few uploads and seen the quality. You can
+        flip this off any time to verify again.
+      </p>
+      <label
+        style={{
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          cursor: 'pointer',
+          fontFamily: T.mono,
+          fontSize: 13,
+          letterSpacing: '0.06em',
+          color: T.ink,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={trustIris}
+          onChange={(e) => onChange(e.target.checked)}
+          style={{ cursor: 'pointer' }}
+        />
+        {trustIris ? 'Trust Iris is ON' : 'Trust Iris is OFF'}
+      </label>
+    </section>
+  );
+}
+
+function readBoolPref(key: string): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeBoolPref(key: string, value: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // ignore — private mode etc.
+  }
 }
 
 function NavCard({ onNavigate }: { onNavigate: (route: Route) => void }) {

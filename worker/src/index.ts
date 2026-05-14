@@ -56,6 +56,7 @@ import {
   getHomework,
   updateHomeworkMmd,
   newHomeworkId,
+  listHomeworkForUser,
   type HomeworkRecord,
 } from './homework';
 import { mmdToTex, wrapTexSource, compileLatex, generateLatexFromMmd } from './latex';
@@ -233,6 +234,14 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/homework/update') {
       return handleHomeworkUpdate(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/homework/list') {
+      return handleHomeworkList(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/homework/get') {
+      return handleHomeworkGet(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -1469,6 +1478,48 @@ async function handleHomeworkUpdate(
     return json({ error: 'homework_not_found' }, 404, cors);
   }
   return json({ ok: true }, 200, cors);
+}
+
+async function handleHomeworkList(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'plus' && tier !== 'pro') {
+    return json({ error: 'upgrade_required' }, 403, cors);
+  }
+  const items = await listHomeworkForUser(env.USAGE, authState.userId);
+  return json({ items }, 200, cors);
+}
+
+async function handleHomeworkGet(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'plus' && tier !== 'pro') {
+    return json({ error: 'upgrade_required' }, 403, cors);
+  }
+  const url = new URL(request.url);
+  const hwId = url.searchParams.get('hwId');
+  if (!hwId) {
+    return json({ error: 'hwId required' }, 400, cors);
+  }
+  const record = await getHomework(env.USAGE, authState.userId, hwId);
+  if (!record) {
+    return json({ error: 'homework_not_found' }, 404, cors);
+  }
+  return json({ record }, 200, cors);
 }
 
 interface HomeworkLatexBody {

@@ -236,7 +236,7 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
           letterSpacing: '0.05em',
         }}
       >
-        Each exam costs 1 of your 70 daily Pro slots. Exams are stored for 30 days
+        Each exam costs 1 of your 70 daily Pro slots. Exams are stored for 90 days
         so you can grade your attempt later.
       </p>
 

@@ -5,13 +5,13 @@
  *   exam:user:<userId>:<examId>        → ExamRecord (the generated problems)
  *   exam-grade:user:<userId>:<examId>  → ExamGradeResult (when graded)
  *
- * Both have a 30-day TTL.
+ * Both have a 90-day TTL — same window as walkthrough history.
  */
 import type { Course, Topic } from './courses';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const GENERATE_MODEL = 'claude-opus-4-6';
-const EXAM_KV_TTL_SECONDS = 30 * 24 * 60 * 60;
+const EXAM_KV_TTL_SECONDS = 90 * 24 * 60 * 60;
 const EXAM_KEY_PREFIX = 'exam:user:';
 const GRADE_KEY_PREFIX = 'exam-grade:user:';
 
