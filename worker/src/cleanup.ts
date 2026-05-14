@@ -153,7 +153,9 @@ export async function cleanupTranscription(params: CleanupParams): Promise<Clean
     body: JSON.stringify({
       model: CLEANUP_MODEL,
       max_tokens: 8192,
-      system: CLEANUP_PROMPT,
+      system: [
+        { type: 'text', text: CLEANUP_PROMPT, cache_control: { type: 'ephemeral' } },
+      ],
       messages: [
         {
           role: 'user',
