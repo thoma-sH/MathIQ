@@ -12,6 +12,8 @@ import {
   HomeworkError,
   transcribeHomework,
   compileLatexPdf,
+  updateHomeworkMmd,
+  type UncertainFix,
 } from '../walkthroughs/homework';
 import type { Route } from '../router';
 
@@ -22,8 +24,22 @@ interface HomeworkProps {
 type UploadState =
   | { kind: 'idle' }
   | { kind: 'transcribing' }
+  | {
+      kind: 'reviewing';
+      hwId: string;
+      cleaned: string;
+      title: string;
+      uncertain: UncertainFix[];
+      resolutions: Record<string, Resolution>;
+      cursor: number;
+    }
   | { kind: 'done'; hwId: string; mmd: string; title: string }
   | { kind: 'error'; message: string };
+
+type Resolution =
+  | { kind: 'accepted' }
+  | { kind: 'rejected' }
+  | { kind: 'edited'; value: string };
 
 type Mode = 'plain' | 'latex';
 
@@ -73,7 +89,19 @@ export function Homework({ onNavigate }: HomeworkProps) {
     try {
       const result = await transcribeHomework({ file, getToken });
       const title = titleFromFilename(file.name);
-      setState({ kind: 'done', hwId: result.hwId, mmd: result.mmd, title });
+      if (result.uncertain.length > 0) {
+        setState({
+          kind: 'reviewing',
+          hwId: result.hwId,
+          cleaned: result.mmd,
+          title,
+          uncertain: result.uncertain,
+          resolutions: {},
+          cursor: 0,
+        });
+      } else {
+        setState({ kind: 'done', hwId: result.hwId, mmd: result.mmd, title });
+      }
     } catch (err) {
       const msg =
         err instanceof HomeworkError
@@ -177,6 +205,42 @@ export function Homework({ onNavigate }: HomeworkProps) {
 
       {state.kind === 'transcribing' && <TranscribingCard />}
 
+      {state.kind === 'reviewing' && (
+        <ReviewView
+          state={state}
+          onResolve={(id, resolution) => {
+            setState({
+              ...state,
+              resolutions: { ...state.resolutions, [id]: resolution },
+              cursor: Math.min(state.cursor + 1, state.uncertain.length),
+            });
+          }}
+          onSkipRemaining={() => {
+            // Accept all unresolved corrections in one click.
+            const accepted: Record<string, Resolution> = { ...state.resolutions };
+            for (const u of state.uncertain) {
+              if (!accepted[u.id]) accepted[u.id] = { kind: 'accepted' };
+            }
+            setState({
+              ...state,
+              resolutions: accepted,
+              cursor: state.uncertain.length,
+            });
+          }}
+          onFinish={async () => {
+            const finalMmd = applyResolutions(state.cleaned, state.uncertain, state.resolutions);
+            try {
+              await updateHomeworkMmd({ hwId: state.hwId, mmd: finalMmd, getToken });
+            } catch {
+              // Non-fatal — the cleaned text is good enough to render.
+              // Server-side save failure just means corrections aren't
+              // persisted across sessions.
+            }
+            setState({ kind: 'done', hwId: state.hwId, mmd: finalMmd, title: state.title });
+          }}
+        />
+      )}
+
       {state.kind === 'error' && (
         <ErrorCard
           message={state.message}
@@ -258,6 +322,340 @@ function IdleCard({
       </p>
     </section>
   );
+}
+
+/** Apply user resolutions to the cleaned transcription. Each accepted fix
+ *  is already in the cleaned text; rejected ones revert to Mathpix's
+ *  original; edited ones get the user's typed version. */
+function applyResolutions(
+  cleaned: string,
+  uncertain: UncertainFix[],
+  resolutions: Record<string, Resolution>,
+): string {
+  let out = cleaned;
+  for (const fix of uncertain) {
+    const r = resolutions[fix.id];
+    if (!r || r.kind === 'accepted') continue;
+    const replacement = r.kind === 'rejected' ? fix.original : r.value;
+    // Targeted replacement: prefer the context window so we don't clobber
+    // an unrelated occurrence of the same word elsewhere in the doc.
+    const ctxIdx = fix.context ? out.indexOf(fix.context.replace(/\s+/g, ' ').trim()) : -1;
+    if (ctxIdx >= 0) {
+      const inside = out.slice(ctxIdx, ctxIdx + fix.context.length + 60);
+      const localIdx = inside.indexOf(fix.applied);
+      if (localIdx >= 0) {
+        const absolute = ctxIdx + localIdx;
+        out = out.slice(0, absolute) + replacement + out.slice(absolute + fix.applied.length);
+        continue;
+      }
+    }
+    const idx = out.indexOf(fix.applied);
+    if (idx >= 0) {
+      out = out.slice(0, idx) + replacement + out.slice(idx + fix.applied.length);
+    }
+  }
+  return out;
+}
+
+function ReviewView({
+  state,
+  onResolve,
+  onSkipRemaining,
+  onFinish,
+}: {
+  state: Extract<UploadState, { kind: 'reviewing' }>;
+  onResolve: (id: string, resolution: Resolution) => void;
+  onSkipRemaining: () => void;
+  onFinish: () => void | Promise<void>;
+}) {
+  const { uncertain, cursor } = state;
+  const total = uncertain.length;
+  const allResolved = cursor >= total;
+  const fix = uncertain[cursor];
+  const [editValue, setEditValue] = useState('');
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    setEditing(false);
+    setEditValue(fix?.applied ?? '');
+  }, [fix?.id, fix?.applied]);
+
+  return (
+    <section
+      style={{
+        padding: '22px 22px 18px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: T.mono,
+          letterSpacing: '0.14em',
+          color: T.muted,
+          textTransform: 'uppercase',
+          marginBottom: 14,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}
+      >
+        <span>
+          {allResolved
+            ? `${total} of ${total} reviewed`
+            : `Reviewing ${cursor + 1} of ${total}`}
+        </span>
+        {!allResolved && total > 1 && (
+          <button
+            type="button"
+            onClick={onSkipRemaining}
+            className="btn-press"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              fontSize: 11,
+              fontFamily: T.mono,
+              letterSpacing: '0.1em',
+              color: T.accent,
+              cursor: 'pointer',
+            }}
+          >
+            Accept all remaining →
+          </button>
+        )}
+      </div>
+
+      {fix ? (
+        <>
+          <div style={{ fontSize: 14, color: T.muted, marginBottom: 6 }}>Did you mean</div>
+          <div
+            style={{
+              fontFamily: T.sans,
+              fontSize: 'clamp(20px, 3.2vw, 26px)',
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              marginBottom: 12,
+              wordBreak: 'break-word',
+            }}
+          >
+            “{fix.applied}”
+            <span
+              style={{
+                marginLeft: 10,
+                fontSize: 13,
+                fontWeight: 400,
+                color: T.muted,
+                fontFamily: T.mono,
+                letterSpacing: '0.04em',
+              }}
+            >
+              instead of “{fix.original}”
+            </span>
+          </div>
+
+          {fix.context && (
+            <div
+              style={{
+                fontSize: 13,
+                color: T.muted,
+                fontFamily: T.mono,
+                lineHeight: 1.55,
+                padding: '10px 12px',
+                background: T.paper,
+                border: `1px solid ${T.hair}`,
+                marginBottom: 10,
+              }}
+            >
+              …{fix.context}…
+            </div>
+          )}
+          {fix.reason && (
+            <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.55, marginBottom: 14 }}>
+              {fix.reason}
+            </div>
+          )}
+
+          {!editing ? (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => onResolve(fix.id, { kind: 'accepted' })}
+                className="btn-press chamfer"
+                style={{
+                  background: T.accent,
+                  color: T.paper,
+                  border: 'none',
+                  padding: '10px 18px',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontFamily: T.sans,
+                }}
+              >
+                Yes, use “{truncate(fix.applied, 30)}”
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="btn-press"
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${T.ink}`,
+                  padding: '10px 14px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  fontFamily: T.sans,
+                }}
+              >
+                Edit…
+              </button>
+              <button
+                type="button"
+                onClick={() => onResolve(fix.id, { kind: 'rejected' })}
+                className="btn-press"
+                style={{
+                  background: 'transparent',
+                  border: `1px solid ${T.hair}`,
+                  padding: '10px 14px',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: T.muted,
+                  cursor: 'pointer',
+                  fontFamily: T.sans,
+                }}
+              >
+                Keep “{truncate(fix.original, 24)}”
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input
+                type="text"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                autoFocus
+                style={{
+                  background: T.paper,
+                  border: `1px solid ${T.ink}`,
+                  padding: '10px 12px',
+                  fontSize: 15,
+                  fontFamily: T.sans,
+                  color: T.ink,
+                  width: '100%',
+                }}
+                placeholder="What should it say?"
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editValue.trim()) {
+                      onResolve(fix.id, { kind: 'edited', value: editValue.trim() });
+                    }
+                  }}
+                  className="btn-press chamfer"
+                  style={{
+                    background: T.accent,
+                    color: T.paper,
+                    border: 'none',
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: T.sans,
+                  }}
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditing(false)}
+                  className="btn-press"
+                  style={{
+                    background: 'transparent',
+                    border: `1px solid ${T.hair}`,
+                    padding: '8px 14px',
+                    fontSize: 13,
+                    fontFamily: T.sans,
+                    cursor: 'pointer',
+                    color: T.muted,
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {fix.alternatives.length > 0 && !editing && (
+            <div
+              style={{
+                marginTop: 14,
+                paddingTop: 12,
+                borderTop: `1px solid ${T.hair}`,
+                fontSize: 12,
+                color: T.muted,
+              }}
+            >
+              <span style={{ fontFamily: T.mono, letterSpacing: '0.06em' }}>OR — </span>
+              {fix.alternatives.map((alt, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => onResolve(fix.id, { kind: 'edited', value: alt })}
+                  className="btn-press"
+                  style={{
+                    background: 'transparent',
+                    border: `1px dashed ${T.hair}`,
+                    padding: '4px 10px',
+                    marginRight: 6,
+                    fontSize: 12,
+                    fontFamily: T.sans,
+                    cursor: 'pointer',
+                    color: T.ink,
+                  }}
+                >
+                  {alt}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ fontSize: 15, lineHeight: 1.55 }}>
+            All set. Saving your corrections and continuing to the PDF.
+          </div>
+          <button
+            type="button"
+            onClick={() => void onFinish()}
+            className="btn-press chamfer"
+            style={{
+              alignSelf: 'flex-start',
+              background: T.accent,
+              color: T.paper,
+              border: 'none',
+              padding: '10px 18px',
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: T.sans,
+            }}
+          >
+            Continue →
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function truncate(s: string, n: number): string {
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1) + '…';
 }
 
 function TranscribingCard() {

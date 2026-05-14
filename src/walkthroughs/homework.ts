@@ -31,9 +31,21 @@ export class HomeworkError extends Error {
   }
 }
 
+/** Word-level OCR fix Claude wasn't fully confident about. Surfaced as an
+ *  inline "Did you mean…?" prompt in the review step. */
+export interface UncertainFix {
+  id: string;
+  original: string;
+  applied: string;
+  alternatives: string[];
+  context: string;
+  reason: string;
+}
+
 export interface TranscribeResult {
   hwId: string;
   mmd: string;
+  uncertain: UncertainFix[];
 }
 
 const ALLOWED_MEDIA = new Set([
@@ -118,7 +130,40 @@ export async function transcribeHomework(opts: TranscribeOpts): Promise<Transcri
       (body as { message?: string }).message ?? 'Transcription failed.',
     );
   }
-  return (await resp.json()) as TranscribeResult;
+  const data = (await resp.json()) as Partial<TranscribeResult>;
+  return {
+    hwId: data.hwId ?? '',
+    mmd: data.mmd ?? '',
+    uncertain: Array.isArray(data.uncertain) ? data.uncertain : [],
+  };
+}
+
+interface UpdateOpts {
+  hwId: string;
+  mmd: string;
+  getToken: () => Promise<string | null>;
+}
+
+/** Save a corrected version of the homework transcription back to the
+ *  server. Used as the user steps through "Did you mean…?" prompts. */
+export async function updateHomeworkMmd(opts: UpdateOpts): Promise<void> {
+  const token = await opts.getToken();
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const resp = await fetch(`${WORKER_URL}/api/homework/update`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ hwId: opts.hwId, mmd: opts.mmd }),
+  });
+
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({ message: '' }));
+    throw new HomeworkError(
+      'upstream_error',
+      (body as { message?: string }).message ?? 'Failed to save correction.',
+    );
+  }
 }
 
 interface CompileLatexOpts {

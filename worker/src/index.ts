@@ -50,10 +50,11 @@ import {
 } from './history';
 import { extractProblemFromImage } from './ocr';
 import { extractStudentWork, extractStudentWorkFromPdf } from './mathpix';
-import { cleanupTranscription } from './cleanup';
+import { cleanupTranscription, type UncertainFix } from './cleanup';
 import {
   saveHomework,
   getHomework,
+  updateHomeworkMmd,
   newHomeworkId,
   type HomeworkRecord,
 } from './homework';
@@ -228,6 +229,10 @@ export default {
 
     if (request.method === 'POST' && url.pathname === '/api/homework/latex-pdf') {
       return handleHomeworkLatexPdf(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/homework/update') {
+      return handleHomeworkUpdate(request, env, cors);
     }
 
     return json({ error: 'not found' }, 404, cors);
@@ -1389,13 +1394,13 @@ async function handleHomeworkTranscribe(
 
   await increment(counter);
 
-  // Cleanup pass — give Claude the original page + raw Mathpix output and
-  // let it fix English-word OCR misreads ("fimit"→"limit") and restore
-  // paragraph/section breaks that Mathpix's reading-order serialization
-  // flattens out of multi-column layouts. Falls back to raw Mathpix
-  // output on any failure so a transient Anthropic blip doesn't kill the
-  // whole transcription.
+  // Cleanup pass — Claude sees the original page + raw Mathpix output,
+  // returns the cleaned transcription plus an `uncertain` list of fixes
+  // that need human verification. Confident fixes are applied silently.
+  // Falls back to raw Mathpix output on any failure so a transient
+  // Anthropic blip doesn't kill the whole transcription.
   let finalText = ocr.text;
+  let uncertain: UncertainFix[] = [];
   const cleanup = await cleanupTranscription({
     apiKey: env.ANTHROPIC_API_KEY,
     mediaType: body.mediaType,
@@ -1404,6 +1409,7 @@ async function handleHomeworkTranscribe(
   });
   if (cleanup.ok && cleanup.cleaned) {
     finalText = cleanup.cleaned;
+    uncertain = cleanup.uncertain ?? [];
   } else if (cleanup.detail) {
     console.error('[homework-cleanup] fell back to raw mathpix:', cleanup.detail);
   }
@@ -1419,7 +1425,50 @@ async function handleHomeworkTranscribe(
   };
   await saveHomework(env.USAGE, record);
 
-  return json({ hwId: record.hwId, mmd: record.mmd }, 200, cors);
+  return json({ hwId: record.hwId, mmd: record.mmd, uncertain }, 200, cors);
+}
+
+interface HomeworkUpdateBody {
+  hwId?: string;
+  mmd?: string;
+}
+
+async function handleHomeworkUpdate(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier = await resolveTier(authState, env);
+  if (tier !== 'plus' && tier !== 'pro') {
+    return json({ error: 'upgrade_required' }, 403, cors);
+  }
+
+  let body: HomeworkUpdateBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.hwId || typeof body.hwId !== 'string') {
+    return json({ error: 'hwId required' }, 400, cors);
+  }
+  if (typeof body.mmd !== 'string') {
+    return json({ error: 'mmd required' }, 400, cors);
+  }
+  // Same KV-friendly size guard the transcription itself respects.
+  if (body.mmd.length > 200_000) {
+    return json({ error: 'mmd too large' }, 413, cors);
+  }
+
+  const ok = await updateHomeworkMmd(env.USAGE, authState.userId, body.hwId, body.mmd);
+  if (!ok) {
+    return json({ error: 'homework_not_found' }, 404, cors);
+  }
+  return json({ ok: true }, 200, cors);
 }
 
 interface HomeworkLatexBody {

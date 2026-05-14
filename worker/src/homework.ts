@@ -62,3 +62,17 @@ export async function getHomework(
     return null;
   }
 }
+
+/** Overwrite the transcription on an existing record (used when the user
+ *  resolves an uncertain correction inline). Preserves TTL by re-saving. */
+export async function updateHomeworkMmd(
+  kv: KVNamespace,
+  userId: string,
+  hwId: string,
+  newMmd: string,
+): Promise<boolean> {
+  const existing = await getHomework(kv, userId, hwId);
+  if (!existing) return false;
+  await saveHomework(kv, { ...existing, mmd: newMmd });
+  return true;
+}
