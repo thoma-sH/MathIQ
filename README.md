@@ -12,19 +12,22 @@ the answer.
 
 ## What it is
 
-Nine courses, 108 topics, three tiers:
+Nine courses, 108 topics, four tiers:
 
-- **Anonymous** — 1 walkthrough/day on Claude Haiku 4.5.
-- **Signed in (free)** — 5/day on Claude Haiku 4.5.
-- **MathIQ+** ($7.99/mo, $4.99/mo annual) — 20 Opus 4.6 walkthroughs daily,
-  then 50 on Sonnet 4.6. "Why & how" step reflection. Image input.
-- **MathIQ Pro** ($29.99/mo, $19.99/mo annual) — 70 Opus 4.6 walkthroughs
-  daily, no degradation. Everything in Plus.
+- **Anonymous** — 1 walkthrough/day on Haiku 4.5. No sign-up.
+- **Free** — 5/day on Haiku 4.5. Email magic link, no password.
+- **MathIQ+** ($7.99/mo · $3.99/mo annual · $25.99 semester) — 40/day:
+  15 on Opus 4.6, then 25 on Sonnet 4.6. Photo input, why-how on any
+  step, 90-day history with PDF export, Handwritten to PDF.
+- **MathIQ Pro** ($19.99/mo · $8.99/mo annual · $64.99 semester) — 40
+  Opus 4.6 walkthroughs daily, no degradation. LaTeX Mode (Computer
+  Modern typeset PDFs), Exam Mode (generated 10–15-problem exams),
+  exam grading from a handwritten photo. Everything in Plus.
 
-Every paid walkthrough auto-saves to a 90-day history. Every answer is
-verified by a separate model before the badge says "verified." Photos of
-textbook problems get extracted to LaTeX and walked through. The landing
-page rotates a different ancient-Greek scribe and tagline by day of week.
+Every answer is verified by a separate model before the badge says
+"verified." Photos of textbook problems get OCR'd to LaTeX and walked
+through. The landing page rotates a different ancient-Greek scribe and
+tagline by day of week.
 
 ---
 
