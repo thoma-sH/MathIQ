@@ -90,7 +90,11 @@ export async function callAnthropicStream(
       max_tokens: maxTokens,
       system: [
         ...buildSystemPrompt(prompts, course, topic),
-        { type: 'text' as const, text: FORMAT_REINFORCEMENT },
+        {
+          type: 'text' as const,
+          text: FORMAT_REINFORCEMENT,
+          cache_control: { type: 'ephemeral' as const },
+        },
       ],
       messages,
       stream: true,
