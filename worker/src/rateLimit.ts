@@ -53,6 +53,41 @@ export function userExamDailyCounter(
   return { ns, name: `user:${userId}:exam:${dateKey()}` };
 }
 
+/** Daily Challenge photo-grade counter — per-user, 1/day, free of charge.
+ *  Signed-in users get one free grade on the daily challenge as the Wordle hook. */
+export function userChallengeGradeCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:challenge-grade:${dateKey()}` };
+}
+
+/** Per-IP anonymous photo-grade counter for the daily challenge. 1/IP/day. */
+export function anonChallengeGradeCounter(
+  ns: DurableObjectNamespace,
+  ip: string,
+): CounterRef {
+  return { ns, name: `anon:${ip}:challenge-grade:${dateKey()}` };
+}
+
+/** Global anonymous photo-grade ceiling — last line of defense against a
+ *  coordinated attack that distributes across many IPs. If this hits the
+ *  cap (configured in index.ts), anonymous grading is disabled for the rest
+ *  of the UTC day. */
+export function anonChallengeGradeGlobalCounter(
+  ns: DurableObjectNamespace,
+): CounterRef {
+  return { ns, name: `anon:global:challenge-grade:${dateKey()}` };
+}
+
+/** Daily LaTeX render counter for the challenge — per-user, 1/day, all tiers. */
+export function userChallengeLatexCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:challenge-latex:${dateKey()}` };
+}
+
 async function callCounter(ref: CounterRef, path: '/peek' | '/inc' | '/dec'): Promise<number> {
   const id = ref.ns.idFromName(ref.name);
   const stub = ref.ns.get(id);

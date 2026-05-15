@@ -8,11 +8,15 @@
 import { COURSES, COURSES_BY_ID, findTopic } from './courses';
 import { authenticate, type AuthState } from './auth';
 import {
+  anonChallengeGradeCounter,
+  anonChallengeGradeGlobalCounter,
   anonymousCounter,
   decrement,
   increment,
   nextMidnightUtc,
   peek,
+  userChallengeGradeCounter,
+  userChallengeLatexCounter,
   userCounter,
   userExamDailyCounter,
   userOpusMonthlyCounter,
@@ -86,6 +90,16 @@ import {
   saveGrade,
   type ExamId,
 } from './exam';
+import {
+  challengeNumberFor,
+  getAttempt,
+  getOrGenerateTodaysChallenge,
+  gradeChallengeSubmission,
+  saveAttempt,
+  todayUtcDateKey,
+  type ChallengeRecord,
+} from './challenge';
+import { getStreak, recordSolve } from './streak';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -127,6 +141,11 @@ interface Env {
   // Sign up at mathpix.com → Dashboard → API Keys. Free tier: 1k pages/month.
   MATHPIX_APP_ID?: string;
   MATHPIX_APP_KEY?: string;
+  // Cloudflare Turnstile secret — required for anonymous Daily Challenge
+  // grading. If unset, anonymous grading is allowed without verification
+  // (logged as a warning). Set via `wrangler secret put TURNSTILE_SECRET_KEY`
+  // once you've created a Turnstile site in the Cloudflare dashboard.
+  TURNSTILE_SECRET_KEY?: string;
 }
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
@@ -137,6 +156,10 @@ const ANTHROPIC_MESSAGES_URL = 'https://api.anthropic.com/v1/messages';
 const MAX_PROBLEM_CHARS = 8000;       // a generous math problem
 const MAX_HISTORY_CHARS = 60000;      // walkthrough-so-far for why/how
 const MAX_CLASSIFY_CHARS = 2000;      // classifier input
+
+// Daily Challenge ceilings. Per-user/IP rate limits are 1/day; the global
+// ceiling is the backstop against distributed abuse on the anonymous path.
+const ANON_CHALLENGE_GRADE_GLOBAL_DAILY_CAP = 500;
 
 interface WalkthroughBody {
   courseId?: string;
@@ -246,6 +269,22 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/api/exam/get') {
       return handleExamGet(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/challenge/today') {
+      return handleChallengeToday(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/challenge/grade') {
+      return handleChallengeGrade(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/challenge/latex') {
+      return handleChallengeLatex(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/streak') {
+      return handleStreak(request, env, cors);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
@@ -1911,5 +1950,357 @@ async function fetchClerkUserEmail(env: Env, userId: string): Promise<string | u
     return (primary ?? user.email_addresses[0]).email_address;
   } catch {
     return undefined;
+  }
+}
+
+// ─── Daily Challenge ──────────────────────────────────────────────────
+
+interface ChallengeGradeBody {
+  image?: string;
+  mediaType?: string;
+  turnstileToken?: string;
+}
+
+async function handleChallengeToday(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  // Public — no auth required. Anonymous visitors see the problem too.
+  const record = await getOrGenerateTodaysChallenge(env);
+  if (!record) {
+    return json(
+      { error: 'challenge_unavailable', message: "Today's challenge is being prepared — try again in a moment." },
+      503,
+      cors,
+    );
+  }
+  return json(
+    {
+      date: record.date,
+      challengeNumber: challengeNumberFor(record.date),
+      courseId: record.courseId,
+      courseTitle: record.courseTitle,
+      topicId: record.topicId,
+      topicTitle: record.topicTitle,
+      difficulty: record.difficulty,
+      problemText: record.problemText,
+    },
+    200,
+    cors,
+  );
+}
+
+async function handleChallengeGrade(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
+  }
+
+  let body: ChallengeGradeBody;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400, cors);
+  }
+  if (!body.image || typeof body.image !== 'string') {
+    return json({ error: 'image required' }, 400, cors);
+  }
+  if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
+    return json({ error: 'unsupported media type' }, 400, cors);
+  }
+  if (body.image.length > MAX_GRADE_BASE64_CHARS) {
+    return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
+  }
+
+  // ── Rate-limit + abuse check, split by auth state ─────────────────
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const userCounters: CounterRef[] = []; // for refund tracking
+  let isAnon = false;
+
+  if (authState.kind === 'user') {
+    const userGrade = userChallengeGradeCounter(env.USAGE_DO, authState.userId);
+    const used = await peek(userGrade);
+    if (used >= 1) {
+      return json(
+        { error: 'rate_limit', message: "You've already graded today's challenge.", resetAt: nextMidnightUtc() },
+        429,
+        cors,
+      );
+    }
+    const newCount = await increment(userGrade);
+    if (newCount > 1) {
+      await decrement(userGrade);
+      return json(
+        { error: 'rate_limit', message: "You've already graded today's challenge.", resetAt: nextMidnightUtc() },
+        429,
+        cors,
+      );
+    }
+    userCounters.push(userGrade);
+  } else {
+    // Anonymous path: Turnstile + per-IP + global ceiling.
+    isAnon = true;
+    if (env.TURNSTILE_SECRET_KEY) {
+      if (!body.turnstileToken || typeof body.turnstileToken !== 'string') {
+        return json({ error: 'turnstile_required', message: 'Verify you are human to grade.' }, 400, cors);
+      }
+      const valid = await verifyTurnstile(env.TURNSTILE_SECRET_KEY, body.turnstileToken, ip);
+      if (!valid) {
+        return json({ error: 'turnstile_failed', message: 'Verification failed. Refresh and try again.' }, 403, cors);
+      }
+    } else {
+      console.warn('[challenge-grade] TURNSTILE_SECRET_KEY not configured — allowing anonymous grade without verification');
+    }
+
+    const ipCounter = anonChallengeGradeCounter(env.USAGE_DO, ip);
+    const ipUsed = await peek(ipCounter);
+    if (ipUsed >= 1) {
+      return json(
+        { error: 'rate_limit', message: "You've already graded today. Sign in for streak tracking.", resetAt: nextMidnightUtc() },
+        429,
+        cors,
+      );
+    }
+    const globalCounter = anonChallengeGradeGlobalCounter(env.USAGE_DO);
+    const globalUsed = await peek(globalCounter);
+    if (globalUsed >= ANON_CHALLENGE_GRADE_GLOBAL_DAILY_CAP) {
+      return json(
+        { error: 'service_unavailable', message: "Today's free grading capacity is full. Sign in to continue." },
+        503,
+        cors,
+      );
+    }
+    const newIp = await increment(ipCounter);
+    if (newIp > 1) {
+      await decrement(ipCounter);
+      return json({ error: 'rate_limit', resetAt: nextMidnightUtc() }, 429, cors);
+    }
+    const newGlobal = await increment(globalCounter);
+    if (newGlobal > ANON_CHALLENGE_GRADE_GLOBAL_DAILY_CAP) {
+      await decrement(globalCounter);
+      await decrement(ipCounter);
+      return json({ error: 'service_unavailable' }, 503, cors);
+    }
+    userCounters.push(ipCounter, globalCounter);
+  }
+
+  const refundCounters = async () => {
+    for (const c of userCounters) await decrement(c);
+  };
+
+  // ── Fetch today's challenge so the grader knows what to grade against
+  const record = await getOrGenerateTodaysChallenge(env);
+  if (!record) {
+    await refundCounters();
+    return json({ error: 'challenge_unavailable' }, 503, cors);
+  }
+
+  // ── Mathpix OCR on the submitted photo
+  if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    await refundCounters();
+    console.error('[challenge-grade] Mathpix credentials missing');
+    return json(
+      { error: 'service_unavailable', message: 'Challenge grading is temporarily unavailable.' },
+      503,
+      cors,
+    );
+  }
+  const ocr =
+    body.mediaType === 'application/pdf'
+      ? await extractStudentWorkFromPdf({
+          appId: env.MATHPIX_APP_ID,
+          appKey: env.MATHPIX_APP_KEY,
+          pdfBase64: body.image,
+        })
+      : await extractStudentWork({
+          appId: env.MATHPIX_APP_ID,
+          appKey: env.MATHPIX_APP_KEY,
+          imageBase64: body.image,
+          mediaType: body.mediaType,
+        });
+  if (!ocr.ok || !ocr.text) {
+    await refundCounters();
+    console.error('[challenge-grade] mathpix failed', ocr.status, ocr.detail);
+    return json(
+      { error: 'ocr_failed', message: 'Could not read your work. Try a clearer, well-lit photo.' },
+      502,
+      cors,
+    );
+  }
+
+  // ── Grade with Sonnet
+  const grade = await gradeChallengeSubmission(env.ANTHROPIC_API_KEY, record, ocr.text);
+  if (!grade) {
+    await refundCounters();
+    return json(
+      { error: 'grade_failed', message: 'Grading failed — try again in a moment.' },
+      502,
+      cors,
+    );
+  }
+
+  // ── Persist (signed-in only) + update streak
+  let streakState = null;
+  if (authState.kind === 'user') {
+    await saveAttempt(env.USAGE, {
+      userId: authState.userId,
+      date: record.date,
+      studentMmd: ocr.text,
+      grade,
+      submittedAt: Date.now(),
+    });
+    streakState = await recordSolve(env.USAGE, authState.userId, grade.correct, record.date);
+  }
+
+  return json(
+    {
+      grade,
+      streak: streakState,
+      challengeNumber: challengeNumberFor(record.date),
+      anonymous: isAnon,
+    },
+    200,
+    cors,
+  );
+}
+
+async function handleChallengeLatex(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required', message: 'Sign in to render your challenge as a typeset PDF.' }, 401, cors);
+  }
+
+  const date = todayUtcDateKey();
+
+  // Cache hit? Free re-download, no slot consumed.
+  const cacheKey = `challenge-latex-pdf:user:${authState.userId}:${date}`;
+  const cached = await env.USAGE.get(cacheKey);
+  if (cached) {
+    return json({ pdfBase64: cached, cached: true }, 200, cors);
+  }
+
+  // Must have graded the challenge before rendering
+  const attempt = await getAttempt(env.USAGE, authState.userId, date);
+  if (!attempt) {
+    return json(
+      { error: 'no_attempt', message: 'Grade the daily challenge first — then you can render your work.' },
+      404,
+      cors,
+    );
+  }
+
+  // Atomic claim of the 1/day LaTeX slot
+  const counter = userChallengeLatexCounter(env.USAGE_DO, authState.userId);
+  const used = await peek(counter);
+  if (used >= 1) {
+    return json(
+      { error: 'rate_limit', message: "You've already rendered today's challenge.", resetAt: nextMidnightUtc() },
+      429,
+      cors,
+    );
+  }
+  const newCount = await increment(counter);
+  if (newCount > 1) {
+    await decrement(counter);
+    return json(
+      { error: 'rate_limit', message: "You've already rendered today's challenge.", resetAt: nextMidnightUtc() },
+      429,
+      cors,
+    );
+  }
+
+  // Need the challenge record for the title
+  const record = await getOrGenerateTodaysChallenge(env);
+  const challengeNum = record ? challengeNumberFor(date) : 0;
+  const title = record
+    ? `MathIQ Daily Challenge #${challengeNum} · ${record.topicTitle}`
+    : `MathIQ Daily Challenge · ${date}`;
+
+  // Generate LaTeX from the stored MMD. Same primary/fallback path as
+  // handleHomeworkLatexPdf — Claude-generated TeX is the premium output,
+  // hand-rolled mmdToTex is the safe fallback.
+  let tex: string;
+  const latexGen = await generateLatexFromMmd({
+    apiKey: env.ANTHROPIC_API_KEY,
+    mmd: attempt.studentMmd,
+    title,
+  });
+  if (latexGen.ok && latexGen.tex) {
+    tex = latexGen.tex;
+  } else {
+    if (latexGen.detail) {
+      console.error('[challenge-latex] Claude gen failed, falling back:', latexGen.detail);
+    }
+    const texBody = mmdToTex(attempt.studentMmd);
+    tex = wrapTexSource(texBody, { title });
+  }
+
+  const compiled = await compileLatex(tex);
+  if (!compiled.ok || !compiled.pdfBase64) {
+    await decrement(counter);
+    console.error('[challenge-latex] compile failed', compiled.status, (compiled.detail ?? '').slice(0, 300));
+    return json(
+      {
+        error: 'compile_failed',
+        message: 'LaTeX compile is having trouble. Try again in a few minutes.',
+        texSource: tex,
+      },
+      502,
+      cors,
+    );
+  }
+
+  // Cache the PDF so re-downloads are free for 24h
+  await env.USAGE.put(cacheKey, compiled.pdfBase64, { expirationTtl: 24 * 60 * 60 });
+
+  return json({ pdfBase64: compiled.pdfBase64, cached: false }, 200, cors);
+}
+
+async function handleStreak(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const streak = await getStreak(env.USAGE, authState.userId);
+  return json(streak, 200, cors);
+}
+
+/**
+ * Verify a Cloudflare Turnstile token. Returns true on valid challenge.
+ * Free service; no per-request cost.
+ */
+async function verifyTurnstile(
+  secretKey: string,
+  token: string,
+  remoteip?: string,
+): Promise<boolean> {
+  try {
+    const params = new URLSearchParams();
+    params.set('secret', secretKey);
+    params.set('response', token);
+    if (remoteip && remoteip !== 'unknown') params.set('remoteip', remoteip);
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+    });
+    if (!resp.ok) return false;
+    const data = (await resp.json()) as { success?: boolean };
+    return data.success === true;
+  } catch {
+    return false;
   }
 }

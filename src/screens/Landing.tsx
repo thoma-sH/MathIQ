@@ -7,9 +7,12 @@ import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
+import type { TodaysChallenge } from '../billing/challenge';
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
+import { DailyChallengeCard } from '../components/DailyChallengeCard';
+import { ChallengeGradeFlow } from '../components/ChallengeGradeFlow';
 import type { Route } from '../router';
 
 interface LandingProps {
@@ -43,6 +46,7 @@ export function Landing({ onNavigate }: LandingProps) {
   const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
   const [tier, setTier] = useState<Tier | null>(null);
+  const [activeChallenge, setActiveChallenge] = useState<TodaysChallenge | null>(null);
   const { requireUpgrade } = useUpgradePrompt();
 
   useEffect(() => {
@@ -402,6 +406,10 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </div>
 
+      {/* Daily Challenge — inline below the hero. Wordle-style ritual hook;
+       *  see DailyChallengeCard for the no-help, photo-grade flow. */}
+      <DailyChallengeCard onStartGrade={setActiveChallenge} />
+
       {/* Secondary CTAs — fade back when the search has focus */}
       <div
         className="reveal reveal-5"
@@ -472,6 +480,14 @@ export function Landing({ onNavigate }: LandingProps) {
         <span aria-hidden>·</span>
         <a href="/privacy" style={{ color: T.muted, textDecoration: 'none' }}>Privacy</a>
       </footer>
+
+      {/* Modal: photo capture + grade reveal + LaTeX render for the daily challenge */}
+      {activeChallenge && (
+        <ChallengeGradeFlow
+          challenge={activeChallenge}
+          onClose={() => setActiveChallenge(null)}
+        />
+      )}
     </main>
   );
 }
