@@ -128,54 +128,97 @@ export function InstallPrompt() {
         border: `1px solid ${T.ink}`,
         padding: '14px 16px',
         display: 'flex',
-        alignItems: 'center',
-        gap: 14,
+        flexDirection: isIos ? 'column' : 'row',
+        alignItems: isIos ? 'stretch' : 'center',
+        gap: isIos ? 8 : 14,
         boxShadow: '0 6px 20px rgba(26, 43, 26, 0.18)',
       }}
     >
-      <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4, color: T.ink }}>
-        {isIos
-          ? 'To install MathIQ: tap Safari’s Share button (the ⬆︎ icon in a rounded square), then “Add to Home Screen”.'
-          : 'Install MathIQ on this device for one-tap access.'}
-      </span>
-      {!isIos && (
-        <button
-          type="button"
-          onClick={() => void install()}
-          className="btn-press chamfer"
-          style={{
-            background: T.accent,
-            color: T.paper,
-            border: 'none',
-            padding: '8px 14px',
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: 'pointer',
-            fontFamily: T.sans,
-            flexShrink: 0,
-          }}
-        >
-          Install
-        </button>
+      {isIos ? (
+        <>
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>
+            Add MathIQ to your home screen
+          </div>
+          <ol
+            style={{
+              margin: 0,
+              padding: '0 0 0 18px',
+              fontSize: 13,
+              lineHeight: 1.55,
+              color: T.ink,
+            }}
+          >
+            <li>
+              Tap the <strong>Share</strong> button (⬆︎ icon) in Safari
+            </li>
+            <li>
+              Then choose <strong>Add to Home Screen</strong>
+            </li>
+          </ol>
+          <button
+            type="button"
+            onClick={dismiss}
+            className="btn-press"
+            style={{
+              alignSelf: 'flex-end',
+              marginTop: 2,
+              background: 'transparent',
+              border: 'none',
+              padding: '4px 0 0',
+              fontSize: 12,
+              fontFamily: T.mono,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: T.muted,
+              cursor: 'pointer',
+            }}
+          >
+            Don’t show again
+          </button>
+        </>
+      ) : (
+        <>
+          <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4, color: T.ink }}>
+            Install MathIQ on this device for one-tap access.
+          </span>
+          <button
+            type="button"
+            onClick={() => void install()}
+            className="btn-press chamfer"
+            style={{
+              background: T.accent,
+              color: T.paper,
+              border: 'none',
+              padding: '8px 14px',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              fontFamily: T.sans,
+              flexShrink: 0,
+            }}
+          >
+            Install
+          </button>
+          <button
+            type="button"
+            onClick={dismiss}
+            aria-label="Dismiss install prompt"
+            className="btn-press"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '4px 8px',
+              fontSize: 18,
+              lineHeight: 1,
+              cursor: 'pointer',
+              color: T.muted,
+              flexShrink: 0,
+            }}
+          >
+            ×
+          </button>
+        </>
       )}
-      <button
-        type="button"
-        onClick={dismiss}
-        aria-label="Dismiss install prompt"
-        className="btn-press"
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: '4px 8px',
-          fontSize: 18,
-          lineHeight: 1,
-          cursor: 'pointer',
-          color: T.muted,
-          flexShrink: 0,
-        }}
-      >
-        ×
-      </button>
     </div>
   );
 }
