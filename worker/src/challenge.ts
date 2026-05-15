@@ -15,7 +15,7 @@
  * generation time. Random selection happens server-side once per day, so
  * every visitor sees the same problem.
  */
-import { COURSES, type Course, type Topic } from './courses';
+import { COURSES, COURSES_BY_ID, type Course, type Topic } from './courses';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const GENERATE_MODEL = 'claude-opus-4-6';
@@ -65,20 +65,80 @@ export function difficultyForDate(date: string): ChallengeDifficulty {
   return 'hard';
 }
 
-function pickRandomTopic(): { course: Course; topic: Topic } {
-  const flat: Array<{ course: Course; topic: Topic }> = [];
-  for (const course of COURSES) {
-    for (const topic of course.topics) flat.push({ course, topic });
+/**
+ * Day-of-week → course assignment. Gives the daily a recognizable
+ * cadence: "Monday is always Algebra day." Saturday and Sunday are
+ * 50/50 toss-ups for variety on the bonus days.
+ */
+function courseForDate(date: string): Course {
+  const [y, m, day] = date.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, day)).getUTCDay();
+  switch (dow) {
+    case 1:
+      return COURSES_BY_ID['algebra'];
+    case 2:
+      return COURSES_BY_ID['precalc'];
+    case 3:
+      return COURSES_BY_ID['calc-1'];
+    case 4:
+      return COURSES_BY_ID['calc-2'];
+    case 5:
+      return COURSES_BY_ID['calc-3'];
+    case 6:
+      return Math.random() < 0.5
+        ? COURSES_BY_ID['discrete']
+        : COURSES_BY_ID['combinatorics'];
+    default:
+      // Sunday: linear-algebra OR differential-equations
+      return Math.random() < 0.5
+        ? COURSES_BY_ID['linear-algebra']
+        : COURSES_BY_ID['differential-equations'];
   }
-  const idx = Math.floor(Math.random() * flat.length);
-  return flat[idx];
+}
+
+function pickTopicFromCourse(course: Course): Topic {
+  const idx = Math.floor(Math.random() * course.topics.length);
+  return course.topics[idx];
+}
+
+/**
+ * Per-course difficulty caps. Some courses (DE, Calc 3) produce problems
+ * that are too hard for a *daily* even at the lowest difficulty — capping
+ * here clamps the natural day-of-week difficulty so a Friday Calc 3 lands
+ * at easy instead of hard, etc.
+ */
+const COURSE_MAX_DIFFICULTY: Record<string, ChallengeDifficulty> = {
+  algebra: 'cumulative',
+  precalc: 'cumulative',
+  'calc-1': 'cumulative',
+  'calc-2': 'cumulative',
+  'calc-3': 'easy',
+  discrete: 'cumulative',
+  combinatorics: 'mid',
+  'linear-algebra': 'mid',
+  'differential-equations': 'easy',
+};
+
+const DIFFICULTY_RANK: Record<ChallengeDifficulty, number> = {
+  easy: 0,
+  mid: 1,
+  hard: 2,
+  cumulative: 3,
+};
+
+function effectiveDifficulty(
+  natural: ChallengeDifficulty,
+  courseId: string,
+): ChallengeDifficulty {
+  const cap = COURSE_MAX_DIFFICULTY[courseId] ?? 'mid';
+  return DIFFICULTY_RANK[natural] <= DIFFICULTY_RANK[cap] ? natural : cap;
 }
 
 const DIFFICULTY_DIRECTIVE: Record<ChallengeDifficulty, string> = {
   easy: 'EASY: a routine one-step application of the topic. A prepared student should solve in under 2 minutes. Use small integers and the cleanest possible setup.',
-  mid: 'MID: requires chaining two ideas from the topic, but no surprises. About 4–5 minutes of work for a prepared student.',
-  hard: 'HARD: multi-step application requiring careful setup and one non-obvious move. Still solvable in 8–10 minutes; not a trick problem.',
-  cumulative: 'CUMULATIVE: a synthesis problem that draws on this topic plus one earlier prerequisite. Harder than a typical homework problem but not contest-level. About 10 minutes of work.',
+  mid: 'MID: requires chaining two ideas from the topic, but no surprises. About 4 minutes of work for a prepared student.',
+  hard: 'HARD: a careful two-step application of the topic with one tidy moving part. NO tricks, NO non-obvious substitutions, NO contest-style insight. About 5–7 minutes for a prepared student. If the topic\'s natural problems take longer than this, soften the numbers and skip the harder variants.',
+  cumulative: 'CUMULATIVE: a review-style problem that touches this topic and one familiar prerequisite. The student should recognize both ideas immediately — no "aha" required. About 6–8 minutes of work. Solid Saturday-afternoon difficulty, not Sunday-night cramming.',
 };
 
 const CHALLENGE_GENERATION_PROMPT = `You are an exam-problem author writing the MathIQ Daily Challenge — one single math problem shown to every user that day. Quality matters: this is a public-facing problem people will share.
@@ -204,8 +264,10 @@ export async function getOrGenerateTodaysChallenge(
     }
   }
 
-  const { course, topic } = pickRandomTopic();
-  const difficulty = difficultyForDate(date);
+  const course = courseForDate(date);
+  const topic = pickTopicFromCourse(course);
+  const natural = difficultyForDate(date);
+  const difficulty = effectiveDifficulty(natural, course.id);
   const record = await generateChallenge(
     env.ANTHROPIC_API_KEY,
     course,
