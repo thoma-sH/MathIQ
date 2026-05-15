@@ -344,17 +344,22 @@ export function TopicScreen({
     }
   }
 
-  async function onImageButtonClick() {
-    // Photo input is Plus+. Show the upgrade modal instead of letting the
-    // worker reject with a 403 the user has to decode.
-    if (rateInfo && rateInfo.tier !== 'plus' && rateInfo.tier !== 'pro') {
-      requireUpgrade('photo-input');
-      return;
-    }
+  async function attemptPhotoInput() {
     const out = await openScanner({ mode: 'single', output: 'image' });
     if (out && out.kind === 'image') {
       void handleImageFile(out.file);
     }
+  }
+
+  async function onImageButtonClick() {
+    // Photo input is Plus+. Free users get a small lifetime trial — if
+    // they have one available, the upgrade modal exposes a "Try free"
+    // button that invokes attemptPhotoInput directly.
+    if (rateInfo && rateInfo.tier !== 'plus' && rateInfo.tier !== 'pro') {
+      requireUpgrade('photo-input', { onTryFree: () => void attemptPhotoInput() });
+      return;
+    }
+    void attemptPhotoInput();
   }
 
   function onCustomTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
@@ -717,7 +722,9 @@ export function TopicScreen({
           whyHowStreaming={whyHowStream?.index === i ? whyHowStream.text : null}
           onToggleWhyHow={() => {
             if (!isPaid) {
-              requireUpgrade('why-how');
+              // Free users get 5 lifetime why-how trials. The modal lets
+              // them spend one directly via the Try-free button.
+              requireUpgrade('why-how', { onTryFree: () => void requestWhyHow(i) });
               return;
             }
             if (whyHow[i] !== undefined) {

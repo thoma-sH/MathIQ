@@ -100,6 +100,12 @@ import {
   type ChallengeRecord,
 } from './challenge';
 import { getStreak, recordSolve } from './streak';
+import {
+  consumeTrial,
+  getRemainingTrials,
+  refundTrial,
+  type TrialFeature,
+} from './trials';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -223,6 +229,10 @@ export default {
       return handleBillingState(request, env, cors);
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/trials') {
+      return handleTrialsGet(request, env, cors);
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
       return handleBillingCheckout(request, env, cors);
     }
@@ -327,26 +337,18 @@ async function handleWalkthrough(
 
   const tier: Tier = await resolveTier(authState, env);
 
-  // Gate Why/How to paid tiers only.
+  // Gate Why/How to paid tiers — Free signed-in can spend one of their
+  // lifetime whyHow trials to taste the feature.
   let parsedBody: WalkthroughBody | null = null;
   try {
     parsedBody = (await request.clone().json()) as WalkthroughBody;
   } catch {
     // We'll re-parse below and surface the error there.
   }
-  if (
-    parsedBody?.action === 'why-how' &&
-    tier !== 'plus' &&
-    tier !== 'pro'
-  ) {
-    return json(
-      {
-        error: 'upgrade_required',
-        message: 'Why & how is a MathIQ+ feature.',
-      },
-      403,
-      cors,
-    );
+  let whyHowAccess: AccessResult | null = null;
+  if (parsedBody?.action === 'why-how') {
+    whyHowAccess = await ensureFeatureAccess(env, authState, tier, 'whyHow', 'plus', cors);
+    if (!whyHowAccess.ok) return whyHowAccess.response;
   }
   const counter: CounterRef =
     authState.kind === 'user'
@@ -520,10 +522,11 @@ async function handleWalkthrough(
 
   if (!upstream.ok || !upstream.body) {
     if (upstream.detail) console.error('upstream walkthrough failed', upstream.status, upstream.detail);
-    // Upstream failed — refund both daily and monthly Opus so the user isn't
-    // charged for it.
+    // Upstream failed — refund daily slot, monthly Opus, and the why-how
+    // trial (if any) so the user isn't charged for it.
     await decrement(counter);
     if (monthlyOpusInc && opusMonthly) await decrement(opusMonthly);
+    if (whyHowAccess) await refundAccess(env, authState, whyHowAccess);
     return json(
       { error: 'upstream_error', message: 'The walkthrough service is having trouble — try again in a moment.' },
       502,
@@ -1065,17 +1068,10 @@ async function handleOcr(
   cors: Record<string, string>,
 ): Promise<Response> {
   const authState = await authenticate(request, env);
-  if (authState.kind !== 'user') {
-    return json({ error: 'sign_in_required' }, 401, cors);
+  if (authState.kind === 'invalid') {
+    return json({ error: 'invalid_token', message: authState.message }, 401, cors);
   }
   const tier: Tier = await resolveTier(authState, env);
-  if (tier !== 'plus' && tier !== 'pro') {
-    return json(
-      { error: 'upgrade_required', message: 'Image input is a MathIQ+ feature.' },
-      403,
-      cors,
-    );
-  }
 
   let body: OcrBody;
   try {
@@ -1093,6 +1089,9 @@ async function handleOcr(
     return json({ error: 'image too large', limit: MAX_OCR_BASE64_CHARS }, 413, cors);
   }
 
+  const access = await ensureFeatureAccess(env, authState, tier, 'photoInput', 'plus', cors);
+  if (!access.ok) return access.response;
+
   const result = await extractProblemFromImage({
     apiKey: env.ANTHROPIC_API_KEY,
     imageBase64: body.image,
@@ -1100,6 +1099,7 @@ async function handleOcr(
   });
 
   if (!result.ok) {
+    await refundAccess(env, authState, access);
     console.error('ocr upstream failed', result.status, result.detail);
     return json({ error: 'ocr_failed' }, 502, cors);
   }
@@ -1180,24 +1180,18 @@ async function handleExamGenerate(
   }
 
   const tier = await resolveTier(authState, env);
-  if (tier !== 'pro') {
-    return json(
-      {
-        error: 'upgrade_required',
-        message: 'Exam mode is a MathIQ Pro feature.',
-      },
-      403,
-      cors,
-    );
-  }
+  const examGenAccess = await ensureFeatureAccess(env, authState, tier, 'examGen', 'pro', cors);
+  if (!examGenAccess.ok) return examGenAccess.response;
 
   let body: ExamGenerateBody;
   try {
     body = await request.json();
   } catch {
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json({ error: 'invalid JSON body' }, 400, cors);
   }
   if (!body.courseId || typeof body.courseId !== 'string') {
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json({ error: 'courseId required' }, 400, cors);
   }
   if (
@@ -1206,11 +1200,13 @@ async function handleExamGenerate(
     body.exam !== 'exam3' &&
     body.exam !== 'final'
   ) {
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json({ error: 'exam must be one of exam1, exam2, exam3, final' }, 400, cors);
   }
 
   const course = COURSES_BY_ID[body.courseId];
   if (!course) {
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json({ error: 'unknown courseId' }, 400, cors);
   }
 
@@ -1229,6 +1225,7 @@ async function handleExamGenerate(
   ]);
 
   if (examUsedToday >= EXAM_DAILY_CAP) {
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json(
       {
         error: 'rate_limit',
@@ -1244,6 +1241,7 @@ async function handleExamGenerate(
 
   const decision = decideTier(tier, usedToday);
   if (decision.model === null) {
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json(
       {
         error: 'rate_limit',
@@ -1263,6 +1261,7 @@ async function handleExamGenerate(
   const postDailyDecision = decideTier(tier, newCount - 1);
   if (postDailyDecision.model === null) {
     await decrement(counter);
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json(
       { error: 'rate_limit', message: `You've used all ${decision.ceiling} Pro slots today.`, resetAt: nextMidnightUtc() },
       429,
@@ -1274,6 +1273,7 @@ async function handleExamGenerate(
   if (newExamCount > EXAM_DAILY_CAP) {
     await decrement(examCounter);
     await decrement(counter);
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json(
       {
         error: 'rate_limit',
@@ -1300,10 +1300,11 @@ async function handleExamGenerate(
   );
 
   if (!result.ok || !result.record) {
-    // Refund all three slots on upstream failure.
+    // Refund all four slots on upstream failure (daily, exam, monthly Opus, trial).
     await decrement(opusMonthly);
     await decrement(examCounter);
     await decrement(counter);
+    if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     if (result.detail) console.error('exam generate failed', result.status, result.detail);
     return json(
       { error: 'upstream_error', message: 'Exam generation failed — try again in a moment.' },
@@ -1337,35 +1338,36 @@ async function handleExamGrade(
   }
 
   const tier = await resolveTier(authState, env);
-  if (tier !== 'pro') {
-    return json(
-      { error: 'upgrade_required', message: 'Exam grading is a MathIQ Pro feature.' },
-      403,
-      cors,
-    );
-  }
+  const examGradeAccess = await ensureFeatureAccess(env, authState, tier, 'examGrade', 'pro', cors);
+  if (!examGradeAccess.ok) return examGradeAccess.response;
 
   let body: ExamGradeBody;
   try {
     body = await request.json();
   } catch {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json({ error: 'invalid JSON body' }, 400, cors);
   }
   if (!body.examId || typeof body.examId !== 'string') {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json({ error: 'examId required' }, 400, cors);
   }
   if (!body.image || typeof body.image !== 'string') {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json({ error: 'image required' }, 400, cors);
   }
   if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json({ error: 'unsupported media type' }, 400, cors);
   }
   if (body.image.length > MAX_GRADE_BASE64_CHARS) {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
   }
 
   const record = await getExam(env.USAGE, authState.userId, body.examId);
   if (!record) {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json(
       {
         error: 'exam_not_found',
@@ -1384,6 +1386,7 @@ async function handleExamGrade(
   const usedToday = await peek(counter);
   const decision = decideTier(tier, usedToday);
   if (decision.model === null) {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json(
       {
         error: 'rate_limit',
@@ -1402,6 +1405,7 @@ async function handleExamGrade(
   // math priors and transcribes exactly what's on the page, then Claude
   // grades the transcribed text instead of looking at the photo.
   if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     console.error('[exam-grade] Mathpix credentials missing');
     return json(
       { error: 'service_unavailable', message: 'Exam grading is temporarily unavailable. Try again shortly.' },
@@ -1426,6 +1430,7 @@ async function handleExamGrade(
           mediaType: body.mediaType,
         });
   if (!ocr.ok || !ocr.text) {
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     console.error('[exam-grade] Mathpix failed', ocr.status, ocr.detail);
     const detailLower = (ocr.detail ?? '').toLowerCase();
     const isPdf = body.mediaType === 'application/pdf';
@@ -1458,6 +1463,7 @@ async function handleExamGrade(
   if (!result.ok || !result.result) {
     await decrement(opusMonthly);
     await decrement(counter);
+    if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     if (result.detail) console.error('exam grade failed', result.status, result.detail);
     const message =
       result.detail && result.detail.startsWith('Grader hallucinated')
@@ -1540,37 +1546,36 @@ async function handleHomeworkTranscribe(
   }
 
   const tier = await resolveTier(authState, env);
-  if (tier !== 'plus' && tier !== 'pro') {
-    return json(
-      { error: 'upgrade_required', message: 'Handwritten to PDF is a MathIQ+ feature.' },
-      403,
-      cors,
-    );
-  }
+  const transcribeAccess = await ensureFeatureAccess(env, authState, tier, 'handwrittenPdf', 'plus', cors);
+  if (!transcribeAccess.ok) return transcribeAccess.response;
 
   let body: HomeworkTranscribeBody;
   try {
     body = await request.json();
   } catch {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json({ error: 'invalid JSON body' }, 400, cors);
   }
   if (!body.image || typeof body.image !== 'string') {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json({ error: 'image required' }, 400, cors);
   }
   if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json({ error: 'unsupported media type' }, 400, cors);
   }
   if (body.image.length > MAX_GRADE_BASE64_CHARS) {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
   }
 
-  // Counts as one walkthrough slot. Plus has the 70/day total, Pro has the
-  // 70/day Opus pool. Increment after Mathpix succeeds so OCR failures
-  // don't burn the user's slot.
+  // Counts as one walkthrough slot. Increment after Mathpix succeeds so OCR
+  // failures don't burn the user's slot.
   const counter = userCounter(env.USAGE_DO, authState.userId);
   const usedToday = await peek(counter);
   const decision = decideTier(tier, usedToday);
   if (decision.model === null) {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json(
       {
         error: 'rate_limit',
@@ -1585,6 +1590,7 @@ async function handleHomeworkTranscribe(
   }
 
   if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     console.error('[homework-transcribe] Mathpix credentials missing');
     return json(
       { error: 'service_unavailable', message: 'Homework transcription is temporarily unavailable. Try again shortly.' },
@@ -1607,6 +1613,7 @@ async function handleHomeworkTranscribe(
           mediaType: body.mediaType,
         });
   if (!ocr.ok || !ocr.text) {
+    if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     console.error('[homework-transcribe] Mathpix failed', ocr.status, ocr.detail);
     const detailLower = (ocr.detail ?? '').toLowerCase();
     const isPdf = body.mediaType === 'application/pdf';
@@ -1764,13 +1771,6 @@ async function handleHomeworkLatexPdf(
   }
 
   const tier = await resolveTier(authState, env);
-  if (tier !== 'pro') {
-    return json(
-      { error: 'upgrade_required', message: 'LaTeX Mode is a MathIQ Pro feature.' },
-      403,
-      cors,
-    );
-  }
 
   let body: HomeworkLatexBody;
   try {
@@ -1797,8 +1797,8 @@ async function handleHomeworkLatexPdf(
   const title = typeof body.title === 'string' && body.title.trim() ? body.title.trim() : undefined;
 
   // Cache keyed by hashed (mmd + title). Identical re-renders are free
-  // (no Claude call, no slot charged). Editing the homework changes the
-  // mmd → cache miss → fresh call → fresh slot.
+  // (no Claude call, no slot charged, no trial consumed). Editing the
+  // homework changes the mmd → cache miss → fresh call → fresh slot.
   const cacheKey = await latexCacheKey(record.mmd, title);
   const cacheKvKey = `latex:user:${authState.userId}:${body.hwId}:${cacheKey}`;
   const cached = await env.USAGE.get(cacheKvKey);
@@ -1806,11 +1806,16 @@ async function handleHomeworkLatexPdf(
     return json({ pdfBase64: cached }, 200, cors);
   }
 
+  // Cache miss — gate on Pro tier or consume a lifetime LaTeX trial.
+  const latexAccess = await ensureFeatureAccess(env, authState, tier, 'latex', 'pro', cors);
+  if (!latexAccess.ok) return latexAccess.response;
+
   // First render for this (hwId, mmd, title) — counts as 1 Pro slot.
   const counter = userCounter(env.USAGE_DO, authState.userId);
   const usedToday = await peek(counter);
   const decision = decideTier(tier, usedToday);
   if (decision.model === null) {
+    if (latexAccess.trialConsumed) await refundAccess(env, authState, latexAccess);
     return json(
       {
         error: 'rate_limit',
@@ -1853,6 +1858,7 @@ async function handleHomeworkLatexPdf(
   const result = await compileLatex(tex);
 
   if (!result.ok || !result.pdfBase64) {
+    if (latexAccess.trialConsumed) await refundAccess(env, authState, latexAccess);
     console.error('[homework-latex] compile failed', result.status, (result.detail ?? '').slice(0, 400));
     return json(
       {
@@ -2276,6 +2282,98 @@ async function handleStreak(
   }
   const streak = await getStreak(env.USAGE, authState.userId);
   return json(streak, 200, cors);
+}
+
+// ─── Trials access gate ──────────────────────────────────────────────
+
+type AccessResult =
+  | { ok: true; trialConsumed: false }
+  | { ok: true; trialConsumed: true; feature: TrialFeature; remaining: number }
+  | { ok: false; response: Response };
+
+/**
+ * Decide whether a request to a premium feature is allowed.
+ *
+ *   - Pro tier always granted (any feature)
+ *   - Plus tier granted for Plus features; Pro features pitch the Pro upgrade
+ *   - Free signed-in: try a lifetime trial; consume one if available, else 402
+ *   - Anonymous: 401 sign_in_required
+ *
+ * Returns AccessResult — caller spreads the deny response or proceeds and
+ * refunds the trial on upstream failure when `trialConsumed === true`.
+ */
+async function ensureFeatureAccess(
+  env: Env,
+  authState: AuthState,
+  tier: Tier,
+  feature: TrialFeature,
+  minTier: 'plus' | 'pro',
+  cors: Record<string, string>,
+): Promise<AccessResult> {
+  if (tier === 'pro') return { ok: true, trialConsumed: false };
+  if (tier === 'plus' && minTier === 'plus') return { ok: true, trialConsumed: false };
+
+  if (authState.kind !== 'user') {
+    return {
+      ok: false,
+      response: json(
+        { error: 'sign_in_required', feature, message: 'Sign in to try this feature.' },
+        401,
+        cors,
+      ),
+    };
+  }
+
+  // Plus user hitting a Pro-only feature. Monthly Pro-trial-for-Plus is a
+  // future phase — for now, pitch the upgrade directly.
+  if (tier === 'plus' && minTier === 'pro') {
+    return {
+      ok: false,
+      response: json(
+        { error: 'upgrade_required', feature, currentTier: 'plus' },
+        403,
+        cors,
+      ),
+    };
+  }
+
+  // Free signed-in — try a lifetime trial.
+  const remaining = await consumeTrial(env.USAGE, authState.userId, feature);
+  if (remaining === null) {
+    return {
+      ok: false,
+      response: json(
+        {
+          error: 'trial_exhausted',
+          feature,
+          message: 'You’ve used your free trial of this feature. Upgrade to continue.',
+        },
+        402,
+        cors,
+      ),
+    };
+  }
+  return { ok: true, trialConsumed: true, feature, remaining };
+}
+
+async function refundAccess(env: Env, authState: AuthState, access: AccessResult): Promise<void> {
+  if (!access.ok || !access.trialConsumed) return;
+  if (authState.kind !== 'user') return;
+  await refundTrial(env.USAGE, authState.userId, access.feature);
+}
+
+async function handleTrialsGet(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'sign_in_required' }, 401, cors);
+  }
+  const tier = await resolveTier(authState, env);
+  const remaining = await getRemainingTrials(env.USAGE, authState.userId);
+  return json({ tier, remaining }, 200, cors);
 }
 
 /**

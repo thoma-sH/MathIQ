@@ -43,6 +43,7 @@ import {
   type Interval,
   type Tier as PaidTier,
 } from '../billing/client';
+import { fetchTrials, type TrialFeature, type TrialState } from '../billing/trials';
 
 // ── Feature catalog ─────────────────────────────────────────────────────────
 
@@ -54,6 +55,17 @@ export type LockedFeature =
   | 'homework-latex'
   | 'why-how'
   | 'photo-input';
+
+/** Map UI feature keys to trial-counter keys (worker side). Features without
+ *  a trial entry (e.g. walkthrough-pdf) get upgrade-only treatment in the modal. */
+const FEATURE_TO_TRIAL: Partial<Record<LockedFeature, TrialFeature>> = {
+  'photo-input': 'photoInput',
+  'why-how': 'whyHow',
+  'homework-plain': 'handwrittenPdf',
+  'homework-latex': 'latex',
+  'exam-mode': 'examGen',
+  'exam-grade': 'examGrade',
+};
 
 interface FeatureMeta {
   /** Small label above the title — e.g. "EXAM MODE · PRO". */
@@ -145,8 +157,16 @@ const SAVINGS_BADGE: Record<PaidTier, Partial<Record<Interval, string>>> = {
 
 // ── Context ─────────────────────────────────────────────────────────────────
 
+interface RequireUpgradeOptions {
+  /** Optional callback invoked when the user clicks "Try free" inside the
+   *  modal. Only fires when the user is on the Free tier and has at least
+   *  one lifetime trial of this feature remaining. The modal closes itself
+   *  after invoking. */
+  onTryFree?: () => void;
+}
+
 interface UpgradePromptContextValue {
-  requireUpgrade: (feature: LockedFeature) => void;
+  requireUpgrade: (feature: LockedFeature, options?: RequireUpgradeOptions) => void;
   close: () => void;
 }
 
@@ -160,9 +180,22 @@ export function useUpgradePrompt(): UpgradePromptContextValue {
 
 export function UpgradeProvider({ children }: { children: ReactNode }) {
   const [feature, setFeature] = useState<LockedFeature | null>(null);
+  const [tryFreeFn, setTryFreeFn] = useState<(() => void) | null>(null);
 
-  const requireUpgrade = useCallback((f: LockedFeature) => setFeature(f), []);
-  const close = useCallback(() => setFeature(null), []);
+  const requireUpgrade = useCallback(
+    (f: LockedFeature, options?: RequireUpgradeOptions) => {
+      setFeature(f);
+      // Wrap the callback so the setState callback signature doesn't try to
+      // invoke it as a state updater. Pass null when not provided so the
+      // modal knows the "Try free" path isn't available.
+      setTryFreeFn(() => options?.onTryFree ?? null);
+    },
+    [],
+  );
+  const close = useCallback(() => {
+    setFeature(null);
+    setTryFreeFn(() => null);
+  }, []);
 
   // Esc to close.
   useEffect(() => {
@@ -189,20 +222,36 @@ export function UpgradeProvider({ children }: { children: ReactNode }) {
   return (
     <UpgradePromptContext.Provider value={value}>
       {children}
-      {feature && <UpgradeModal feature={feature} onClose={close} />}
+      {feature && (
+        <UpgradeModal feature={feature} onTryFree={tryFreeFn} onClose={close} />
+      )}
     </UpgradePromptContext.Provider>
   );
 }
 
 // ── Modal ───────────────────────────────────────────────────────────────────
 
-function UpgradeModal({ feature, onClose }: { feature: LockedFeature; onClose: () => void }) {
+function UpgradeModal({
+  feature,
+  onTryFree,
+  onClose,
+}: {
+  feature: LockedFeature;
+  onTryFree: (() => void) | null;
+  onClose: () => void;
+}) {
   const meta = FEATURE_META[feature];
   const { getToken } = useAuth();
   const [interval, setIntervalChoice] = useState<Interval>('annual');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentTier, setCurrentTier] = useState<PaidTier | null>(null);
+  const [trialsRemaining, setTrialsRemaining] = useState<TrialState | null>(null);
+
+  const trialKey: TrialFeature | undefined = FEATURE_TO_TRIAL[feature];
+  const trialsLeftForFeature =
+    trialKey && trialsRemaining ? trialsRemaining[trialKey] : 0;
+  const tryFreeAvailable = !!onTryFree && trialsLeftForFeature > 0 && currentTier === null;
 
   // Resolve the user's current tier so we don't show "Upgrade to Plus" when
   // they already have Plus. Pro users will never see this modal since every
@@ -217,6 +266,21 @@ function UpgradeModal({ feature, onClose }: { feature: LockedFeature; onClose: (
       cancelled = true;
     };
   }, [getToken]);
+
+  // Fetch lifetime trial state. Only meaningful for the Free tier — Plus/Pro
+  // never spend trials. Fires after currentTier resolves to skip the call
+  // entirely for paid users.
+  useEffect(() => {
+    if (currentTier !== null) return; // Paid → no trials to fetch
+    let cancelled = false;
+    void (async () => {
+      const trials = await fetchTrials({ getToken });
+      if (!cancelled && trials) setTrialsRemaining(trials.remaining);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTier, getToken]);
 
   // If the feature requires Plus but the user is already on Plus (or higher),
   // they must have hit this modal due to a stale tier read — close it.
@@ -315,6 +379,50 @@ function UpgradeModal({ feature, onClose }: { feature: LockedFeature; onClose: (
         >
           {meta.blurb}
         </p>
+
+        {/* Try-free affordance — only renders for Free users with a remaining
+         *  lifetime trial of this feature AND a caller that supplied an
+         *  onTryFree callback. Sits *above* the upgrade pitch so the
+         *  free option is the first thing the user sees. */}
+        {tryFreeAvailable && (
+          <div
+            style={{
+              padding: '14px 16px',
+              border: `1px solid ${T.accent3}`,
+              background: T.paper2,
+              marginBottom: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ fontSize: 13, color: T.ink, lineHeight: 1.5 }}>
+              <strong>{trialsLeftForFeature} free trial{trialsLeftForFeature === 1 ? '' : 's'}</strong>{' '}
+              of this feature — try it now without upgrading.
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (onTryFree) onTryFree();
+                onClose();
+              }}
+              className="btn-press chamfer"
+              style={{
+                background: T.accent3,
+                color: T.paper,
+                border: 'none',
+                padding: '10px 14px',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                fontFamily: T.sans,
+                alignSelf: 'flex-start',
+              }}
+            >
+              Try free →
+            </button>
+          </div>
+        )}
 
         {/* Signed in: plan card + interval toggle + checkout CTA */}
         <SignedIn>
