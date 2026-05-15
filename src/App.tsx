@@ -10,6 +10,7 @@ import { Settings } from './screens/Settings';
 import { Terms } from './screens/Terms';
 import { Privacy } from './screens/Privacy';
 import { Pricing } from './screens/Pricing';
+import { Share } from './screens/Share';
 import { Exams } from './screens/Exams';
 import { ExamTake } from './screens/ExamTake';
 import { ExamGrade } from './screens/ExamGrade';
@@ -51,20 +52,34 @@ function escapeTarget(route: Route): Route | null {
 // Legal / marketing pages are real URLs (Stripe Customer Portal + outside
 // links use them) so deep-linking has to work. Everything else uses
 // internal `route` state.
-function getRealUrlPath(): 'terms' | 'privacy' | 'pricing' | null {
+type RealUrl =
+  | { kind: 'terms' }
+  | { kind: 'privacy' }
+  | { kind: 'pricing' }
+  | { kind: 'share'; shareId: string };
+
+function getRealUrlPath(): RealUrl | null {
   if (typeof window === 'undefined') return null;
   const p = window.location.pathname.replace(/\/$/, '');
-  if (p === '/terms') return 'terms';
-  if (p === '/privacy') return 'privacy';
-  if (p === '/pricing') return 'pricing';
+  if (p === '/terms') return { kind: 'terms' };
+  if (p === '/privacy') return { kind: 'privacy' };
+  if (p === '/pricing') return { kind: 'pricing' };
+  // /share/<shareId> — opaque hex id. Defensive validation matches the
+  // worker's 16-char hex format so a typo'd URL goes to NotFound, not the
+  // share screen with broken state.
+  if (p.startsWith('/share/')) {
+    const id = p.slice('/share/'.length);
+    if (/^[a-f0-9]{4,64}$/i.test(id)) return { kind: 'share', shareId: id };
+  }
   return null;
 }
 
 export default function App() {
   const realPath = getRealUrlPath();
-  if (realPath === 'terms') return <Terms />;
-  if (realPath === 'privacy') return <Privacy />;
-  if (realPath === 'pricing') return <Pricing />;
+  if (realPath?.kind === 'terms') return <Terms />;
+  if (realPath?.kind === 'privacy') return <Privacy />;
+  if (realPath?.kind === 'pricing') return <Pricing />;
+  if (realPath?.kind === 'share') return <Share shareId={realPath.shareId} />;
   return <MathIQApp />;
 }
 

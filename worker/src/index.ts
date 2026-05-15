@@ -106,6 +106,7 @@ import {
   refundTrial,
   type TrialFeature,
 } from './trials';
+import { createShare, getShare } from './share';
 import type Stripe from 'stripe';
 
 interface Env {
@@ -295,6 +296,16 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/api/streak') {
       return handleStreak(request, env, cors);
+    }
+
+    // Shareable Daily Challenge attempts — public, no auth. Path is
+    // /api/share/:shareId or /api/share/:shareId/pdf.
+    if (request.method === 'GET' && url.pathname.startsWith('/api/share/')) {
+      const rest = url.pathname.slice('/api/share/'.length);
+      if (rest.endsWith('/pdf')) {
+        return handleSharePdf(request, env, cors, rest.slice(0, -'/pdf'.length));
+      }
+      return handleShareGet(request, env, cors, rest);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
@@ -2150,8 +2161,9 @@ async function handleChallengeGrade(
     );
   }
 
-  // ── Persist (signed-in only) + update streak
+  // ── Persist (signed-in only) + update streak + mint a shareable link
   let streakState = null;
+  let shareId: string | null = null;
   if (authState.kind === 'user') {
     await saveAttempt(env.USAGE, {
       userId: authState.userId,
@@ -2161,6 +2173,12 @@ async function handleChallengeGrade(
       submittedAt: Date.now(),
     });
     streakState = await recordSolve(env.USAGE, authState.userId, grade.correct, record.date);
+    // Auto-mint a shareable id so the user can copy a real link straight
+    // away — no extra "make this shareable" step. The id is opaque (64-bit
+    // hex) and resolves only to the attempt+grade, never to identifiable
+    // user data.
+    const share = await createShare(env.USAGE, authState.userId, record.date);
+    shareId = share.shareId;
   }
 
   return json(
@@ -2169,6 +2187,7 @@ async function handleChallengeGrade(
       streak: streakState,
       challengeNumber: challengeNumberFor(record.date),
       anonymous: isAnon,
+      shareId,
     },
     200,
     cors,
@@ -2282,6 +2301,86 @@ async function handleStreak(
   }
   const streak = await getStreak(env.USAGE, authState.userId);
   return json(streak, 200, cors);
+}
+
+/**
+ * Public read of a shared Daily Challenge attempt. Returns the challenge
+ * problem + the sharer's grade + a flag indicating whether they rendered
+ * a LaTeX PDF (the actual PDF is served separately by /pdf).
+ *
+ * Never returns the sharer's userId or any other identifiable info.
+ */
+async function handleShareGet(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+  shareId: string,
+): Promise<Response> {
+  const share = await getShare(env.USAGE, shareId);
+  if (!share) {
+    return json({ error: 'not_found', message: "This shared challenge expired or was never created." }, 404, cors);
+  }
+  const challenge = await getOrGenerateTodaysChallenge(env, share.date);
+  if (!challenge) {
+    return json({ error: 'challenge_unavailable' }, 503, cors);
+  }
+  const attempt = await getAttempt(env.USAGE, share.userId, share.date);
+  if (!attempt) {
+    return json({ error: 'not_found' }, 404, cors);
+  }
+  const pdfCacheKey = `challenge-latex-pdf:user:${share.userId}:${share.date}`;
+  const hasPdf = (await env.USAGE.get(pdfCacheKey)) !== null;
+
+  return json(
+    {
+      shareId: share.shareId,
+      date: share.date,
+      challengeNumber: challengeNumberFor(share.date),
+      courseTitle: challenge.courseTitle,
+      topicTitle: challenge.topicTitle,
+      difficulty: challenge.difficulty,
+      problemText: challenge.problemText,
+      grade: attempt.grade,
+      hasPdf,
+    },
+    200,
+    cors,
+  );
+}
+
+/**
+ * Serve the typeset LaTeX PDF for a shared attempt. Returned as
+ * `application/pdf` so browsers can embed it directly.
+ */
+async function handleSharePdf(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+  shareId: string,
+): Promise<Response> {
+  const share = await getShare(env.USAGE, shareId);
+  if (!share) {
+    return new Response('not found', { status: 404, headers: cors });
+  }
+  const pdfCacheKey = `challenge-latex-pdf:user:${share.userId}:${share.date}`;
+  const pdfBase64 = await env.USAGE.get(pdfCacheKey);
+  if (!pdfBase64) {
+    return new Response('no pdf', { status: 404, headers: cors });
+  }
+  // Decode base64 → bytes. Chunked to avoid large fromCharCode call stack.
+  const bin = atob(pdfBase64);
+  const len = bin.length;
+  const buf = new Uint8Array(len);
+  for (let i = 0; i < len; i++) buf[i] = bin.charCodeAt(i);
+  return new Response(buf, {
+    status: 200,
+    headers: {
+      ...cors,
+      'content-type': 'application/pdf',
+      'cache-control': 'public, max-age=3600',
+      'content-disposition': `inline; filename="mathiq-challenge-${share.date}.pdf"`,
+    },
+  });
 }
 
 // ─── Trials access gate ──────────────────────────────────────────────

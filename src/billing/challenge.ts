@@ -34,6 +34,33 @@ export interface ChallengeGradeResponse {
   streak: StreakState | null;
   challengeNumber: number;
   anonymous: boolean;
+  /** Opaque share id minted by the worker on successful grade. Anonymous
+   *  submissions don't get one (we don't track anonymous attempts). */
+  shareId: string | null;
+}
+
+export interface SharedChallenge {
+  shareId: string;
+  date: string;
+  challengeNumber: number;
+  courseTitle: string;
+  topicTitle: string;
+  difficulty: ChallengeDifficulty;
+  problemText: string;
+  grade: ChallengeGradeResult;
+  hasPdf: boolean;
+}
+
+/** Public read of a shared attempt. No auth required. */
+export async function fetchSharedAttempt(shareId: string): Promise<SharedChallenge | null> {
+  const resp = await fetch(`${WORKER_URL}/api/share/${encodeURIComponent(shareId)}`);
+  if (!resp.ok) return null;
+  return (await resp.json()) as SharedChallenge;
+}
+
+/** Direct URL to the PDF for a shared attempt — drop this into an iframe src. */
+export function sharedPdfUrl(shareId: string): string {
+  return `${WORKER_URL}/api/share/${encodeURIComponent(shareId)}/pdf`;
 }
 
 interface AuthOpts {

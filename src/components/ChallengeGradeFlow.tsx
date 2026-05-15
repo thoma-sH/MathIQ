@@ -149,10 +149,9 @@ export function ChallengeGradeFlow({ challenge, onClose }: ChallengeGradeFlowPro
         WebkitBackdropFilter: 'blur(4px)',
         zIndex: 9000,
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         justifyContent: 'center',
-        padding: 'clamp(16px, 4vh, 40px) 16px',
-        overflowY: 'auto',
+        padding: 'clamp(8px, 2vh, 24px)',
       }}
     >
       <div
@@ -161,11 +160,17 @@ export function ChallengeGradeFlow({ challenge, onClose }: ChallengeGradeFlowPro
           position: 'relative',
           width: '100%',
           maxWidth: 560,
+          maxHeight: '100%',
           background: T.paper,
           border: `1px solid ${T.ink}`,
           padding: '28px 22px',
           color: T.ink,
-          marginBottom: 'auto',
+          // The card itself scrolls when content exceeds the viewport. This
+          // avoids the iOS Safari quirk where `overflow-y: auto` on a backdrop
+          // combined with `backdrop-filter` silently blocks touch scrolling
+          // on inner content.
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <button
@@ -692,10 +697,16 @@ function buildShareString(challenge: TodaysChallenge, response: ChallengeGradeRe
     response.streak && response.streak.current > 0
       ? `\n🔥 ${response.streak.current}-day streak`
       : '';
+  // If the worker minted a shareId (signed-in attempts get one) the link
+  // resolves to the user's full attempt + LaTeX render. Anonymous attempts
+  // share a generic link back to today's challenge.
+  const shareUrl = response.shareId
+    ? `https://mathiq.io/share/${response.shareId}`
+    : `https://mathiq.io/`;
   return [
     `MathIQ #${challenge.challengeNumber} · ${emoji} ${challenge.difficulty.toUpperCase()}`,
     `${challenge.courseTitle} · ${challenge.topicTitle}`,
     `${verdict}${streakLine}`,
-    `https://mathiq.io/`,
+    shareUrl,
   ].join('\n');
 }
