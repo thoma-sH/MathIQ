@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { SignedIn, useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import {

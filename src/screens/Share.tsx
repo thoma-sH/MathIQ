@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
 import {
   fetchSharedAttempt,

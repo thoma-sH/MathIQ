@@ -1,5 +1,3 @@
-@import 'katex/dist/katex.min.css';
-
 /* ─── Design tokens ──────────────────────────────────────────────────────
  * Pistachio identity: a punchy yellow-green body, near-black ink, deep
  * teal as the contrast pop. Theme is set as data-* attributes on <html>
