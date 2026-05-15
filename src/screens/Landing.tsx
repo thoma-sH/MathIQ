@@ -7,12 +7,11 @@ import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
-import type { TodaysChallenge } from '../billing/challenge';
+import { fetchTodaysChallenge, type TodaysChallenge } from '../billing/challenge';
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
-import { DailyChallengeCard } from '../components/DailyChallengeCard';
-import { ChallengeGradeFlow } from '../components/ChallengeGradeFlow';
+import { DifficultyChip } from '../design/icons';
 import type { Route } from '../router';
 
 interface LandingProps {
@@ -46,7 +45,7 @@ export function Landing({ onNavigate }: LandingProps) {
   const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
   const [tier, setTier] = useState<Tier | null>(null);
-  const [activeChallenge, setActiveChallenge] = useState<TodaysChallenge | null>(null);
+  const [dailyTease, setDailyTease] = useState<TodaysChallenge | null>(null);
   const { requireUpgrade } = useUpgradePrompt();
 
   useEffect(() => {
@@ -59,6 +58,16 @@ export function Landing({ onNavigate }: LandingProps) {
       cancelled = true;
     };
   }, [getToken]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchTodaysChallenge().then((c) => {
+      if (!cancelled && c) setDailyTease(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function onHomeworkClick() {
     if (!isPaid(tier)) {
@@ -226,7 +235,7 @@ export function Landing({ onNavigate }: LandingProps) {
           display: 'flex',
           alignItems: 'center',
           gap: 14,
-          marginBottom: 'clamp(40px, 8vh, 72px)',
+          marginBottom: 'clamp(24px, 5vh, 44px)',
         }}
       >
         <span aria-hidden style={{ width: 'clamp(40px, 8vw, 80px)', height: 1, background: T.ink }} />
@@ -246,6 +255,86 @@ export function Landing({ onNavigate }: LandingProps) {
         </span>
         <span aria-hidden style={{ width: 'clamp(40px, 8vw, 80px)', height: 1, background: T.ink }} />
       </div>
+
+      {/* Daily challenge — compact button card sitting between the day kicker
+       *  and the Scribe. Whole card is a link to /daily; the Scribe stays the
+       *  primary hero element so we don't compete with it. */}
+      {dailyTease && (
+        <a
+          href="/daily"
+          className="reveal reveal-3 lift btn-press"
+          style={{
+            display: 'block',
+            width: '100%',
+            maxWidth: 440,
+            padding: '14px 18px',
+            border: `1px solid ${T.ink}`,
+            background: T.paper2,
+            color: T.ink,
+            textDecoration: 'none',
+            marginBottom: 'clamp(24px, 5vh, 44px)',
+            textAlign: 'left',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <span
+              style={{
+                fontFamily: T.mono,
+                fontSize: 11,
+                letterSpacing: '0.18em',
+                color: T.muted,
+                textTransform: 'uppercase',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              <span>DAILY · #{dailyTease.challengeNumber}</span>
+              <span aria-hidden>·</span>
+              <DifficultyChip tier={dailyTease.difficulty} />
+            </span>
+            <span
+              className="arrow-nudge"
+              aria-hidden
+              style={{ fontSize: 18, color: T.muted, flexShrink: 0 }}
+            >
+              →
+            </span>
+          </div>
+          <div
+            style={{
+              fontFamily: T.sans,
+              fontSize: 17,
+              fontWeight: 600,
+              lineHeight: 1.25,
+              letterSpacing: '-0.01em',
+              marginTop: 6,
+            }}
+          >
+            {dailyTease.courseTitle} · {dailyTease.topicTitle}
+          </div>
+          <div
+            style={{
+              fontFamily: T.mono,
+              fontSize: 11,
+              letterSpacing: '0.14em',
+              color: T.accent,
+              textTransform: 'uppercase',
+              marginTop: 8,
+            }}
+          >
+            Solve today
+          </div>
+        </a>
+      )}
 
       {/* The stage — scribe and search occupy the same cell; one cross-fades into the other */}
       <div
@@ -408,10 +497,6 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </div>
 
-      {/* Daily Challenge — inline below the hero. Wordle-style ritual hook;
-       *  see DailyChallengeCard for the no-help, photo-grade flow. */}
-      <DailyChallengeCard onStartGrade={setActiveChallenge} />
-
       {/* Secondary CTAs — fade back when the search has focus */}
       <div
         className="reveal reveal-5"
@@ -483,13 +568,6 @@ export function Landing({ onNavigate }: LandingProps) {
         <a href="/privacy" style={{ color: T.muted, textDecoration: 'none' }}>Privacy</a>
       </footer>
 
-      {/* Modal: photo capture + grade reveal + LaTeX render for the daily challenge */}
-      {activeChallenge && (
-        <ChallengeGradeFlow
-          challenge={activeChallenge}
-          onClose={() => setActiveChallenge(null)}
-        />
-      )}
     </main>
   );
 }
