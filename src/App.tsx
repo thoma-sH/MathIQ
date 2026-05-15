@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
@@ -71,6 +71,47 @@ export default function App() {
 function MathIQApp() {
   const [route, setRoute] = useState<Route>({ name: 'home' });
 
+  // Wraps setRoute so every internal navigation pushes a history entry.
+  // That gives us a working browser back/forward button on web *and* the
+  // iOS PWA edge-swipe (and the in-app back arrow in Header).
+  const navigate = useCallback((target: Route) => {
+    try {
+      window.history.pushState(target, '');
+    } catch {
+      // Sandboxed contexts can throw — fall back to state-only navigation.
+    }
+    setRoute(target);
+  }, []);
+
+  // Anchor the very first history entry to the home route so the user's
+  // first back press from anywhere lands cleanly here (or exits the app
+  // in PWA mode) instead of leaving an unexpected state behind.
+  useEffect(() => {
+    try {
+      const s = window.history.state as { name?: unknown } | null;
+      if (!s || typeof s.name !== 'string') {
+        window.history.replaceState({ name: 'home' }, '');
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Sync state with the history stack whenever the user pops (browser
+  // back/forward, iOS edge-swipe, or our in-app back button).
+  useEffect(() => {
+    const onPop = (e: PopStateEvent) => {
+      const s = e.state as { name?: unknown } | null;
+      if (s && typeof s.name === 'string') {
+        setRoute(s as Route);
+      } else {
+        setRoute({ name: 'home' });
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [route]);
@@ -79,26 +120,26 @@ function MathIQApp() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const target = escapeTarget(route);
-      if (target) setRoute(target);
+      if (target) navigate(target);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [route]);
+  }, [route, navigate]);
 
   return (
     <UpgradeProvider>
-      <Header route={route} onNavigate={setRoute} />
+      <Header route={route} onNavigate={navigate} />
       <Page routeKey={pageKey(route)}>
-        {route.name === 'home'        && <Landing onNavigate={setRoute} />}
-        {route.name === 'subjects'    && <Subjects onNavigate={setRoute} />}
-        {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={setRoute} />}
-        {route.name === 'topic'       && <TopicScreen courseId={route.courseId} topicId={route.topicId} initialProblem={route.problem} onNavigate={setRoute} />}
-        {route.name === 'history'     && <History onNavigate={setRoute} />}
-        {route.name === 'settings'    && <Settings onNavigate={setRoute} />}
-        {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={setRoute} />}
-        {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} recordId={route.recordId} onNavigate={setRoute} />}
-        {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} recordId={route.recordId} onNavigate={setRoute} />}
-        {route.name === 'homework'    && <Homework onNavigate={setRoute} />}
+        {route.name === 'home'        && <Landing onNavigate={navigate} />}
+        {route.name === 'subjects'    && <Subjects onNavigate={navigate} />}
+        {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={navigate} />}
+        {route.name === 'topic'       && <TopicScreen courseId={route.courseId} topicId={route.topicId} initialProblem={route.problem} onNavigate={navigate} />}
+        {route.name === 'history'     && <History onNavigate={navigate} />}
+        {route.name === 'settings'    && <Settings onNavigate={navigate} />}
+        {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={navigate} />}
+        {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} recordId={route.recordId} onNavigate={navigate} />}
+        {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} recordId={route.recordId} onNavigate={navigate} />}
+        {route.name === 'homework'    && <Homework onNavigate={navigate} />}
       </Page>
       <InstallPrompt />
     </UpgradeProvider>

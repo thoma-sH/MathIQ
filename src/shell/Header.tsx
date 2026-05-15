@@ -8,6 +8,7 @@ interface HeaderProps {
 }
 
 export function Header({ route, onNavigate }: HeaderProps) {
+  const showBack = route.name !== 'home';
   return (
     <header
       style={{
@@ -23,24 +24,46 @@ export function Header({ route, onNavigate }: HeaderProps) {
         background: T.paper,
       }}
     >
-      <button
-        onClick={() => onNavigate({ name: 'home' })}
-        className="btn-press"
-        aria-label="Home"
-        style={{
-          background: 'transparent',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          fontFamily: T.sans,
-          fontSize: 22,
-          fontWeight: 700,
-          letterSpacing: '-0.02em',
-          color: T.ink,
-        }}
-      >
-        MathIQ
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {showBack && (
+          <button
+            onClick={() => window.history.back()}
+            className="btn-press"
+            aria-label="Back"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              padding: '6px 8px',
+              marginLeft: -8,
+              cursor: 'pointer',
+              fontFamily: T.sans,
+              fontSize: 22,
+              lineHeight: 1,
+              color: T.ink,
+            }}
+          >
+            ←
+          </button>
+        )}
+        <button
+          onClick={() => onNavigate({ name: 'home' })}
+          className="btn-press"
+          aria-label="Home"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '-0.02em',
+            color: T.ink,
+          }}
+        >
+          MathIQ
+        </button>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button
           onClick={() => onNavigate({ name: 'settings' })}
