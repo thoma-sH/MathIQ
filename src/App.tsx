@@ -21,6 +21,7 @@ const Exams = lazy(() => import('./screens/Exams').then((m) => ({ default: m.Exa
 const ExamTake = lazy(() => import('./screens/ExamTake').then((m) => ({ default: m.ExamTake })));
 const ExamGrade = lazy(() => import('./screens/ExamGrade').then((m) => ({ default: m.ExamGrade })));
 const Homework = lazy(() => import('./screens/Homework').then((m) => ({ default: m.Homework })));
+const DailyChallenge = lazy(() => import('./screens/DailyChallenge').then((m) => ({ default: m.DailyChallenge })));
 
 interface PageProps {
   routeKey: string;
@@ -60,6 +61,7 @@ type RealUrl =
   | { kind: 'terms' }
   | { kind: 'privacy' }
   | { kind: 'pricing' }
+  | { kind: 'daily' }
   | { kind: 'share'; shareId: string };
 
 function getRealUrlPath(): RealUrl | null {
@@ -68,6 +70,7 @@ function getRealUrlPath(): RealUrl | null {
   if (p === '/terms') return { kind: 'terms' };
   if (p === '/privacy') return { kind: 'privacy' };
   if (p === '/pricing') return { kind: 'pricing' };
+  if (p === '/daily') return { kind: 'daily' };
   // /share/<shareId> — opaque hex id. Defensive validation matches the
   // worker's 16-char hex format so a typo'd URL goes to NotFound, not the
   // share screen with broken state.
@@ -86,6 +89,7 @@ export default function App() {
         {realPath.kind === 'terms' && <Terms />}
         {realPath.kind === 'privacy' && <Privacy />}
         {realPath.kind === 'pricing' && <Pricing />}
+        {realPath.kind === 'daily' && <DailyChallenge />}
         {realPath.kind === 'share' && <Share shareId={realPath.shareId} />}
       </Suspense>
     );
