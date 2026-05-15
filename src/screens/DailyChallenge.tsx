@@ -33,6 +33,9 @@ import {
   type ChallengeGradeResponse,
   type TodaysChallenge,
 } from '../billing/challenge';
+import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { isPro } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 
 type EntryMode = 'photo' | 'typed';
 type FlowState =
@@ -56,7 +59,9 @@ const STREAK_MILESTONES = new Set([3, 7, 14, 30, 60, 100]);
 
 export function DailyChallenge() {
   const { getToken, isSignedIn } = useAuth();
+  const { requireUpgrade } = useUpgradePrompt();
   const [challenge, setChallenge] = useState<TodaysChallenge | null>(null);
+  const [tier, setTier] = useState<Tier | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mode, setMode] = useState<EntryMode>('photo');
@@ -78,6 +83,18 @@ export function DailyChallenge() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    void (async () => {
+      const sub = await fetchSubscriptionState({ getToken });
+      if (!cancelled) setTier(sub?.tier ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken, isSignedIn]);
 
   async function gradeWithImage(file: File) {
     if (!ALLOWED_TYPES.has(file.type)) {
@@ -132,6 +149,10 @@ export function DailyChallenge() {
 
   async function onRenderLatex() {
     if (state.kind !== 'revealed') return;
+    if (!isPro(tier)) {
+      requireUpgrade('homework-latex');
+      return;
+    }
     setError(null);
     const prev = state.response;
     setState({ kind: 'rendering-latex', response: prev });
