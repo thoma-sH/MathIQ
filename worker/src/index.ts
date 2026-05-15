@@ -2002,8 +2002,11 @@ async function fetchClerkUserEmail(env: Env, userId: string): Promise<string | u
 interface ChallengeGradeBody {
   image?: string;
   mediaType?: string;
+  studentAnswer?: string;
   turnstileToken?: string;
 }
+
+const MAX_TYPED_ANSWER_CHARS = 2000;
 
 async function handleChallengeToday(
   request: Request,
@@ -2053,14 +2056,28 @@ async function handleChallengeGrade(
   } catch {
     return json({ error: 'invalid JSON body' }, 400, cors);
   }
-  if (!body.image || typeof body.image !== 'string') {
-    return json({ error: 'image required' }, 400, cors);
+  const typedAnswer: string | null =
+    typeof body.studentAnswer === 'string' && body.studentAnswer.trim().length > 0
+      ? body.studentAnswer.trim()
+      : null;
+  const imageBase64: string | null =
+    typeof body.image === 'string' && body.image.length > 0 ? body.image : null;
+  if (typedAnswer && imageBase64) {
+    return json({ error: 'choose one', message: 'Send either a typed answer or an image, not both.' }, 400, cors);
   }
-  if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
-    return json({ error: 'unsupported media type' }, 400, cors);
+  if (!typedAnswer && !imageBase64) {
+    return json({ error: 'image or studentAnswer required' }, 400, cors);
   }
-  if (body.image.length > MAX_GRADE_BASE64_CHARS) {
-    return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
+  if (imageBase64) {
+    if (!body.mediaType || !ALLOWED_GRADE_MEDIA.has(body.mediaType)) {
+      return json({ error: 'unsupported media type' }, 400, cors);
+    }
+    if (imageBase64.length > MAX_GRADE_BASE64_CHARS) {
+      return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
+    }
+  }
+  if (typedAnswer && typedAnswer.length > MAX_TYPED_ANSWER_CHARS) {
+    return json({ error: 'typed answer too long', limit: MAX_TYPED_ANSWER_CHARS }, 413, cors);
   }
 
   // ── Rate-limit + abuse check, split by auth state ─────────────────
@@ -2146,41 +2163,47 @@ async function handleChallengeGrade(
     return json({ error: 'challenge_unavailable' }, 503, cors);
   }
 
-  // ── Mathpix OCR on the submitted photo
-  if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
-    await refundCounters();
-    console.error('[challenge-grade] Mathpix credentials missing');
-    return json(
-      { error: 'service_unavailable', message: 'Challenge grading is temporarily unavailable.' },
-      503,
-      cors,
-    );
-  }
-  const ocr =
-    body.mediaType === 'application/pdf'
-      ? await extractStudentWorkFromPdf({
-          appId: env.MATHPIX_APP_ID,
-          appKey: env.MATHPIX_APP_KEY,
-          pdfBase64: body.image,
-        })
-      : await extractStudentWork({
-          appId: env.MATHPIX_APP_ID,
-          appKey: env.MATHPIX_APP_KEY,
-          imageBase64: body.image,
-          mediaType: body.mediaType,
-        });
-  if (!ocr.ok || !ocr.text) {
-    await refundCounters();
-    console.error('[challenge-grade] mathpix failed', ocr.status, ocr.detail);
-    return json(
-      { error: 'ocr_failed', message: 'Could not read your work. Try a clearer, well-lit photo.' },
-      502,
-      cors,
-    );
+  // ── Resolve student work text — either OCR'd from the photo or typed directly
+  let studentWorkText: string;
+  if (imageBase64) {
+    if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+      await refundCounters();
+      console.error('[challenge-grade] Mathpix credentials missing');
+      return json(
+        { error: 'service_unavailable', message: 'Challenge grading is temporarily unavailable.' },
+        503,
+        cors,
+      );
+    }
+    const ocr =
+      body.mediaType === 'application/pdf'
+        ? await extractStudentWorkFromPdf({
+            appId: env.MATHPIX_APP_ID,
+            appKey: env.MATHPIX_APP_KEY,
+            pdfBase64: imageBase64,
+          })
+        : await extractStudentWork({
+            appId: env.MATHPIX_APP_ID,
+            appKey: env.MATHPIX_APP_KEY,
+            imageBase64,
+            mediaType: body.mediaType!,
+          });
+    if (!ocr.ok || !ocr.text) {
+      await refundCounters();
+      console.error('[challenge-grade] mathpix failed', ocr.status, ocr.detail);
+      return json(
+        { error: 'ocr_failed', message: 'Could not read your work. Try a clearer, well-lit photo.' },
+        502,
+        cors,
+      );
+    }
+    studentWorkText = ocr.text;
+  } else {
+    studentWorkText = typedAnswer!;
   }
 
   // ── Grade with Sonnet
-  const grade = await gradeChallengeSubmission(env.ANTHROPIC_API_KEY, record, ocr.text);
+  const grade = await gradeChallengeSubmission(env.ANTHROPIC_API_KEY, record, studentWorkText);
   if (!grade) {
     await refundCounters();
     return json(
@@ -2197,7 +2220,7 @@ async function handleChallengeGrade(
     await saveAttempt(env.USAGE, {
       userId: authState.userId,
       date: record.date,
-      studentMmd: ocr.text,
+      studentMmd: studentWorkText,
       grade,
       submittedAt: Date.now(),
     });
