@@ -194,8 +194,14 @@ export default {
       .map((o) => o.trim())
       .filter(Boolean);
     const originAllowed = !!origin && allowed.includes(origin);
-    // Health check doesn't need CORS; everything else requires a known Origin.
-    if (!originAllowed && url.pathname !== '/api/health') {
+    // Some endpoints are public-by-design and must work without an Origin
+    // header. iframe loads and direct PDF downloads don't send Origin on
+    // GET navigations, so the share endpoints have to be exempt — they're
+    // the whole point of shareable links.
+    const publicEndpoint =
+      url.pathname === '/api/health' ||
+      (request.method === 'GET' && url.pathname.startsWith('/api/share/'));
+    if (!originAllowed && !publicEndpoint) {
       return new Response('forbidden origin', { status: 403 });
     }
 

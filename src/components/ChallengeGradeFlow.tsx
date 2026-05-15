@@ -11,12 +11,29 @@
  * Walkthrough access is intentionally hidden until after submission — the
  * Wordle ritual is "commit, then see."
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
 import { SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
+
+/** Inline KaTeX rendering for short answer strings. See Share.tsx for context. */
+function InlineMath({ value }: { value: string }) {
+  const html = useMemo(() => {
+    const cleaned = value.replace(/^\$+|\$+$/g, '').trim();
+    try {
+      return katex.renderToString(cleaned, {
+        throwOnError: false,
+        displayMode: false,
+      });
+    } catch {
+      return cleaned;
+    }
+  }, [value]);
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
 import {
   renderChallengeLatex,
   submitChallengeGrade,
@@ -515,8 +532,21 @@ function RevealStage({
           {grade.correct ? '✅ CORRECT' : '❌ NOT QUITE'}
         </div>
         {grade.studentAnswer && (
-          <div style={{ fontSize: 14, color: T.ink, marginBottom: 6 }}>
-            Your answer: <strong>{grade.studentAnswer}</strong>
+          <div
+            style={{
+              fontSize: 14,
+              color: T.ink,
+              marginBottom: 6,
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 6,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span>Your answer:</span>
+            <strong>
+              <InlineMath value={grade.studentAnswer} />
+            </strong>
           </div>
         )}
         {grade.feedback && (

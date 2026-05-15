@@ -8,16 +8,41 @@
  * No auth required. Anonymous viewers see the same content as signed-in.
  * Privacy: the page never reveals the sharer's userId or identity.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
 import { T } from '../design/tokens';
 import {
   fetchSharedAttempt,
   sharedPdfUrl,
   type SharedChallenge,
 } from '../billing/challenge';
+
+/**
+ * Render a short LaTeX string inline (no block wrapper). Used for the
+ * one-liner "their answer" callouts — the grader emits things like
+ * "x = 4" or "x = \\frac{1}{2}" without delimiters, so we strip any
+ * stray $ from the edges and ask KaTeX to render in inline mode.
+ *
+ * If KaTeX fails (malformed input), falls back to the raw string so
+ * the page never goes blank.
+ */
+function InlineMath({ value }: { value: string }) {
+  const html = useMemo(() => {
+    const cleaned = value.replace(/^\$+|\$+$/g, '').trim();
+    try {
+      return katex.renderToString(cleaned, {
+        throwOnError: false,
+        displayMode: false,
+      });
+    } catch {
+      return cleaned;
+    }
+  }, [value]);
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
 
 const DIFFICULTY_EMOJI: Record<SharedChallenge['difficulty'], string> = {
   easy: '🟢',
@@ -184,8 +209,21 @@ function SharedView({ data }: { data: SharedChallenge }) {
           {data.grade.correct ? '✅ SOLVED' : '❌ NOT QUITE'}
         </div>
         {data.grade.studentAnswer && (
-          <div style={{ marginTop: 10, fontSize: 15, color: T.ink }}>
-            Their answer: <strong>{data.grade.studentAnswer}</strong>
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 15,
+              color: T.ink,
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 6,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span>Their answer:</span>
+            <strong>
+              <InlineMath value={data.grade.studentAnswer} />
+            </strong>
           </div>
         )}
         {data.grade.feedback && (
