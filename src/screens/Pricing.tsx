@@ -343,6 +343,8 @@ export function Pricing({ onBack }: PricingProps) {
         </div>
       )}
 
+      <LatexShowcase />
+
       <h2
         style={{
           fontFamily: T.sans,
@@ -427,6 +429,166 @@ export function Pricing({ onBack }: PricingProps) {
         is active through the end of the current billing period.
       </p>
     </main>
+  );
+}
+
+function LatexShowcase() {
+  const [flipped, setFlipped] = useState(false);
+  return (
+    <section style={{ margin: '48px 0 12px' }}>
+      <div
+        style={{
+          fontSize: 11,
+          fontFamily: T.mono,
+          letterSpacing: '0.18em',
+          color: T.muted,
+          textTransform: 'uppercase',
+          marginBottom: 10,
+        }}
+      >
+        Pro · LaTeX Mode
+      </div>
+      <h2
+        style={{
+          fontFamily: T.sans,
+          fontSize: 'clamp(24px, 4vw, 32px)',
+          fontWeight: 700,
+          letterSpacing: '-0.015em',
+          margin: '0 0 8px',
+        }}
+      >
+        Hand it in. Typed.
+      </h2>
+      <p
+        style={{
+          fontSize: 15,
+          color: T.muted,
+          lineHeight: 1.55,
+          margin: '0 0 20px',
+          maxWidth: 560,
+        }}
+      >
+        Snap your handwritten work. Iris reads it, fixes notation, and renders a
+        Computer Modern PDF in the exact LaTeX a professor expects. Tap the
+        page to see it transform.
+      </p>
+      <button
+        type="button"
+        onClick={() => setFlipped((f) => !f)}
+        aria-label={
+          flipped
+            ? 'Show original handwritten page'
+            : 'Show typeset LaTeX result'
+        }
+        className="btn-press"
+        style={{
+          position: 'relative',
+          display: 'block',
+          width: '100%',
+          maxWidth: 720,
+          margin: '0 auto',
+          aspectRatio: '4 / 5',
+          background: T.paper,
+          border: `1px solid ${T.ink}`,
+          padding: 0,
+          cursor: 'pointer',
+          overflow: 'hidden',
+        }}
+      >
+        <img
+          src="/latex-before.jpg"
+          alt="Handwritten homework on lined paper"
+          loading="lazy"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            objectPosition: 'center',
+            opacity: flipped ? 0 : 1,
+            transition: 'opacity 700ms ease',
+            background: T.paper,
+          }}
+        />
+        <img
+          src="/latex-after.jpg"
+          alt="Same homework typeset as a Computer Modern LaTeX PDF"
+          loading="lazy"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            objectPosition: 'center',
+            opacity: flipped ? 1 : 0,
+            transition: 'opacity 700ms ease',
+            background: T.paper,
+          }}
+        />
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            bottom: 14,
+            right: 14,
+            background: T.accent,
+            color: T.paper,
+            padding: '8px 14px',
+            fontSize: 11,
+            fontFamily: T.mono,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            boxShadow: '0 2px 8px rgba(26, 43, 26, 0.25)',
+            transition: 'transform 300ms ease',
+            transform: flipped ? 'translateX(-2px)' : 'translateX(0)',
+          }}
+        >
+          {flipped ? '← Original' : 'Typeset →'}
+        </div>
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: 14,
+            background: 'rgba(255, 255, 255, 0.92)',
+            color: T.ink,
+            padding: '6px 12px',
+            fontSize: 10,
+            fontFamily: T.mono,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            border: `1px solid ${T.ink}`,
+            opacity: flipped ? 1 : 0,
+            transition: 'opacity 700ms ease',
+          }}
+        >
+          After
+        </div>
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 14,
+            left: 14,
+            background: 'rgba(255, 255, 255, 0.92)',
+            color: T.ink,
+            padding: '6px 12px',
+            fontSize: 10,
+            fontFamily: T.mono,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            border: `1px solid ${T.ink}`,
+            opacity: flipped ? 0 : 1,
+            transition: 'opacity 700ms ease',
+          }}
+        >
+          Before
+        </div>
+      </button>
+    </section>
   );
 }
 
