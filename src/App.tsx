@@ -3,6 +3,7 @@ import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
 import { UpgradeProvider } from './upgrade/UpgradePrompt';
+import { T } from './design/tokens';
 import type { Route } from './router';
 
 // All non-home screens are split off into their own chunks so the initial
@@ -30,6 +31,29 @@ interface PageProps {
 
 function Page({ routeKey, children }: PageProps) {
   return <div key={routeKey} className="page-enter">{children}</div>;
+}
+
+// Fade-in is delayed 200ms so chunks that load fast never flash the skeleton;
+// only slow loads see the placeholder appear and ease in.
+function RouteSkeleton() {
+  return (
+    <div
+      aria-busy="true"
+      style={{
+        maxWidth: 760,
+        margin: '40px auto',
+        padding: '24px 22px',
+        border: `1px solid ${T.hair}`,
+        background: T.paper2,
+        opacity: 0,
+        animation: 'page-enter 360ms ease-out 200ms forwards',
+      }}
+    >
+      <div style={{ height: 28, width: '50%', background: T.hair }} />
+      <div style={{ height: 16, width: '85%', background: T.hair, marginTop: 14 }} />
+      <div style={{ height: 16, width: '70%', background: T.hair, marginTop: 8 }} />
+    </div>
+  );
 }
 
 function pageKey(route: Route): string {
@@ -85,7 +109,7 @@ export default function App() {
   const realPath = getRealUrlPath();
   if (realPath) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<RouteSkeleton />}>
         {realPath.kind === 'terms' && <Terms />}
         {realPath.kind === 'privacy' && <Privacy />}
         {realPath.kind === 'pricing' && <Pricing />}
@@ -159,7 +183,7 @@ function MathIQApp() {
     <UpgradeProvider>
       <Header route={route} onNavigate={navigate} />
       <Page routeKey={pageKey(route)}>
-        <Suspense fallback={null}>
+        <Suspense fallback={<RouteSkeleton />}>
           {route.name === 'home'        && <Landing onNavigate={navigate} />}
           {route.name === 'subjects'    && <Subjects onNavigate={navigate} />}
           {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={navigate} />}
