@@ -13,7 +13,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.1",
     "@clerk/clerk-react": "^5.61.6",
-    "jscanify": "^1.4.2",
     "jspdf": "^4.2.1",
     "katex": "^0.16.45",
     "react": "^18.3.1",
