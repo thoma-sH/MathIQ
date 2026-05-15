@@ -124,6 +124,11 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
       }
       onNavigate({ name: 'exam-take', courseId, recordId: record.examId });
     } catch (err) {
+      if (err instanceof ExamError && err.kind === 'rate_limit') {
+        requireUpgrade('exam-mode');
+        setPendingExam(null);
+        return;
+      }
       if (err instanceof ExamError) {
         setError(err.message);
       } else {
