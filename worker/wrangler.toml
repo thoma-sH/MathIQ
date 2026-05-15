@@ -44,7 +44,7 @@ PRO_USER_IDS = ""
 MAX_USER_IDS = "user_3DYnEzyeFI36j2JWovhFyBEvRPe"
 
 # Stripe price IDs. Current pricing: Plus $7.99/mo or $47.99/yr (50% off)
-# or $25.99 one-time Semester (5 months). Pro $19.99/mo or $107.99/yr
+# or $25.99 one-time Semester (4 months). Pro $19.99/mo or $107.99/yr
 # (55% off) or $64.99 one-time Semester. The `_OLD` block below holds the
 # pre-reshape monthly/annual price IDs so existing subscribers' webhooks
 # still resolve to their tier — leave those alone unless you're sure no

@@ -494,12 +494,12 @@ function AccountCard() {
 const PLAN_PRICES: Record<BillingTier, Record<Interval, { display: string; tagline: string }>> = {
   plus: {
     monthly: { display: '$7.99 / mo', tagline: '' },
-    semester: { display: '$25.99', tagline: 'one-time · 5 months · save 35%' },
+    semester: { display: '$25.99', tagline: 'one-time · 4 months · save 19%' },
     annual: { display: '$3.99 / mo', tagline: 'billed $47.99 / year · save 50%' },
   },
   pro: {
     monthly: { display: '$19.99 / mo', tagline: '' },
-    semester: { display: '$64.99', tagline: 'one-time · 5 months · save 35%' },
+    semester: { display: '$64.99', tagline: 'one-time · 4 months · save 19%' },
     annual: { display: '$8.99 / mo', tagline: 'billed $107.99 / year · save 55%' },
   },
 };
@@ -636,7 +636,7 @@ function BillingSection() {
       <div style={kicker()}>PAID PLANS</div>
       <div style={{ display: 'flex', gap: 4, marginTop: 8, marginBottom: 18, flexWrap: 'wrap' }}>
         <IntervalChip current={interval} value="annual" label="Annual" badge="−50%+" onSelect={setInterval} />
-        <IntervalChip current={interval} value="semester" label="Semester" badge="5 mo" onSelect={setInterval} />
+        <IntervalChip current={interval} value="semester" label="Semester" badge="4 mo" onSelect={setInterval} />
         <IntervalChip current={interval} value="monthly" label="Monthly" onSelect={setInterval} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

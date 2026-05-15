@@ -27,7 +27,7 @@ export interface SubscriptionState {
 
 /**
  * One-time Semester purchase — Stripe `mode: 'payment'`, no recurring
- * billing. The user gets 5 months of access from the purchase date.
+ * billing. The user gets 4 months of access from the purchase date.
  * Stored separately from `SubscriptionState` so the two access paths can
  * coexist (rare, but possible if a Semester holder later subscribes).
  */
@@ -100,7 +100,7 @@ function passKey(userId: string): string {
   return `pass:user:${userId}`;
 }
 
-// 5 months of access + 1 month buffer so the KV record survives long
+// 4 months of access + 1 month buffer so the KV record survives long
 // enough for billing history / Settings to display "expired" cleanly.
 const PASS_BUFFER_SECONDS = 60 * 60 * 24 * 30;
 

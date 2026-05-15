@@ -799,7 +799,7 @@ async function processStripeEvent(
         return;
       }
       const purchasedAt = Math.floor(Date.now() / 1000);
-      const expiresAt = addCalendarMonths(purchasedAt, 5);
+      const expiresAt = addCalendarMonths(purchasedAt, 4);
       const pass: PassState = {
         kind: 'pass',
         tier: mapping.tier,
