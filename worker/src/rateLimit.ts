@@ -1,8 +1,7 @@
 /**
- * Daily per-key counter. Implemented as a Durable Object so concurrent
- * requests from the same user can't both pass the ceiling check.
+ * Counter refs and tiny RPC client for the UsageCounter Durable Object.
  *
- * Pattern:
+ * Pattern (daily walkthrough quota):
  *   const used = await peek(counter);          // for the model decision
  *   if (decision.model === null) return 429;
  *   const newCount = await increment(counter); // atomic + 1
@@ -12,11 +11,19 @@
  *   }
  *   const upstream = await callModel(...);
  *   if (!upstream.ok) { await decrement(counter); return 502; }
+ *
+ * Three counter shapes share the same UsageCounter class, distinguished by
+ * the DO name and (where rollover differs from daily) an explicit period key:
+ *   userCounter             — daily walkthrough/feature slots
+ *   userOpusMonthlyCounter  — month-scoped premium-model spend
+ *   userExamDailyCounter    — daily Exam Mode generation cap
  */
 
 export interface CounterRef {
   ns: DurableObjectNamespace;
   name: string;
+  /** Rollover key sent to the DO. Omit for the default (today's UTC date). */
+  period?: string;
 }
 
 export function userCounter(ns: DurableObjectNamespace, userId: string): CounterRef {
@@ -27,10 +34,32 @@ export function anonymousCounter(ns: DurableObjectNamespace, ip: string): Counte
   return { ns, name: `anon:${ip}:${dateKey()}` };
 }
 
+/** Monthly Opus counter — the safety net that stops a single whale from
+ *  burning a year of revenue in one month. Rolls over on calendar UTC month. */
+export function userOpusMonthlyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  const month = monthKey();
+  return { ns, name: `user:${userId}:opus:${month}`, period: month };
+}
+
+/** Daily Exam Mode counter — caps Pro users at N exam generations per day
+ *  so one user can't generate 20 exams (20 × Opus × 15 problems each) overnight. */
+export function userExamDailyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:exam:${dateKey()}` };
+}
+
 async function callCounter(ref: CounterRef, path: '/peek' | '/inc' | '/dec'): Promise<number> {
   const id = ref.ns.idFromName(ref.name);
   const stub = ref.ns.get(id);
-  const resp = await stub.fetch(`https://counter${path}`, { method: path === '/peek' ? 'GET' : 'POST' });
+  const qs = ref.period ? `?period=${encodeURIComponent(ref.period)}` : '';
+  const resp = await stub.fetch(`https://counter${path}${qs}`, {
+    method: path === '/peek' ? 'GET' : 'POST',
+  });
   const body = (await resp.json()) as { count: number };
   return body.count;
 }
@@ -51,6 +80,10 @@ export async function decrement(ref: CounterRef): Promise<number> {
 
 function dateKey(d = new Date()): string {
   return d.toISOString().slice(0, 10);
+}
+
+function monthKey(d = new Date()): string {
+  return d.toISOString().slice(0, 7);
 }
 
 export function nextMidnightUtc(d = new Date()): string {

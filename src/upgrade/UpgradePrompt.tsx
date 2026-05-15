@@ -124,12 +124,12 @@ const PLAN_PRICES: Record<PaidTier, Record<Interval, { display: string; tagline:
   plus: {
     monthly: { display: '$7.99 / mo', tagline: 'billed monthly' },
     semester: { display: '$25.99', tagline: '4 months · one-time' },
-    annual: { display: '$3.99 / mo', tagline: 'billed $47.99 / year' },
+    annual: { display: '$5.99 / mo', tagline: 'billed $71.88 / year' },
   },
   pro: {
-    monthly: { display: '$19.99 / mo', tagline: 'billed monthly' },
-    semester: { display: '$64.99', tagline: '4 months · one-time' },
-    annual: { display: '$8.99 / mo', tagline: 'billed $107.99 / year' },
+    monthly: { display: '$12.99 / mo', tagline: 'billed monthly' },
+    semester: { display: '$41.99', tagline: '4 months · one-time' },
+    annual: { display: '$9.99 / mo', tagline: 'billed $119.88 / year' },
   },
 };
 
@@ -139,8 +139,8 @@ const PLAN_LABEL: Record<PaidTier, string> = {
 };
 
 const SAVINGS_BADGE: Record<PaidTier, Partial<Record<Interval, string>>> = {
-  plus: { annual: 'save 50%', semester: 'save 19%' },
-  pro: { annual: 'save 55%', semester: 'save 19%' },
+  plus: { annual: 'save 25%', semester: 'save 19%' },
+  pro: { annual: 'save 23%', semester: 'save 19%' },
 };
 
 // ── Context ─────────────────────────────────────────────────────────────────

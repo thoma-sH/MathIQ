@@ -636,7 +636,7 @@ export function TopicScreen({
           <div style={kicker()}>FREE WALKTHROUGH USED</div>
           <p style={{ margin: '6px 0 12px', fontSize: 14, lineHeight: 1.5 }}>
             {limitDetail?.message ??
-              "You've used your free walkthrough today. Sign in to get 5/day."}
+              "You've used your free walkthrough today. Sign in to get 3/day."}
           </p>
           <SignInButton mode="modal">
             <button className="btn-press chamfer" style={primaryCta()}>

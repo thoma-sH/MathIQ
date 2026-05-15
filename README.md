@@ -15,14 +15,16 @@ loud. Not just the answer.
 Nine courses, 108 topics, four tiers:
 
 - **Anonymous** — 1 walkthrough/day on Haiku 4.5. No sign-up.
-- **Free** — 5/day on Haiku 4.5. Email magic link, no password.
-- **MathIQ+** ($7.99/mo · $3.99/mo annual · $25.99 semester) — 40/day:
-  15 on Opus 4.6, then 25 on Sonnet 4.6. Photo input, why-how on any
-  step, 90-day history with PDF export, Handwritten to PDF.
-- **MathIQ Pro** ($19.99/mo · $8.99/mo annual · $64.99 semester) — 40
-  Opus 4.6 walkthroughs daily, no degradation. LaTeX Mode (Computer
-  Modern typeset PDFs), Exam Mode (generated 10–15-problem exams),
-  exam grading from a handwritten photo. Everything in Plus.
+- **Free** — 3/day on Haiku 4.5. Email magic link, no password.
+- **MathIQ+** ($7.99/mo · $5.99/mo annual · $25.99 semester) — 25/day:
+  5 on Opus 4.6, then 20 on Sonnet 4.6, plus a 100-Opus-per-month
+  ceiling. Photo input, why-how on any step, 90-day history with PDF
+  export, Handwritten to PDF.
+- **MathIQ Pro** ($12.99/mo · $9.99/mo annual · $41.99 semester) — 38/day:
+  8 on Opus 4.6, then 30 on Sonnet 4.6, plus a 150-Opus-per-month
+  ceiling. LaTeX Mode (Computer Modern typeset PDFs), Exam Mode
+  (generated 10–15-problem exams, capped at 2 generations/day), exam
+  grading from a handwritten photo. Everything in Plus.
 
 Every answer is verified by a separate model before the badge says
 "verified." Photos of textbook problems get OCR'd to LaTeX and walked

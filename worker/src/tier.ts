@@ -4,8 +4,13 @@
  * Identifiers:
  *   'anonymous' — not signed in
  *   'free'      — signed in, no paid plan
- *   'plus'      — MathIQ+   ($7.99/mo or $3.99/mo annual): 15 Opus + 25 Sonnet daily (40 total)
- *   'pro'       — MathIQ Pro ($19.99/mo or $8.99/mo annual): 40 Opus daily
+ *   'plus'      — MathIQ+   ($7.99/mo or $5.99/mo annual): 5 Opus + 20 Sonnet daily (25 total), 100 Opus/month
+ *   'pro'       — MathIQ Pro ($12.99/mo or $9.99/mo annual): 8 Opus + 30 Sonnet daily (38 total), 150 Opus/month
+ *
+ * The monthly Opus ceiling sits on top of the daily caps: once a paid user
+ * exhausts their monthly Opus allowance, decideTier auto-degrades their
+ * remaining daily Opus slots to Sonnet. Daily total still flows; only the
+ * model quality drops.
  *
  * Resolution order:
  *   1. Anonymous if not signed in.
@@ -62,24 +67,40 @@ export interface TierDecision {
   /** Model to use for *this* request. Null if the user is over the ceiling. */
   model: ModelKey | null;
   /** True when the user is on the fallback model because they exhausted
-   *  their premium allotment. Always false for non-paid tiers. */
+   *  their premium allotment (daily OR monthly). Always false for non-paid tiers. */
   degraded: boolean;
   /** For paid tiers with a premium allotment: how many premium (non-degraded)
-   *  walkthroughs the user gets before degrading. Undefined for free tiers. */
+   *  walkthroughs the user gets before degrading. Undefined for non-paid. */
   premiumAllotment?: number;
 }
 
 const ANONYMOUS_LIMIT = 1;
-const FREE_LIMIT = 5;
-const PLUS_OPUS_LIMIT = 15;
-const PLUS_TOTAL_LIMIT = 40;
-const PRO_LIMIT = 40;
+const FREE_LIMIT = 3;
 
-const HAIKU: ModelKey = { provider: 'anthropic', id: 'claude-haiku-4-5' };
-const OPUS: ModelKey = { provider: 'anthropic', id: 'claude-opus-4-6' };
-const SONNET: ModelKey = { provider: 'anthropic', id: 'claude-sonnet-4-6' };
+export const PLUS_OPUS_DAILY = 5;
+export const PLUS_TOTAL_DAILY = 25;
+export const PLUS_OPUS_MONTHLY = 100;
 
-export function decideTier(tier: Tier, alreadyUsedToday: number): TierDecision {
+export const PRO_OPUS_DAILY = 8;
+export const PRO_TOTAL_DAILY = 38;
+export const PRO_OPUS_MONTHLY = 150;
+
+export const HAIKU: ModelKey = { provider: 'anthropic', id: 'claude-haiku-4-5' };
+export const OPUS: ModelKey = { provider: 'anthropic', id: 'claude-opus-4-6' };
+export const SONNET: ModelKey = { provider: 'anthropic', id: 'claude-sonnet-4-6' };
+
+/** Monthly Opus ceiling for a given tier. Free/anonymous don't get Opus at all. */
+export function monthlyOpusLimit(tier: Tier): number {
+  if (tier === 'pro') return PRO_OPUS_MONTHLY;
+  if (tier === 'plus') return PLUS_OPUS_MONTHLY;
+  return 0;
+}
+
+export function decideTier(
+  tier: Tier,
+  alreadyUsedToday: number,
+  alreadyUsedThisMonthOpus: number = 0,
+): TierDecision {
   if (tier === 'anonymous') {
     return {
       ceiling: ANONYMOUS_LIMIT,
@@ -94,37 +115,41 @@ export function decideTier(tier: Tier, alreadyUsedToday: number): TierDecision {
       degraded: false,
     };
   }
-  if (tier === 'pro') {
-    // MathIQ Pro: 40 Opus calls daily, no degradation.
+
+  // Paid tiers — Plus and Pro share the same Opus-then-Sonnet pattern; only
+  // the daily/monthly numbers differ.
+  const isPro = tier === 'pro';
+  const dailyOpus = isPro ? PRO_OPUS_DAILY : PLUS_OPUS_DAILY;
+  const dailyTotal = isPro ? PRO_TOTAL_DAILY : PLUS_TOTAL_DAILY;
+  const monthlyOpus = isPro ? PRO_OPUS_MONTHLY : PLUS_OPUS_MONTHLY;
+
+  if (alreadyUsedToday >= dailyTotal) {
     return {
-      ceiling: PRO_LIMIT,
-      model: alreadyUsedToday < PRO_LIMIT ? OPUS : null,
+      ceiling: dailyTotal,
+      model: null,
       degraded: false,
-      premiumAllotment: PRO_LIMIT,
+      premiumAllotment: dailyOpus,
     };
   }
-  // MathIQ+ ('plus'): 15 Opus then 25 Sonnet, total 40. Same daily count as
-  // Pro — differentiator is model quality, not raw walkthrough volume.
-  if (alreadyUsedToday < PLUS_OPUS_LIMIT) {
+
+  const opusEligible =
+    alreadyUsedToday < dailyOpus && alreadyUsedThisMonthOpus < monthlyOpus;
+
+  if (opusEligible) {
     return {
-      ceiling: PLUS_TOTAL_LIMIT,
+      ceiling: dailyTotal,
       model: OPUS,
       degraded: false,
-      premiumAllotment: PLUS_OPUS_LIMIT,
+      premiumAllotment: dailyOpus,
     };
   }
-  if (alreadyUsedToday < PLUS_TOTAL_LIMIT) {
-    return {
-      ceiling: PLUS_TOTAL_LIMIT,
-      model: SONNET,
-      degraded: true,
-      premiumAllotment: PLUS_OPUS_LIMIT,
-    };
-  }
+
+  // Over daily Opus quota OR over monthly Opus quota — fall back to Sonnet
+  // for the rest of the daily allotment.
   return {
-    ceiling: PLUS_TOTAL_LIMIT,
-    model: null,
-    degraded: false,
-    premiumAllotment: PLUS_OPUS_LIMIT,
+    ceiling: dailyTotal,
+    model: SONNET,
+    degraded: true,
+    premiumAllotment: dailyOpus,
   };
 }

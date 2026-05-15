@@ -1,5 +1,5 @@
 /**
- * Atomic daily usage counter as a Durable Object.
+ * Atomic usage counter as a Durable Object.
  *
  * Each (userId or IP) gets one DO instance. The DO is single-threaded per
  * id, so read-modify-write inside it is atomic — concurrent requests from
@@ -12,8 +12,15 @@
  *   /inc   — atomically increment, returns { count } (post-increment)
  *   /dec   — atomically decrement (refund on upstream failure), returns { count }
  *
- * Daily reset is built in: if the stored date doesn't match today's UTC
- * date, count is reset to 0 before the operation.
+ * Period rollover:
+ *   The caller passes the desired rollover key via `?period=<key>`. The DO
+ *   stores it alongside the count; when the caller sends a different key
+ *   than the one stored, the count resets to 0 before the operation. This
+ *   lets the same DO class back both daily counters (key = "2026-05-15")
+ *   and monthly counters (key = "2026-05") without code branching.
+ *
+ *   Backward compat: when `period` is absent the DO defaults to today's UTC
+ *   date — the same auto-reset behavior the daily counters always had.
  */
 export interface DOEnv {}
 
@@ -26,33 +33,32 @@ export class UsageCounter {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    const periodKey = url.searchParams.get('period') ?? utcDate();
     switch (url.pathname) {
       case '/peek':
-        return this.respond(await this.currentCount());
+        return this.respond(await this.currentCount(periodKey));
       case '/inc':
-        return this.respond(await this.mutate(1));
+        return this.respond(await this.mutate(1, periodKey));
       case '/dec':
-        return this.respond(await this.mutate(-1));
+        return this.respond(await this.mutate(-1, periodKey));
       default:
         return new Response('not found', { status: 404 });
     }
   }
 
-  private async currentCount(): Promise<number> {
-    const today = utcDate();
-    const storedDate = (await this.state.storage.get<string>('date')) ?? '';
-    const stored = (await this.state.storage.get<number>('count')) ?? 0;
-    return storedDate === today ? stored : 0;
+  private async currentCount(periodKey: string): Promise<number> {
+    const stored = (await this.state.storage.get<string>('date')) ?? '';
+    const count = (await this.state.storage.get<number>('count')) ?? 0;
+    return stored === periodKey ? count : 0;
   }
 
-  /** Atomic mutate: reset if it's a new day, then add `delta`, clamped at 0. */
-  private async mutate(delta: number): Promise<number> {
-    const today = utcDate();
-    const storedDate = (await this.state.storage.get<string>('date')) ?? '';
+  /** Atomic mutate: reset if it's a new period, then add `delta`, clamped at 0. */
+  private async mutate(delta: number, periodKey: string): Promise<number> {
+    const stored = (await this.state.storage.get<string>('date')) ?? '';
     let count = (await this.state.storage.get<number>('count')) ?? 0;
-    if (storedDate !== today) {
+    if (stored !== periodKey) {
       count = 0;
-      await this.state.storage.put('date', today);
+      await this.state.storage.put('date', periodKey);
     }
     count = Math.max(0, count + delta);
     await this.state.storage.put('count', count);

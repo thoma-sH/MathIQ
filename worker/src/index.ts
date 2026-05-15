@@ -14,10 +14,21 @@ import {
   nextMidnightUtc,
   peek,
   userCounter,
+  userExamDailyCounter,
+  userOpusMonthlyCounter,
   type CounterRef,
 } from './rateLimit';
 export { UsageCounter } from './counterDO';
-import { decideTier, resolveTier, type Tier, type TierDecision } from './tier';
+import {
+  decideTier,
+  monthlyOpusLimit,
+  OPUS,
+  resolveTier,
+  SONNET,
+  type ModelKey,
+  type Tier,
+  type TierDecision,
+} from './tier';
 import { callAnthropicStream } from './anthropic';
 import { callOpenRouterStream } from './openrouter';
 import { getIrisPrompts } from './prompt';
@@ -95,9 +106,12 @@ interface Env {
   STRIPE_PRICE_PRO_ANNUAL: string;
   STRIPE_PRICE_PLUS_SEMESTER: string;
   STRIPE_PRICE_PRO_SEMESTER: string;
-  STRIPE_PRICE_PRO_MONTHLY_OLD?: string;
+  STRIPE_PRICE_PLUS_MONTHLY_OLD?: string;
   STRIPE_PRICE_PLUS_ANNUAL_OLD?: string;
+  STRIPE_PRICE_PLUS_SEMESTER_OLD?: string;
+  STRIPE_PRICE_PRO_MONTHLY_OLD?: string;
   STRIPE_PRICE_PRO_ANNUAL_OLD?: string;
+  STRIPE_PRICE_PRO_SEMESTER_OLD?: string;
   STRIPE_SUCCESS_URL: string;
   STRIPE_CANCEL_URL: string;
   STRIPE_PORTAL_RETURN_URL: string;
@@ -303,8 +317,19 @@ async function handleWalkthrough(
           request.headers.get('CF-Connecting-IP') ?? 'unknown',
         );
 
-  const usedToday = await peek(counter);
-  const decision: TierDecision = decideTier(tier, usedToday);
+  // Monthly Opus is the cost ceiling that sits on top of the daily caps.
+  // Only signed-in users carry one — anonymous/free never reach Opus, so the
+  // counter is moot for them and we skip the round trip.
+  const opusMonthly: CounterRef | null =
+    authState.kind === 'user'
+      ? userOpusMonthlyCounter(env.USAGE_DO, authState.userId)
+      : null;
+
+  const [usedToday, opusUsedMonth] = await Promise.all([
+    peek(counter),
+    opusMonthly ? peek(opusMonthly) : Promise.resolve(0),
+  ]);
+  const decision: TierDecision = decideTier(tier, usedToday, opusUsedMonth);
 
   const baseHeaders = buildRateLimitHeaders(tier, usedToday, decision);
 
@@ -385,7 +410,7 @@ async function handleWalkthrough(
   // commit the same value.
   const newCount = await increment(counter);
   const usedBefore = newCount - 1;
-  const finalDecision: TierDecision = decideTier(tier, usedBefore);
+  let finalDecision: TierDecision = decideTier(tier, usedBefore, opusUsedMonth);
 
   // Race-lost case: another request from this user landed first and pushed us
   // over the ceiling. Refund the increment and 429.
@@ -404,8 +429,30 @@ async function handleWalkthrough(
     );
   }
 
+  // finalDecision.model is non-null here (early-return above handled null).
+  // Capture into a local `let` so the monthly-Opus downgrade can reassign
+  // without TS losing the type narrowing.
+  let model: ModelKey = finalDecision.model;
+  let degraded = finalDecision.degraded;
+
+  // If we're about to serve Opus, atomically claim a monthly-Opus slot too.
+  // Post-increment > cap means another Opus request grabbed the last slot
+  // first — refund THIS one and downgrade it to Sonnet for the rest of the
+  // month. The daily slot still counts (the user got a walkthrough, just on
+  // the fallback model).
+  let monthlyOpusInc = false;
+  if (model.id === OPUS.id && opusMonthly) {
+    const newOpusMonth = await increment(opusMonthly);
+    if (newOpusMonth > monthlyOpusLimit(tier)) {
+      await decrement(opusMonthly);
+      model = SONNET;
+      degraded = true;
+    } else {
+      monthlyOpusInc = true;
+    }
+  }
+
   // Provider dispatch
-  const model = finalDecision.model;
   const prompts = getIrisPrompts(env);
   const upstream =
     model.provider === 'anthropic'
@@ -434,8 +481,10 @@ async function handleWalkthrough(
 
   if (!upstream.ok || !upstream.body) {
     if (upstream.detail) console.error('upstream walkthrough failed', upstream.status, upstream.detail);
-    // Upstream failed — refund the slot so the user isn't charged for it.
+    // Upstream failed — refund both daily and monthly Opus so the user isn't
+    // charged for it.
     await decrement(counter);
+    if (monthlyOpusInc && opusMonthly) await decrement(opusMonthly);
     return json(
       { error: 'upstream_error', message: 'The walkthrough service is having trouble — try again in a moment.' },
       502,
@@ -452,7 +501,7 @@ async function handleWalkthrough(
       ...cors,
       ...postHeaders,
       'X-Model-Used': model.id,
-      'X-Degraded': finalDecision.degraded ? 'true' : 'false',
+      'X-Degraded': degraded ? 'true' : 'false',
       'content-type': 'text/plain; charset=utf-8',
       // `no-transform` tells Cloudflare's edge not to gzip the response, which
       // would otherwise buffer streamed tokens before flushing. We *need* the
@@ -1126,9 +1175,34 @@ async function handleExamGenerate(
     return json({ error: 'unknown courseId' }, 400, cors);
   }
 
-  // Exam generation counts against the user's daily Opus quota (1 slot).
+  // Exam Mode has three counters:
+  //   1. examCounter   — per-day cap on exam generations (EXAM_DAILY_CAP = 2)
+  //   2. counter       — the shared daily walkthrough/feature slot
+  //   3. opusMonthly   — the monthly Opus ceiling (exam always uses Opus)
+  // The 2/day cap is the real ceiling; daily and monthly are belt-and-suspenders.
+  const examCounter = userExamDailyCounter(env.USAGE_DO, authState.userId);
   const counter = userCounter(env.USAGE_DO, authState.userId);
-  const usedToday = await peek(counter);
+  const opusMonthly = userOpusMonthlyCounter(env.USAGE_DO, authState.userId);
+
+  const [examUsedToday, usedToday] = await Promise.all([
+    peek(examCounter),
+    peek(counter),
+  ]);
+
+  if (examUsedToday >= EXAM_DAILY_CAP) {
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've generated ${EXAM_DAILY_CAP} exams today. Try again tomorrow.`,
+        limit: EXAM_DAILY_CAP,
+        used: examUsedToday,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
   const decision = decideTier(tier, usedToday);
   if (decision.model === null) {
     return json(
@@ -1143,7 +1217,38 @@ async function handleExamGenerate(
       cors,
     );
   }
-  await increment(counter);
+
+  // Atomic claims. Order: daily slot → exam slot → monthly Opus. Refund in
+  // reverse order on any post-check failure.
+  const newCount = await increment(counter);
+  const postDailyDecision = decideTier(tier, newCount - 1);
+  if (postDailyDecision.model === null) {
+    await decrement(counter);
+    return json(
+      { error: 'rate_limit', message: `You've used all ${decision.ceiling} Pro slots today.`, resetAt: nextMidnightUtc() },
+      429,
+      cors,
+    );
+  }
+
+  const newExamCount = await increment(examCounter);
+  if (newExamCount > EXAM_DAILY_CAP) {
+    await decrement(examCounter);
+    await decrement(counter);
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've generated ${EXAM_DAILY_CAP} exams today. Try again tomorrow.`,
+        limit: EXAM_DAILY_CAP,
+        used: newExamCount,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
+  await increment(opusMonthly);
 
   const result = await generateExam(
     {
@@ -1156,7 +1261,9 @@ async function handleExamGenerate(
   );
 
   if (!result.ok || !result.record) {
-    // Refund the slot on upstream failure.
+    // Refund all three slots on upstream failure.
+    await decrement(opusMonthly);
+    await decrement(examCounter);
     await decrement(counter);
     if (result.detail) console.error('exam generate failed', result.status, result.detail);
     return json(
@@ -1168,6 +1275,8 @@ async function handleExamGenerate(
 
   return json(result.record, 200, cors);
 }
+
+const EXAM_DAILY_CAP = 2;
 
 interface ExamGradeBody {
   examId?: string;
@@ -1228,8 +1337,11 @@ async function handleExamGrade(
     );
   }
 
-  // Grading counts against the user's daily Pro quota (1 slot).
+  // Grading uses Opus (same as generate). Counts against the daily walkthrough
+  // slot AND the monthly Opus ceiling, but not the exam-per-day cap — that's
+  // only on generation.
   const counter = userCounter(env.USAGE_DO, authState.userId);
+  const opusMonthly = userOpusMonthlyCounter(env.USAGE_DO, authState.userId);
   const usedToday = await peek(counter);
   const decision = decideTier(tier, usedToday);
   if (decision.model === null) {
@@ -1293,6 +1405,7 @@ async function handleExamGrade(
   }
 
   await increment(counter);
+  await increment(opusMonthly);
 
   const prompts = getIrisPrompts(env);
   const result = await gradeExam({
@@ -1304,6 +1417,7 @@ async function handleExamGrade(
   });
 
   if (!result.ok || !result.result) {
+    await decrement(opusMonthly);
     await decrement(counter);
     if (result.detail) console.error('exam grade failed', result.status, result.detail);
     const message =

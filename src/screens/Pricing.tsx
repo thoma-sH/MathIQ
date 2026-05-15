@@ -26,12 +26,12 @@ const PLAN_PRICES: Record<PaidTier, Record<Interval, { display: string; sub: str
   plus: {
     monthly: { display: '$7.99', sub: 'per month' },
     semester: { display: '$25.99', sub: 'one-time · 4 months · $6.50/mo · 19% off' },
-    annual: { display: '$3.99', sub: '/ month · billed $47.99 annually · save 50%' },
+    annual: { display: '$5.99', sub: '/ month · billed $71.88 annually · save 25%' },
   },
   pro: {
-    monthly: { display: '$19.99', sub: 'per month' },
-    semester: { display: '$64.99', sub: 'one-time · 4 months · $16.25/mo · 19% off' },
-    annual: { display: '$8.99', sub: '/ month · billed $107.99 annually · save 55%' },
+    monthly: { display: '$12.99', sub: 'per month' },
+    semester: { display: '$41.99', sub: 'one-time · 4 months · $10.50/mo · 19% off' },
+    annual: { display: '$9.99', sub: '/ month · billed $119.88 annually · save 23%' },
   },
 };
 
@@ -47,16 +47,16 @@ const FEATURES: FeatureRow[] = [
   {
     label: 'Daily walkthroughs',
     detail: 'Type a problem; Iris walks you through every move',
-    free: '5 / day',
-    plus: '40 / day',
-    pro: '40 / day',
+    free: '3 / day',
+    plus: '25 / day',
+    pro: '38 / day',
   },
   {
     label: 'Premium model',
     detail: 'Claude Opus 4.6 — best for hard problems',
     free: false,
-    plus: '15 / day',
-    pro: '40 / day',
+    plus: '5 / day · 100 / mo',
+    pro: '8 / day · 150 / mo',
   },
   {
     label: 'Why & how reflection',
@@ -212,7 +212,7 @@ export function Pricing({ onBack }: PricingProps) {
           current={interval}
           onSelect={setInterval}
           label="Annual"
-          badge="save 50%+"
+          badge="save 23%+"
         />
         <IntervalChip
           value="semester"
@@ -241,9 +241,9 @@ export function Pricing({ onBack }: PricingProps) {
           tierLabel="Free"
           headline="$0"
           subline="forever"
-          blurb="Five daily walkthroughs on Haiku 4.5. No card required."
+          blurb="Three daily walkthroughs on Haiku 4.5. No card required."
           highlights={[
-            '5 walkthroughs / day',
+            '3 walkthroughs / day',
             'Haiku 4.5 model',
             'Step-by-step explanations',
           ]}
@@ -288,7 +288,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.plus[interval].sub}
           blurb="The premium model, photo input, why-how, and Handwritten to PDF."
           highlights={[
-            '40 walkthroughs / day (15 on Opus, 25 on Sonnet)',
+            '25 walkthroughs / day (5 Opus + 20 Sonnet)',
             'Why & how reflection',
             'Photo input',
             'Handwritten to PDF',
@@ -309,7 +309,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.pro[interval].sub}
           blurb="Everything in Plus, plus LaTeX Mode, Exam Mode, and grading."
           highlights={[
-            '40 Opus walkthroughs / day (no degradation)',
+            '38 walkthroughs / day (8 Opus + 30 Sonnet)',
             'LaTeX Mode — typeset PDFs',
             'Exam Mode — generate full exams',
             'Exam grading',

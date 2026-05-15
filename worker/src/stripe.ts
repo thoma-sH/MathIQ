@@ -25,13 +25,16 @@ export interface StripeEnv {
   STRIPE_PRICE_PRO_ANNUAL: string;
   STRIPE_PRICE_PLUS_SEMESTER: string;
   STRIPE_PRICE_PRO_SEMESTER: string;
-  // Grandfathered price IDs. New checkouts use the *_MONTHLY / *_ANNUAL
-  // vars above; subscribers already on the old prices keep paying their
-  // bound rate, and we still need to recognize their price ID at webhook
-  // time so they don't silently downgrade to free.
-  STRIPE_PRICE_PRO_MONTHLY_OLD?: string;
+  // Grandfathered price IDs. New checkouts use the live vars above;
+  // subscribers already on prior-iteration prices keep paying their bound
+  // rate, and we still need to recognize their price ID at webhook time so
+  // they don't silently downgrade to free.
+  STRIPE_PRICE_PLUS_MONTHLY_OLD?: string;
   STRIPE_PRICE_PLUS_ANNUAL_OLD?: string;
+  STRIPE_PRICE_PLUS_SEMESTER_OLD?: string;
+  STRIPE_PRICE_PRO_MONTHLY_OLD?: string;
   STRIPE_PRICE_PRO_ANNUAL_OLD?: string;
+  STRIPE_PRICE_PRO_SEMESTER_OLD?: string;
   STRIPE_SUCCESS_URL: string;
   STRIPE_CANCEL_URL: string;
   STRIPE_PORTAL_RETURN_URL: string;
@@ -71,12 +74,18 @@ export function priceIdToTierInterval(
   if (priceId === env.STRIPE_PRICE_PRO_ANNUAL) return { tier: 'pro', interval: 'annual' };
   if (priceId === env.STRIPE_PRICE_PLUS_SEMESTER) return { tier: 'plus', interval: 'semester' };
   if (priceId === env.STRIPE_PRICE_PRO_SEMESTER) return { tier: 'pro', interval: 'semester' };
-  if (env.STRIPE_PRICE_PRO_MONTHLY_OLD && priceId === env.STRIPE_PRICE_PRO_MONTHLY_OLD)
-    return { tier: 'pro', interval: 'monthly' };
+  if (env.STRIPE_PRICE_PLUS_MONTHLY_OLD && priceId === env.STRIPE_PRICE_PLUS_MONTHLY_OLD)
+    return { tier: 'plus', interval: 'monthly' };
   if (env.STRIPE_PRICE_PLUS_ANNUAL_OLD && priceId === env.STRIPE_PRICE_PLUS_ANNUAL_OLD)
     return { tier: 'plus', interval: 'annual' };
+  if (env.STRIPE_PRICE_PLUS_SEMESTER_OLD && priceId === env.STRIPE_PRICE_PLUS_SEMESTER_OLD)
+    return { tier: 'plus', interval: 'semester' };
+  if (env.STRIPE_PRICE_PRO_MONTHLY_OLD && priceId === env.STRIPE_PRICE_PRO_MONTHLY_OLD)
+    return { tier: 'pro', interval: 'monthly' };
   if (env.STRIPE_PRICE_PRO_ANNUAL_OLD && priceId === env.STRIPE_PRICE_PRO_ANNUAL_OLD)
     return { tier: 'pro', interval: 'annual' };
+  if (env.STRIPE_PRICE_PRO_SEMESTER_OLD && priceId === env.STRIPE_PRICE_PRO_SEMESTER_OLD)
+    return { tier: 'pro', interval: 'semester' };
   return null;
 }
 

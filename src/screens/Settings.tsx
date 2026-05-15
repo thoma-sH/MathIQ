@@ -57,7 +57,7 @@ export function Settings({ onNavigate }: SettingsProps) {
           maxWidth: 540,
         }}
       >
-        Sign in for 5 walkthroughs per day. Paid plans add deeper models and the Why & how reflection on every step.
+        Sign in for 3 walkthroughs per day. Paid plans add deeper models and the Why & how reflection on every step.
       </p>
 
       <SignedIn>
@@ -495,18 +495,18 @@ const PLAN_PRICES: Record<BillingTier, Record<Interval, { display: string; tagli
   plus: {
     monthly: { display: '$7.99 / mo', tagline: '' },
     semester: { display: '$25.99', tagline: 'one-time · 4 months · save 19%' },
-    annual: { display: '$3.99 / mo', tagline: 'billed $47.99 / year · save 50%' },
+    annual: { display: '$5.99 / mo', tagline: 'billed $71.88 / year · save 25%' },
   },
   pro: {
-    monthly: { display: '$19.99 / mo', tagline: '' },
-    semester: { display: '$64.99', tagline: 'one-time · 4 months · save 19%' },
-    annual: { display: '$8.99 / mo', tagline: 'billed $107.99 / year · save 55%' },
+    monthly: { display: '$12.99 / mo', tagline: '' },
+    semester: { display: '$41.99', tagline: 'one-time · 4 months · save 19%' },
+    annual: { display: '$9.99 / mo', tagline: 'billed $119.88 / year · save 23%' },
   },
 };
 
 const PLAN_BLURBS: Record<BillingTier, string> = {
-  plus: '15 Opus 4.6 walkthroughs, then 25 Sonnet 4.6 (40 total). Why & how on every step.',
-  pro: '40 Opus 4.6 walkthroughs daily, no degradation. Why & how on every step.',
+  plus: '5 Opus 4.6 walkthroughs, then 20 Sonnet 4.6 (25 total daily, 100 Opus / month). Why & how on every step.',
+  pro: '8 Opus 4.6 walkthroughs, then 30 Sonnet 4.6 (38 total daily, 150 Opus / month). LaTeX Mode + Exam Mode.',
 };
 
 const PLAN_LABELS: Record<BillingTier, string> = {
@@ -635,7 +635,7 @@ function BillingSection() {
     <>
       <div style={kicker()}>PAID PLANS</div>
       <div style={{ display: 'flex', gap: 4, marginTop: 8, marginBottom: 18, flexWrap: 'wrap' }}>
-        <IntervalChip current={interval} value="annual" label="Annual" badge="−50%+" onSelect={setInterval} />
+        <IntervalChip current={interval} value="annual" label="Annual" badge="−23%+" onSelect={setInterval} />
         <IntervalChip current={interval} value="semester" label="Semester" badge="4 mo" onSelect={setInterval} />
         <IntervalChip current={interval} value="monthly" label="Monthly" onSelect={setInterval} />
       </div>
@@ -781,7 +781,7 @@ function SignedOutCard() {
         You get 1 free walkthrough per day.
       </div>
       <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5, marginBottom: 16 }}>
-        Sign in (email magic link, no password) for 5 walkthroughs/day.
+        Sign in (email magic link, no password) for 3 walkthroughs/day.
       </div>
       <SignInButton mode="modal">
         <button

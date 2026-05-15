@@ -462,7 +462,7 @@ function UpgradeStrip({ onUpgrade }: { onUpgrade: () => void }) {
         color: T.ink,
       }}
     >
-      Exam mode is a <strong>MathIQ Pro</strong> feature ($29.99/mo, $19.99/mo annual). Pro adds
+      Exam mode is a <strong>MathIQ Pro</strong> feature ($12.99/mo, $9.99/mo annual). Pro adds
       generated exams, photo grading, and PDF downloads of every walkthrough.{' '}
       <button
         type="button"

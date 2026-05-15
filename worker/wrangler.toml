@@ -43,27 +43,48 @@ PRO_USER_IDS = ""
 # Set to empty string if no manual grants.
 MAX_USER_IDS = "user_3DYnEzyeFI36j2JWovhFyBEvRPe"
 
-# Stripe price IDs. Current pricing: Plus $7.99/mo or $47.99/yr (50% off)
-# or $25.99 one-time Semester (4 months). Pro $19.99/mo or $107.99/yr
-# (55% off) or $64.99 one-time Semester. The `_OLD` block below holds the
-# pre-reshape monthly/annual price IDs so existing subscribers' webhooks
-# still resolve to their tier — leave those alone unless you're sure no
-# grandfathered subs remain.
-STRIPE_PRICE_PLUS_MONTHLY = "price_1TW78XHJHOfcH2xmkZFDsdtz"
-STRIPE_PRICE_PLUS_ANNUAL  = "price_1TX50oHJHOfcH2xmCrYGV8RP"
-STRIPE_PRICE_PLUS_SEMESTER = "price_1TX51ZHJHOfcH2xm5wCInQW8"
-STRIPE_PRICE_PRO_MONTHLY  = "price_1TX54pHJHOfcH2xmZXBafXCc"
-STRIPE_PRICE_PRO_ANNUAL   = "price_1TX55OHJHOfcH2xmd9uhWcVp"
-STRIPE_PRICE_PRO_SEMESTER = "price_1TX55qHJHOfcH2xmPkffVYOu"
+# Stripe price IDs.
+#
+# TARGET PRICING (new, not yet reflected in the IDs below):
+#   Plus  $7.99/mo · $5.99/mo annual ($71.88/yr, save 25%) · $25.99 semester
+#   Pro   $12.99/mo · $9.99/mo annual ($119.88/yr, save 23%) · $41.99 semester
+#
+# The IDs below are still bound to the PREVIOUS prices ($7.99/$3.99/$25.99
+# Plus, $19.99/$8.99/$64.99 Pro). Before pushing the new frontend display
+# to prod:
+#   1. Create six new Price products in the Stripe dashboard at the target
+#      amounts above (Monthly + Annual recurring + Semester one-time, for
+#      both Plus and Pro).
+#   2. Move the six current IDs below into the grandfathered `_OLD` slots
+#      (extending the schema in `priceIdToTierInterval` if more than three
+#      OLD slots are needed) so existing subscribers' renewal webhooks still
+#      resolve correctly.
+#   3. Paste the six new IDs into the slots below.
+#
+# Until step 3 is done, the frontend will display the new prices but
+# checkout will charge the legacy amounts — fix this before the deploy.
+STRIPE_PRICE_PLUS_MONTHLY = "price_1TXDrnHJHOfcH2xmMhvhYKx9"
+STRIPE_PRICE_PLUS_ANNUAL  = "price_1TXDs8HJHOfcH2xmi2Bjh9X0"
+STRIPE_PRICE_PLUS_SEMESTER = "price_1TXDt5HJHOfcH2xmqfwfvHOL"
+STRIPE_PRICE_PRO_MONTHLY  = "price_1TXDqeHJHOfcH2xmi3ilzJoI"
+STRIPE_PRICE_PRO_ANNUAL   = "price_1TXDrMHJHOfcH2xmfI4b0Din"
+STRIPE_PRICE_PRO_SEMESTER = "price_1TXDthHJHOfcH2xmSa25pCcs"
 
-# Grandfathered (deactivated-in-Stripe) price IDs. Pre-populated with the
-# current live IDs so that once the three above are swapped to new IDs,
-# webhooks for existing $29.99 / $59.88 / $239.88 subscribers still
-# resolve to their tier instead of silently downgrading them to free.
+# Grandfathered (deactivated-in-Stripe) price IDs. Holds the IDs of every
+# previous price tier we've shipped — webhooks for existing subscribers
+# resolve to their tier here instead of silently downgrading them to free.
 # Leave empty when there are no grandfathered subscribers (e.g. dev).
-STRIPE_PRICE_PRO_MONTHLY_OLD = "price_1TW78WHJHOfcH2xmEiMUYsWn"
-STRIPE_PRICE_PLUS_ANNUAL_OLD = "price_1TW78XHJHOfcH2xm3ofmLa2b"
-STRIPE_PRICE_PRO_ANNUAL_OLD  = "price_1TW78YHJHOfcH2xm35zn1EKi"
+#
+# The six *_OLD slots below mirror the six live slots above, so every
+# previous SKU has a grandfathering home. If you do a third price reshape
+# in the future, add a second tier (`_OLD2`) and extend
+# `priceIdToTierInterval` in worker/src/stripe.ts to recognize it.
+STRIPE_PRICE_PLUS_MONTHLY_OLD  = "price_1TW78XHJHOfcH2xmkZFDsdtz"
+STRIPE_PRICE_PLUS_ANNUAL_OLD   = "price_1TX50oHJHOfcH2xmCrYGV8RP"
+STRIPE_PRICE_PLUS_SEMESTER_OLD = "price_1TX51ZHJHOfcH2xm5wCInQW8"
+STRIPE_PRICE_PRO_MONTHLY_OLD   = "price_1TX54pHJHOfcH2xmZXBafXCc"
+STRIPE_PRICE_PRO_ANNUAL_OLD    = "price_1TX55OHJHOfcH2xmd9uhWcVp"
+STRIPE_PRICE_PRO_SEMESTER_OLD  = "price_1TX55qHJHOfcH2xmPkffVYOu"
 
 # Where Stripe redirects after Checkout success/cancel and Portal exit.
 # Use your client origin + the Settings route.
