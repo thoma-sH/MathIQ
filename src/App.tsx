@@ -1,22 +1,26 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
-import { Subjects } from './screens/Subjects';
-import { WalkthroughCourse } from './screens/WalkthroughCourse';
-import { TopicScreen } from './screens/Topic';
-import { History } from './screens/History';
-import { Settings } from './screens/Settings';
-import { Terms } from './screens/Terms';
-import { Privacy } from './screens/Privacy';
-import { Pricing } from './screens/Pricing';
-import { Share } from './screens/Share';
-import { Exams } from './screens/Exams';
-import { ExamTake } from './screens/ExamTake';
-import { ExamGrade } from './screens/ExamGrade';
-import { Homework } from './screens/Homework';
 import { UpgradeProvider } from './upgrade/UpgradePrompt';
 import type { Route } from './router';
+
+// All non-home screens are split off into their own chunks so the initial
+// bundle only carries Landing + the shell. Each route fetches its chunk on
+// first navigation; subsequent visits within the session are cached.
+const Subjects = lazy(() => import('./screens/Subjects').then((m) => ({ default: m.Subjects })));
+const WalkthroughCourse = lazy(() => import('./screens/WalkthroughCourse').then((m) => ({ default: m.WalkthroughCourse })));
+const TopicScreen = lazy(() => import('./screens/Topic').then((m) => ({ default: m.TopicScreen })));
+const History = lazy(() => import('./screens/History').then((m) => ({ default: m.History })));
+const Settings = lazy(() => import('./screens/Settings').then((m) => ({ default: m.Settings })));
+const Terms = lazy(() => import('./screens/Terms').then((m) => ({ default: m.Terms })));
+const Privacy = lazy(() => import('./screens/Privacy').then((m) => ({ default: m.Privacy })));
+const Pricing = lazy(() => import('./screens/Pricing').then((m) => ({ default: m.Pricing })));
+const Share = lazy(() => import('./screens/Share').then((m) => ({ default: m.Share })));
+const Exams = lazy(() => import('./screens/Exams').then((m) => ({ default: m.Exams })));
+const ExamTake = lazy(() => import('./screens/ExamTake').then((m) => ({ default: m.ExamTake })));
+const ExamGrade = lazy(() => import('./screens/ExamGrade').then((m) => ({ default: m.ExamGrade })));
+const Homework = lazy(() => import('./screens/Homework').then((m) => ({ default: m.Homework })));
 
 interface PageProps {
   routeKey: string;
@@ -76,10 +80,16 @@ function getRealUrlPath(): RealUrl | null {
 
 export default function App() {
   const realPath = getRealUrlPath();
-  if (realPath?.kind === 'terms') return <Terms />;
-  if (realPath?.kind === 'privacy') return <Privacy />;
-  if (realPath?.kind === 'pricing') return <Pricing />;
-  if (realPath?.kind === 'share') return <Share shareId={realPath.shareId} />;
+  if (realPath) {
+    return (
+      <Suspense fallback={null}>
+        {realPath.kind === 'terms' && <Terms />}
+        {realPath.kind === 'privacy' && <Privacy />}
+        {realPath.kind === 'pricing' && <Pricing />}
+        {realPath.kind === 'share' && <Share shareId={realPath.shareId} />}
+      </Suspense>
+    );
+  }
   return <MathIQApp />;
 }
 
@@ -145,16 +155,18 @@ function MathIQApp() {
     <UpgradeProvider>
       <Header route={route} onNavigate={navigate} />
       <Page routeKey={pageKey(route)}>
-        {route.name === 'home'        && <Landing onNavigate={navigate} />}
-        {route.name === 'subjects'    && <Subjects onNavigate={navigate} />}
-        {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={navigate} />}
-        {route.name === 'topic'       && <TopicScreen courseId={route.courseId} topicId={route.topicId} initialProblem={route.problem} onNavigate={navigate} />}
-        {route.name === 'history'     && <History onNavigate={navigate} />}
-        {route.name === 'settings'    && <Settings onNavigate={navigate} />}
-        {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={navigate} />}
-        {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} recordId={route.recordId} onNavigate={navigate} />}
-        {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} recordId={route.recordId} onNavigate={navigate} />}
-        {route.name === 'homework'    && <Homework onNavigate={navigate} />}
+        <Suspense fallback={null}>
+          {route.name === 'home'        && <Landing onNavigate={navigate} />}
+          {route.name === 'subjects'    && <Subjects onNavigate={navigate} />}
+          {route.name === 'walkthrough' && <WalkthroughCourse courseId={route.courseId} onNavigate={navigate} />}
+          {route.name === 'topic'       && <TopicScreen courseId={route.courseId} topicId={route.topicId} initialProblem={route.problem} onNavigate={navigate} />}
+          {route.name === 'history'     && <History onNavigate={navigate} />}
+          {route.name === 'settings'    && <Settings onNavigate={navigate} />}
+          {route.name === 'exams'       && <Exams courseId={route.courseId} onNavigate={navigate} />}
+          {route.name === 'exam-take'   && <ExamTake courseId={route.courseId} recordId={route.recordId} onNavigate={navigate} />}
+          {route.name === 'exam-grade'  && <ExamGrade courseId={route.courseId} recordId={route.recordId} onNavigate={navigate} />}
+          {route.name === 'homework'    && <Homework onNavigate={navigate} />}
+        </Suspense>
       </Page>
       <InstallPrompt />
     </UpgradeProvider>
