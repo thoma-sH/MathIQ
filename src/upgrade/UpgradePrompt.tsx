@@ -51,6 +51,7 @@ export type LockedFeature =
   | 'exam-mode'
   | 'exam-grade'
   | 'walkthrough-pdf'
+  | 'walkthrough-quota'
   | 'homework-plain'
   | 'homework-latex'
   | 'why-how'
@@ -98,6 +99,13 @@ const FEATURE_META: Record<LockedFeature, FeatureMeta> = {
     title: 'Save walkthroughs as print-ready PDFs.',
     blurb:
       "Open any past walkthrough from your history and export it as a clean PDF. Math renders properly, and the layout is paginated for easy reading offline.",
+    requiredTier: 'plus',
+  },
+  'walkthrough-quota': {
+    kicker: 'DAILY LIMIT · PLUS',
+    title: 'More walkthroughs every day.',
+    blurb:
+      "You've used today's free walkthroughs. Plus gives you 25/day on Sonnet 4.6 plus 5 on Opus 4.6. Pro doubles that with 38/day total and 8 on Opus.",
     requiredTier: 'plus',
   },
   'homework-plain': {

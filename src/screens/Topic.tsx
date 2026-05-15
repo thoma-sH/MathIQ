@@ -664,9 +664,16 @@ export function TopicScreen({
               </span>
             )}
           </p>
-          <p style={{ margin: '6px 0 12px', fontSize: 13, color: T.muted, lineHeight: 1.5 }}>
-            Pro upgrade with higher limits and the premium model is coming soon.
-          </p>
+          {!isPaid && (
+            <button
+              type="button"
+              onClick={() => requireUpgrade('walkthrough-quota')}
+              className="btn-press chamfer"
+              style={cta()}
+            >
+              See Plus + Pro plans →
+            </button>
+          )}
         </div>
       )}
 
