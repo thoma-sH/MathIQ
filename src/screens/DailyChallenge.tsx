@@ -498,8 +498,7 @@ function TabButton({
       role="tab"
       aria-selected={active}
       onClick={onSelect}
-      className="btn-press tab-toggle"
-      data-active={active}
+      className="btn-press"
       style={{
         background: 'transparent',
         border: 'none',
@@ -511,9 +510,23 @@ function TabButton({
         color: active ? T.ink : T.muted,
         cursor: 'pointer',
         position: 'relative',
+        transition: 'color 220ms ease-out',
       }}
     >
       {label}
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: '50%',
+          bottom: -1,
+          transform: 'translateX(-50%)',
+          width: active ? 'calc(100% - 24px)' : '0%',
+          height: 2,
+          background: T.ink,
+          transition: 'width 220ms ease-out',
+        }}
+      />
     </button>
   );
 }
