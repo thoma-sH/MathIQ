@@ -6,7 +6,10 @@
  *
  * iOS Safari fallback: Apple gives no programmatic install API and never
  * fires `beforeinstallprompt`, so on iPhone/iPad Safari we render a
- * text-only instruction banner ("tap Share → Add to Home Screen") instead.
+ * text-only instruction banner instead. The copy points at the Share
+ * icon (a square with an up arrow) by shape because users often don't
+ * recognize it by name — and its location differs between iPhone Safari
+ * (bottom toolbar) and iPad Safari (top toolbar).
  * The PWA tags in index.html make sure the manually-installed app still
  * lands with the right icon and full-screen behavior.
  */
@@ -132,7 +135,7 @@ export function InstallPrompt() {
     >
       <span style={{ flex: 1, fontSize: 14, lineHeight: 1.4, color: T.ink }}>
         {isIos
-          ? 'Install MathIQ: tap Share, then "Add to Home Screen".'
+          ? 'To install MathIQ: tap Safari’s Share button (the ⬆︎ icon in a rounded square), then “Add to Home Screen”.'
           : 'Install MathIQ on this device for one-tap access.'}
       </span>
       {!isIos && (
