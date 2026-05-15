@@ -97,6 +97,15 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
   useEffect(() => {
     let cancelled = false;
 
+    // Hard timeout so we never hang on "Opening camera…" — iOS PWAs in
+    // particular sometimes swallow the permission prompt and getUserMedia
+    // resolves neither way. After 6s we assume the prompt is stuck and
+    // surface the library-only fallback.
+    const stuckTimer = window.setTimeout(() => {
+      if (cancelled) return;
+      setCamera((current) => (current === 'pending' ? 'unsupported' : current));
+    }, 6000);
+
     async function startCamera() {
       if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         if (!cancelled) setCamera('unsupported');
@@ -124,9 +133,11 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
             // assignment. The 'playing' event will still fire — ignore.
           }
         }
+        window.clearTimeout(stuckTimer);
         setCamera('live');
       } catch (err) {
         if (cancelled) return;
+        window.clearTimeout(stuckTimer);
         const name = err instanceof Error ? err.name : '';
         setCamera(name === 'NotAllowedError' || name === 'PermissionDeniedError' ? 'denied' : 'unsupported');
       }
@@ -142,6 +153,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
 
     return () => {
       cancelled = true;
+      window.clearTimeout(stuckTimer);
       teardownCamera();
     };
   }, [teardownCamera]);
@@ -551,21 +563,20 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
         }}
       >
         {camera === 'pending' && (
-          <div style={{ textAlign: 'center', padding: 24 }}>
+          <div style={{ textAlign: 'center', padding: 24, color: T.paper }}>
             <div
               style={{
-                fontSize: 11,
-                fontFamily: T.mono,
-                letterSpacing: '0.18em',
-                textTransform: 'uppercase',
-                opacity: 0.7,
-                marginBottom: 8,
+                fontSize: 18,
+                fontWeight: 600,
+                fontFamily: T.sans,
+                marginBottom: 10,
               }}
             >
               Opening camera…
             </div>
-            <div style={{ fontSize: 14, opacity: 0.6 }}>
-              You'll see a permission prompt.
+            <div style={{ fontSize: 14, lineHeight: 1.5, maxWidth: 280, margin: '0 auto' }}>
+              Allow camera access when prompted — or tap{' '}
+              <strong>Cancel</strong> and try again with a file picker.
             </div>
           </div>
         )}

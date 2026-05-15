@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@clerk/clerk-react';
 import ReactMarkdown from 'react-markdown';
@@ -366,14 +366,26 @@ function IdleCard({
 }: {
   onFile: (f: File | null) => void;
 }) {
+  const fallbackRef = useRef<HTMLInputElement | null>(null);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+
   async function onScan() {
-    const out = await openScanner({
-      mode: 'multi',
-      output: 'pdf',
-      filename: 'Homework.pdf',
-    });
-    if (out && out.kind === 'pdf') onFile(out.file);
+    setScannerError(null);
+    try {
+      const out = await openScanner({
+        mode: 'multi',
+        output: 'pdf',
+        filename: 'Homework.pdf',
+      });
+      if (out && out.kind === 'pdf') onFile(out.file);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Scanner unavailable.';
+      // eslint-disable-next-line no-console
+      console.error('[Scanner] failed to open:', e);
+      setScannerError(msg);
+    }
   }
+
   return (
     <section
       style={{
@@ -382,26 +394,73 @@ function IdleCard({
         background: T.paper2,
       }}
     >
-      <button
-        type="button"
-        onClick={() => void onScan()}
-        className="btn-press chamfer"
-        style={{
-          background: T.accent,
-          color: T.paper,
-          border: 'none',
-          padding: '12px 22px',
-          fontSize: 15,
-          fontWeight: 500,
-          cursor: 'pointer',
-          fontFamily: T.sans,
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => void onScan()}
+          className="btn-press chamfer"
+          style={{
+            background: T.accent,
+            color: T.paper,
+            border: 'none',
+            padding: '12px 22px',
+            fontSize: 15,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          Scan pages →
+        </button>
+        <button
+          type="button"
+          onClick={() => fallbackRef.current?.click()}
+          className="btn-press chamfer"
+          style={{
+            background: 'transparent',
+            color: T.ink,
+            border: `1px solid ${T.ink}`,
+            padding: '12px 22px',
+            fontSize: 15,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: T.sans,
+          }}
+        >
+          Pick file →
+        </button>
+      </div>
+      <input
+        ref={fallbackRef}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          onFile(e.target.files?.[0] ?? null);
+          if (e.target) e.target.value = '';
         }}
-      >
-        Scan pages →
-      </button>
+      />
+      {scannerError && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: 12,
+            padding: '8px 12px',
+            border: `1px solid ${T.ink}`,
+            background: T.paper,
+            fontSize: 13,
+            fontFamily: T.mono,
+            color: T.ink,
+          }}
+        >
+          Scanner couldn't open ({scannerError}). Use "Pick file" instead.
+        </div>
+      )}
       <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.55, margin: '14px 0 0' }}>
-        Snap each page of your handwritten work. Iris auto-crops and
-        straightens, then bundles everything into one PDF for transcription.
+        Scan each page with your camera — Iris auto-crops and straightens, then
+        bundles everything into one PDF. Or pick an existing PDF or photo from
+        your device.
       </p>
     </section>
   );
