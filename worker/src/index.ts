@@ -2305,7 +2305,10 @@ async function handleStreak(
   if (authState.kind !== 'user') {
     return json({ error: 'sign_in_required' }, 401, cors);
   }
-  const streak = await getStreak(env.USAGE, authState.userId);
+  // Pass today's date so getStreak applies the monthly freeze refill on
+  // the response. Otherwise the UI would show last month's freeze count
+  // until the user next submits.
+  const streak = await getStreak(env.USAGE, authState.userId, todayUtcDateKey());
   return json(streak, 200, cors);
 }
 

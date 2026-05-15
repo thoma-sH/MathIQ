@@ -117,6 +117,11 @@ export function DailyChallengeCard({ onStartGrade }: DailyChallengeCardProps) {
           {streak && streak.current > 0 && (
             <span style={{ color: T.ink, fontWeight: 600 }}>
               🔥 {streak.current}-day
+              {streak.freezes > 0 && (
+                <span style={{ marginLeft: 8, color: T.muted, fontWeight: 500 }}>
+                  ❄ {streak.freezes}
+                </span>
+              )}
             </span>
           )}
         </SignedIn>

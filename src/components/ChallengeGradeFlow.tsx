@@ -591,16 +591,20 @@ function RevealStage({
           <div
             style={{
               padding: '10px 14px',
-              background: T.paper2,
-              border: `1px solid ${T.hair}`,
+              background: streak.freezeConsumed ? T.accent : T.paper2,
+              color: streak.freezeConsumed ? T.paper : T.ink,
+              border: `1px solid ${streak.freezeConsumed ? T.accent : T.hair}`,
               fontSize: 13,
-              color: T.ink,
               marginBottom: 14,
               fontFamily: T.mono,
               letterSpacing: '0.06em',
             }}
           >
-            🔥 {streak.current}-day streak · Longest: {streak.longest}
+            {streak.freezeConsumed ? (
+              <>❄ Saved by a freeze · 🔥 {streak.current}-day streak intact</>
+            ) : (
+              <>🔥 {streak.current}-day streak · Longest: {streak.longest}</>
+            )}
           </div>
         )}
       </SignedIn>

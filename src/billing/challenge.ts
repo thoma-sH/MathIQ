@@ -27,6 +27,13 @@ export interface StreakState {
   current: number;
   longest: number;
   lastSolvedDate: string | null;
+  /** Freezes available this UTC calendar month. Refills to 1 on the 1st. */
+  freezes: number;
+  freezeMonth: string | null;
+  /** Sticky-only-on-the-grade-response flag: a freeze was just consumed
+   *  to save the streak (user missed exactly one day). Lets the reveal
+   *  screen show "Saved by a freeze!" celebration. */
+  freezeConsumed?: boolean;
 }
 
 export interface ChallengeGradeResponse {
