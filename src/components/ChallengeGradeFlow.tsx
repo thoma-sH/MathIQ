@@ -497,6 +497,27 @@ function RevealStage({
   const { grade, streak } = response;
   const shareString = buildShareString(challenge, response);
   const [copied, setCopied] = useState(false);
+  // navigator.share is mobile-only (iOS Safari, Android Chrome). Desktop
+  // browsers fall through to the clipboard path which is the only thing
+  // that makes sense there anyway.
+  const canNativeShare =
+    typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  async function onShareNative() {
+    try {
+      await navigator.share({
+        title: `MathIQ Daily Challenge #${response.challengeNumber}`,
+        text: shareString,
+      });
+    } catch (err) {
+      // User cancelled the share sheet — silent. AbortError is the
+      // standard signal; ignore.
+      if ((err as Error)?.name !== 'AbortError') {
+        // Real failure — fall back to clipboard.
+        void onCopyShare();
+      }
+    }
+  }
 
   async function onCopyShare() {
     try {
@@ -598,6 +619,26 @@ function RevealStage({
         >
           {shareString}
         </pre>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {canNativeShare && (
+            <button
+              type="button"
+              onClick={onShareNative}
+              className="btn-press chamfer"
+              style={{
+                background: T.accent,
+                color: T.paper,
+                border: 'none',
+                padding: '8px 14px',
+                fontSize: 13,
+                fontWeight: 600,
+                fontFamily: T.sans,
+                cursor: 'pointer',
+              }}
+            >
+              Share →
+            </button>
+          )}
         <button
           type="button"
           onClick={onCopyShare}
@@ -614,6 +655,7 @@ function RevealStage({
         >
           {copied ? '✓ Copied!' : 'Copy to clipboard'}
         </button>
+        </div>
       </div>
 
       {/* LaTeX render — signed-in only */}
