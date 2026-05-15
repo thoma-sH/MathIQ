@@ -1,5 +1,16 @@
 {
   "rewrites": [
+    {
+      "source": "/share/:shareId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(Twitterbot|facebookexternalhit|facebookcatalog|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Googlebot|Applebot|bingbot|Pinterest|redditbot|SkypeUriPreview|vkShare).*"
+        }
+      ],
+      "destination": "/api/share-og/:shareId"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
