@@ -388,6 +388,13 @@ function UpgradeModal({
           {meta.blurb}
         </p>
 
+        {/* Visual demo for the handwritten-to-PDF features. Lands above the
+         *  pitch so signed-out users (and anyone hesitating) see the actual
+         *  transformation before being asked to commit. */}
+        {(feature === 'homework-latex' || feature === 'homework-plain') && (
+          <HandwrittenPreview />
+        )}
+
         {/* Try-free affordance — only renders for Free users with a remaining
          *  lifetime trial of this feature AND a caller that supplied an
          *  onTryFree callback. Sits *above* the upgrade pitch so the
@@ -579,6 +586,88 @@ function UpgradeModal({
           </div>
         </SignedOut>
       </div>
+    </div>
+  );
+}
+
+/** Compact auto-flipping before/after preview. Crossfades between a
+ *  handwritten page and the typeset LaTeX result every ~3s. Respects
+ *  prefers-reduced-motion by holding the after frame. */
+function HandwrittenPreview() {
+  const [flipped, setFlipped] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setFlipped(true);
+      return;
+    }
+    const id = window.setInterval(() => setFlipped((f) => !f), 3000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div
+        style={{
+          fontSize: 10,
+          fontFamily: T.mono,
+          letterSpacing: '0.16em',
+          color: T.muted,
+          textTransform: 'uppercase',
+          marginBottom: 6,
+        }}
+      >
+        {flipped ? 'After — typeset' : 'Before — handwritten'}
+      </div>
+      <button
+        type="button"
+        onClick={() => setFlipped((f) => !f)}
+        aria-label={flipped ? 'Show original handwritten page' : 'Show typeset PDF'}
+        className="btn-press"
+        style={{
+          position: 'relative',
+          display: 'block',
+          width: '100%',
+          aspectRatio: '3 / 2',
+          background: T.paper,
+          border: `1px solid ${T.ink}`,
+          padding: 0,
+          cursor: 'pointer',
+          overflow: 'hidden',
+        }}
+      >
+        <img
+          src="/latex-before.jpg"
+          alt=""
+          loading="lazy"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            background: T.paper,
+            opacity: flipped ? 0 : 1,
+            transition: 'opacity 600ms ease',
+          }}
+        />
+        <img
+          src="/latex-after.jpg"
+          alt=""
+          loading="lazy"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            background: T.paper,
+            opacity: flipped ? 1 : 0,
+            transition: 'opacity 600ms ease',
+          }}
+        />
+      </button>
     </div>
   );
 }
