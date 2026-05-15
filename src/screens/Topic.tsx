@@ -19,6 +19,7 @@ import { verifyWalkthrough, type Verdict } from '../walkthroughs/verify';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
+import { CheckIcon } from '../design/icons';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
@@ -844,9 +845,9 @@ export function TopicScreen({
               T.muted,
           }}
         >
-          <span aria-hidden style={{ fontSize: 13 }}>
+          <span aria-hidden style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center' }}>
             {verifyState === 'verifying' ? '·' :
-             verifyState === 'correct'   ? '✓' :
+             verifyState === 'correct'   ? <CheckIcon size="13px" /> :
              verifyState === 'incorrect' ? '!' :
              '?'}
           </span>
@@ -910,8 +911,8 @@ export function TopicScreen({
             marginLeft: verifyState !== 'idle' ? 12 : 0,
           }}
         >
-          <span aria-hidden style={{ fontSize: 13 }}>
-            {saveState === 'saving' ? '·' : saveState === 'saved' ? '✓' : '!'}
+          <span aria-hidden style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center' }}>
+            {saveState === 'saving' ? '·' : saveState === 'saved' ? <CheckIcon size="13px" /> : '!'}
           </span>
           {saveState === 'saving' ? 'Saving to history…' :
            saveState === 'saved'  ? 'Saved to history' :

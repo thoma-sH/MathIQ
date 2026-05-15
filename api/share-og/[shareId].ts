@@ -31,11 +31,11 @@ interface ShareApiResponse {
   hasPdf: boolean;
 }
 
-const DIFFICULTY_EMOJI: Record<ShareApiResponse['difficulty'], string> = {
-  easy: '🟢',
-  mid: '🟡',
-  hard: '🟠',
-  cumulative: '🔴',
+const DIFFICULTY_LABEL: Record<ShareApiResponse['difficulty'], string> = {
+  easy: 'EASY',
+  mid: 'MID',
+  hard: 'HARD',
+  cumulative: 'SUNDAY',
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -67,9 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 function crawlerHtml(d: ShareApiResponse): string {
-  const verdict = d.grade.correct ? 'Solved ✅' : 'Attempted ❌';
-  const emoji = DIFFICULTY_EMOJI[d.difficulty];
-  const title = `MathIQ #${d.challengeNumber} · ${emoji} ${d.difficulty.toUpperCase()} · ${verdict}`;
+  const verdict = d.grade.correct ? 'Solved' : 'Attempted';
+  const label = DIFFICULTY_LABEL[d.difficulty];
+  const title = `MathIQ #${d.challengeNumber} · ${label} · ${verdict}`;
   // Trim problem text to ~160 chars so the description doesn't get cut
   // mid-LaTeX. Strip $...$ delimiters so the preview reads like plain text.
   const cleanProblem = d.problemText

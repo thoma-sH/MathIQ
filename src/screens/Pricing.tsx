@@ -13,6 +13,7 @@
  */
 import { useState } from 'react';
 import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/clerk-react';
+import { CheckIcon } from '../design/icons';
 import { T } from '../design/tokens';
 import { startCheckout, type Interval, type Tier as PaidTier } from '../billing/client';
 
@@ -696,12 +697,13 @@ function TierCard({
               aria-hidden
               style={{
                 color: T.accent3,
-                fontWeight: 700,
                 fontSize: 14,
                 lineHeight: 1.4,
+                display: 'inline-flex',
+                alignItems: 'center',
               }}
             >
-              ✓
+              <CheckIcon size="14px" />
             </span>
             <span>{h}</span>
           </li>
@@ -823,8 +825,11 @@ function IntervalChip({
 function renderCell(value: string | boolean): React.ReactNode {
   if (value === true) {
     return (
-      <span style={{ color: T.accent3, fontWeight: 700, fontSize: 16 }} aria-label="Included">
-        ✓
+      <span
+        style={{ color: T.accent3, fontSize: 16, display: 'inline-flex', alignItems: 'center' }}
+        aria-label="Included"
+      >
+        <CheckIcon size="16px" />
       </span>
     );
   }

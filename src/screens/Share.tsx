@@ -15,6 +15,7 @@ import rehypeKatex from 'rehype-katex';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
+import { CheckIcon, CrossIcon, DifficultyChip } from '../design/icons';
 import {
   fetchSharedAttempt,
   sharedPdfUrl,
@@ -44,13 +45,6 @@ function InlineMath({ value }: { value: string }) {
   }, [value]);
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
-
-const DIFFICULTY_EMOJI: Record<SharedChallenge['difficulty'], string> = {
-  easy: '🟢',
-  mid: '🟡',
-  hard: '🟠',
-  cumulative: '🔴',
-};
 
 interface ShareProps {
   shareId: string;
@@ -147,14 +141,21 @@ export function Share({ shareId }: ShareProps) {
 }
 
 function SharedView({ data }: { data: SharedChallenge }) {
-  const diffEmoji = DIFFICULTY_EMOJI[data.difficulty];
-
   return (
     <>
       {/* Hero */}
       <header style={{ marginBottom: 28 }}>
-        <div style={kicker()}>
-          MATHIQ DAILY #{data.challengeNumber} · {diffEmoji} {data.difficulty.toUpperCase()}
+        <div
+          style={{
+            ...kicker(),
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <span>MATHIQ DAILY #{data.challengeNumber}</span>
+          <span aria-hidden>·</span>
+          <DifficultyChip tier={data.difficulty} />
         </div>
         <h1
           style={{
@@ -206,8 +207,16 @@ function SharedView({ data }: { data: SharedChallenge }) {
           marginBottom: data.hasPdf ? 18 : 28,
         }}
       >
-        <div style={kicker()}>
-          {data.grade.correct ? '✅ SOLVED' : '❌ NOT QUITE'}
+        <div style={{ ...kicker(), display: 'flex', alignItems: 'center', gap: 8 }}>
+          {data.grade.correct ? (
+            <>
+              <CheckIcon /> SOLVED
+            </>
+          ) : (
+            <>
+              <CrossIcon /> NOT QUITE
+            </>
+          )}
         </div>
         {data.grade.studentAnswer && (
           <div
