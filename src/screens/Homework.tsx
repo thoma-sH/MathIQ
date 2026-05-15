@@ -56,7 +56,7 @@ type LatexState =
   | { kind: 'failed'; message: string; texSource?: string };
 
 export function Homework({ onNavigate }: HomeworkProps) {
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
   const [tier, setTier] = useState<Tier | null>(null);
   const [tierLoaded, setTierLoaded] = useState(false);
@@ -182,9 +182,17 @@ export function Homework({ onNavigate }: HomeworkProps) {
 
   async function onCompileLatex(hwId: string, title: string) {
     if (!isPro(tier)) {
-      requireUpgrade('homework-latex');
+      // Free users get one lifetime LaTeX trial. Spend it directly from
+      // the modal instead of forcing an upgrade.
+      requireUpgrade('homework-latex', {
+        onTryFree: () => void runCompile(hwId, title),
+      });
       return;
     }
+    await runCompile(hwId, title);
+  }
+
+  async function runCompile(hwId: string, title: string) {
     setLatex({ kind: 'compiling' });
     try {
       const result = await compileLatexPdf({ hwId, title, getToken });
@@ -198,16 +206,18 @@ export function Homework({ onNavigate }: HomeworkProps) {
     }
   }
 
-  // Tier-gated entry. Direct route access by a non-Plus user → bounce to
-  // home and surface the upgrade modal.
+  // Tier-gated entry. Anonymous (signed-out) users get bounced — they
+  // can't have trials. Signed-in Free users with no remaining
+  // Handwritten-to-PDF trial will still land here; the actual trial is
+  // server-checked at upload time and the upgrade modal fires on 402.
   useEffect(() => {
-    if (tierLoaded && !isPaid(tier)) {
+    if (tierLoaded && !isPaid(tier) && !isSignedIn) {
       requireUpgrade('homework-plain');
       onNavigate({ name: 'home' });
     }
-  }, [tierLoaded, tier, requireUpgrade, onNavigate]);
+  }, [tierLoaded, tier, isSignedIn, requireUpgrade, onNavigate]);
 
-  if (tierLoaded && !isPaid(tier)) return null;
+  if (tierLoaded && !isPaid(tier) && !isSignedIn) return null;
 
   return (
     <main

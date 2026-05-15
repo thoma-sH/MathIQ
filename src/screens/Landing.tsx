@@ -62,7 +62,9 @@ export function Landing({ onNavigate }: LandingProps) {
 
   function onHomeworkClick() {
     if (!isPaid(tier)) {
-      requireUpgrade('homework-plain');
+      requireUpgrade('homework-plain', {
+        onTryFree: () => onNavigate({ name: 'homework' }),
+      });
       return;
     }
     onNavigate({ name: 'homework' });

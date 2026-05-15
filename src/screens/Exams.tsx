@@ -65,7 +65,12 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
 
   function onHomeworkClick() {
     if (!isPaid(tier)) {
-      requireUpgrade('homework-plain');
+      // Free users get a lifetime Handwritten-to-PDF trial. The modal lets
+      // them spend one by navigating straight to the homework screen — the
+      // actual trial is consumed server-side when they upload.
+      requireUpgrade('homework-plain', {
+        onTryFree: () => onNavigate({ name: 'homework' }),
+      });
       return;
     }
     onNavigate({ name: 'homework' });
