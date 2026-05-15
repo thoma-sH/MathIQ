@@ -18,6 +18,7 @@ import rehypeKatex from 'rehype-katex';
 import katex from 'katex';
 import { SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
+import { Confetti } from './Confetti';
 
 /** Inline KaTeX rendering for short answer strings. See Share.tsx for context. */
 function InlineMath({ value }: { value: string }) {
@@ -152,6 +153,12 @@ export function ChallengeGradeFlow({ challenge, onClose }: ChallengeGradeFlowPro
     URL.revokeObjectURL(url);
   }
 
+  const celebrating =
+    (state.kind === 'revealed' ||
+      state.kind === 'rendering-latex' ||
+      state.kind === 'rendered-latex') &&
+    state.response.grade.correct;
+
   return (
     <div
       onClick={onClose}
@@ -171,6 +178,7 @@ export function ChallengeGradeFlow({ challenge, onClose }: ChallengeGradeFlowPro
         padding: 'clamp(8px, 2vh, 24px)',
       }}
     >
+      {celebrating && <Confetti />}
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
