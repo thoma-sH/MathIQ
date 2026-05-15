@@ -90,29 +90,40 @@ export async function fetchTodaysChallenge(): Promise<TodaysChallenge | null> {
   return (await resp.json()) as TodaysChallenge;
 }
 
-export async function submitChallengeGrade(args: {
-  /** Base64-encoded image or PDF. No data: prefix. */
-  image: string;
-  mediaType: string;
+interface ChallengeGradeArgsCommon {
   /** Cloudflare Turnstile token. Required for anonymous, ignored for signed-in. */
   turnstileToken?: string;
   /** From useAuth() — supply null if anonymous. */
   getToken?: AuthOpts['getToken'];
-}): Promise<ChallengeGradeResponse> {
+}
+
+export type ChallengeGradeArgs =
+  | (ChallengeGradeArgsCommon & {
+      /** Base64-encoded image or PDF. No data: prefix. */
+      image: string;
+      mediaType: string;
+    })
+  | (ChallengeGradeArgsCommon & {
+      /** Typed answer — bypasses Mathpix OCR and goes straight to the grader. */
+      studentAnswer: string;
+    });
+
+export async function submitChallengeGrade(args: ChallengeGradeArgs): Promise<ChallengeGradeResponse> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (args.getToken) {
     const token = await args.getToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const payload: Record<string, string | undefined> =
+    'studentAnswer' in args
+      ? { studentAnswer: args.studentAnswer, turnstileToken: args.turnstileToken }
+      : { image: args.image, mediaType: args.mediaType, turnstileToken: args.turnstileToken };
+
   const resp = await fetch(`${WORKER_URL}/api/challenge/grade`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      image: args.image,
-      mediaType: args.mediaType,
-      turnstileToken: args.turnstileToken,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!resp.ok) {
