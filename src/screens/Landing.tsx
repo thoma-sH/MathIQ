@@ -202,7 +202,7 @@ export function Landing({ onNavigate }: LandingProps) {
       style={{
         maxWidth: 760,
         margin: '0 auto',
-        paddingTop: 'clamp(56px, 12vh, 140px)',
+        paddingTop: 'clamp(32px, 7vh, 100px)',
         paddingBottom: 96,
         display: 'flex',
         flexDirection: 'column',
