@@ -1074,6 +1074,21 @@ const ALLOWED_GRADE_MEDIA = new Set([
 ]);
 const MAX_GRADE_BASE64_CHARS = 20 * 1024 * 1024;    // ~15MB raw — PDFs run larger
 
+// Content-length ceilings used to 413 oversized uploads before request.json()
+// parses the body. The +4 KiB covers JSON wrapper overhead.
+const MAX_OCR_BODY_BYTES = MAX_OCR_BASE64_CHARS + 4096;
+const MAX_GRADE_BODY_BYTES = MAX_GRADE_BASE64_CHARS + 4096;
+
+function assertContentLength(
+  request: Request,
+  max: number,
+  cors: Record<string, string>,
+): Response | null {
+  const cl = Number(request.headers.get('content-length') ?? 0);
+  if (cl > max) return json({ error: 'request too large', limit: max }, 413, cors);
+  return null;
+}
+
 interface OcrBody {
   image?: string;
   mediaType?: string;
@@ -1084,6 +1099,8 @@ async function handleOcr(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
+  const tooLarge = assertContentLength(request, MAX_OCR_BODY_BYTES, cors);
+  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
@@ -1346,6 +1363,8 @@ async function handleExamGrade(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
+  const tooLarge = assertContentLength(request, MAX_GRADE_BODY_BYTES, cors);
+  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
@@ -1554,6 +1573,8 @@ async function handleHomeworkTranscribe(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
+  const tooLarge = assertContentLength(request, MAX_GRADE_BODY_BYTES, cors);
+  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
@@ -2019,6 +2040,8 @@ async function handleChallengeGrade(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
+  const tooLarge = assertContentLength(request, MAX_GRADE_BODY_BYTES, cors);
+  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
