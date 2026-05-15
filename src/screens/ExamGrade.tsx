@@ -15,6 +15,9 @@ import {
 } from '../walkthroughs/exam';
 import { openScanner } from '../scanner';
 import { NotFound } from './NotFound';
+import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { isPro } from '../walkthroughs/tier';
+import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import type { Route } from '../router';
 
 interface ExamGradeProps {
@@ -32,8 +35,21 @@ type GradeState =
 export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
   const course = COURSES_BY_ID[courseId];
   const { getToken } = useAuth();
+  const { requireUpgrade } = useUpgradePrompt();
+  const [tier, setTier] = useState<Tier | null>(null);
   const [record, setRecord] = useState<ExamRecord | null>(null);
   const [state, setState] = useState<GradeState>({ kind: 'idle' });
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const sub = await fetchSubscriptionState({ getToken });
+      if (!cancelled) setTier(sub?.tier ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,11 +84,20 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
 
   async function onFile(file: File | null) {
     if (!file || !record) return;
+    if (!isPro(tier)) {
+      requireUpgrade('exam-grade');
+      return;
+    }
     setState({ kind: 'grading' });
     try {
       const result = await gradeExam({ examId: record.examId, file, getToken });
       setState({ kind: 'graded', result });
     } catch (err) {
+      if (err instanceof ExamError && err.kind === 'rate_limit') {
+        requireUpgrade('exam-grade');
+        setState({ kind: 'idle' });
+        return;
+      }
       const msg =
         err instanceof ExamError ? err.message : 'Grading failed — try again in a moment.';
       setState({ kind: 'error', message: msg });
