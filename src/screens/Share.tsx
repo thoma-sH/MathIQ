@@ -233,7 +233,12 @@ function SharedView({ data }: { data: SharedChallenge }) {
         )}
       </section>
 
-      {/* Typeset PDF — the centerpiece for shared attempts that rendered one */}
+      {/* Typeset PDF — the centerpiece for shared attempts that rendered one.
+       *  The LaTeX preamble uses A4 paper (210mm × 297mm), so the container
+       *  aspect ratio matches that, not US Letter. The `#zoom=page-width`
+       *  hash tells the browser's PDF viewer to fit horizontally on load
+       *  instead of opening at its default zoom (usually 100%, which gets
+       *  cropped). Honored by Chrome/Edge/pdf.js. */}
       {data.hasPdf && (
         <section style={{ marginBottom: 28 }}>
           <div style={{ ...kicker(), marginBottom: 8 }}>THEIR TYPESET WORK · LATEX</div>
@@ -241,7 +246,7 @@ function SharedView({ data }: { data: SharedChallenge }) {
             style={{
               border: `1px solid ${T.ink}`,
               background: '#fff',
-              aspectRatio: '8.5 / 11',
+              aspectRatio: '210 / 297',
               width: '100%',
               maxWidth: 720,
               margin: '0 auto',
@@ -249,7 +254,7 @@ function SharedView({ data }: { data: SharedChallenge }) {
             }}
           >
             <iframe
-              src={sharedPdfUrl(data.shareId)}
+              src={`${sharedPdfUrl(data.shareId)}#zoom=page-width&view=FitH&toolbar=0`}
               title="Typeset LaTeX submission"
               style={{
                 width: '100%',
