@@ -11,6 +11,6 @@
       ],
       "destination": "/api/share-og/:shareId"
     },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
