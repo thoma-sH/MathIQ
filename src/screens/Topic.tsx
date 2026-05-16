@@ -548,7 +548,7 @@ export function TopicScreen({
           <button
             onClick={() => runWalkthrough(undefined, { practice: true })}
             className="btn-press chamfer"
-            aria-label="Generate a new practice problem for this topic"
+            aria-label="Generate a fresh practice problem on this topic"
             style={{
               background: 'transparent',
               color: T.ink,
@@ -560,7 +560,7 @@ export function TopicScreen({
               fontFamily: T.sans,
             }}
           >
-            Practice problem →
+            Try one like this →
           </button>
         </div>
       )}
