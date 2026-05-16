@@ -36,6 +36,11 @@ export interface ChallengeRecord {
   problemText: string;
   /** Short hint about the answer form (e.g., "Final answer is an integer"). Helps the grader. */
   answerForm: string;
+  /** The exact correct final answer in plain text (no $...$ delimiters). Stored at
+   *  generation time so the grader compares against a fixed truth instead of
+   *  re-deriving on every request. Optional only for backwards-compat with
+   *  pre-2026-05 records; new ones always include it. */
+  canonicalAnswer?: string;
   createdAt: number;
 }
 
@@ -144,19 +149,13 @@ const DIFFICULTY_DIRECTIVE: Record<ChallengeDifficulty, string> = {
 const CHALLENGE_GENERATION_PROMPT = `You are an exam-problem author writing the MathIQ Daily Challenge — one single math problem shown to every user that day. Quality matters: this is a public-facing problem people will share.
 
 RULES:
-- Output ONLY valid JSON conforming to the schema below. No prose before or after. No markdown code fences. Start with { and end with }.
 - The problem must be SELF-CONTAINED — solvable from the statement alone, no figure references.
-- No hints, no solutions, no "show your work" reminders.
+- No hints, no solutions, no "show your work" reminders in the problem text.
 - Problem text: 1–2 sentences max. Concise.
 - Use LaTeX with $...$ for inline and $$...$$ for display. Never \\( or \\[.
 - Clean numbers — small integers, simple fractions, common angles. Test the technique, not arithmetic stamina.
-- Clean, unambiguous final answer. Specify the answer form in answerForm field.
-
-JSON SCHEMA:
-{
-  "problemText": "<the problem statement in markdown+LaTeX>",
-  "answerForm": "<one sentence: what shape the final answer takes — e.g. 'An integer.' or 'A simplified fraction p/q.' or 'A function f(x) in closed form.'>"
-}`;
+- Clean, unambiguous final answer. Solve the problem yourself to determine the canonical answer before submitting — the grader will compare student answers against this value.
+- Submit via the submit_challenge tool. The tool's input_schema is the contract.`;
 
 async function generateChallenge(
   apiKey: string,
@@ -192,6 +191,34 @@ Write one problem for this topic at this difficulty. Return the JSON only.`;
         },
       ],
       messages: [{ role: 'user', content: userMessage }],
+      tools: [
+        {
+          name: 'submit_challenge',
+          description:
+            'Submit the daily challenge problem and the exact correct answer that students should arrive at.',
+          input_schema: {
+            type: 'object',
+            properties: {
+              problemText: {
+                type: 'string',
+                description: 'The problem statement in markdown + inline/display LaTeX.',
+              },
+              answerForm: {
+                type: 'string',
+                description:
+                  "One sentence: what shape the final answer takes — e.g. 'An integer.' or 'A simplified fraction p/q.' or 'A function f(x) in closed form.'",
+              },
+              canonicalAnswer: {
+                type: 'string',
+                description:
+                  "The exact correct final answer in plain text (no $...$ delimiters). Compute it yourself before submitting. Examples: '-59', 'x = 4', '362880', '1/2', 'pi/3', 'f(x) = e^{2x}'.",
+              },
+            },
+            required: ['problemText', 'answerForm', 'canonicalAnswer'],
+          },
+        },
+      ],
+      tool_choice: { type: 'tool', name: 'submit_challenge' },
     }),
   });
 
@@ -202,23 +229,15 @@ Write one problem for this topic at this difficulty. Return the JSON only.`;
   }
 
   const data = (await resp.json()) as {
-    content?: Array<{ type: string; text?: string }>;
+    content?: Array<{
+      type: string;
+      input?: { problemText?: string; answerForm?: string; canonicalAnswer?: string };
+    }>;
   };
-  const text = data.content?.find((b) => b.type === 'text')?.text?.trim() ?? '';
-  if (!text) {
-    console.error('[challenge] empty model output');
-    return null;
-  }
-
-  let parsed: { problemText?: string; answerForm?: string };
-  try {
-    parsed = JSON.parse(stripCodeFences(text));
-  } catch {
-    console.error('[challenge] malformed JSON output', text.slice(0, 200));
-    return null;
-  }
-  if (typeof parsed.problemText !== 'string' || parsed.problemText.trim().length === 0) {
-    console.error('[challenge] missing problemText');
+  const toolUse = data.content?.find((b) => b.type === 'tool_use');
+  const input = toolUse?.input;
+  if (!input || typeof input.problemText !== 'string' || input.problemText.trim().length === 0) {
+    console.error('[challenge] generator returned no tool_use or empty problem');
     return null;
   }
 
@@ -229,8 +248,15 @@ Write one problem for this topic at this difficulty. Return the JSON only.`;
     topicId: topic.id,
     topicTitle: topic.title,
     difficulty,
-    problemText: parsed.problemText.trim(),
-    answerForm: typeof parsed.answerForm === 'string' ? parsed.answerForm.trim() : 'Final answer.',
+    problemText: input.problemText.trim(),
+    answerForm:
+      typeof input.answerForm === 'string' && input.answerForm.trim().length > 0
+        ? input.answerForm.trim()
+        : 'Final answer.',
+    canonicalAnswer:
+      typeof input.canonicalAnswer === 'string' && input.canonicalAnswer.trim().length > 0
+        ? input.canonicalAnswer.trim()
+        : undefined,
     createdAt: Date.now(),
   };
 }
@@ -314,30 +340,41 @@ export async function gradeChallengeSubmission(
   studentWorkText: string,
   inputKind: ChallengeInputKind = 'photo',
 ): Promise<ChallengeGradeResult | null> {
+  // Canonical answer is stored at generation time. When present, the grader
+  // compares against it (fixed truth). When absent (legacy records), the
+  // grader has to derive — that path is more error-prone, so newer records
+  // always include canonicalAnswer.
+  const canonicalLine = record.canonicalAnswer
+    ? `CANONICAL ANSWER (already verified — trust this): ${record.canonicalAnswer}`
+    : `EXPECTED ANSWER FORM: ${record.answerForm}`;
+  const gradingNote = record.canonicalAnswer
+    ? `Compare the student's answer to the canonical answer above. Be charitable about notation (sign placement, fraction vs decimal, equivalent forms — e.g. -59 = "negative 59", 1/2 = 0.5, x=4 = "the answer is 4"). The canonical answer IS the truth — do not second-guess it.`
+    : `Compute the correct answer yourself, then compare to the student's submission with notation tolerance.`;
+
   const userMessage =
     inputKind === 'typed'
       ? `PROBLEM:
 ${record.problemText}
 
-EXPECTED ANSWER FORM: ${record.answerForm}
+${canonicalLine}
 
-STUDENT'S TYPED FINAL ANSWER (just the answer, no work — they want this graded directly):
+STUDENT'S TYPED FINAL ANSWER (just the answer — there is no work to inspect):
 ---
 ${studentWorkText}
 ---
 
-Compare the typed answer to the canonical answer. There is no "work" to inspect — grade the answer itself. Return JSON only.`
+${gradingNote}`
       : `PROBLEM:
 ${record.problemText}
 
-EXPECTED ANSWER FORM: ${record.answerForm}
+${canonicalLine}
 
 STUDENT'S OCR'd WORK:
 ---
 ${studentWorkText}
 ---
 
-Grade this submission. Return JSON only.`;
+Grade this submission. ${gradingNote}`;
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
