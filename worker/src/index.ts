@@ -2424,7 +2424,12 @@ async function handleChallengeGrade(
   }
 
   // ── Grade with Sonnet
-  const grade = await gradeChallengeSubmission(env.ANTHROPIC_API_KEY, record, studentWorkText);
+  const grade = await gradeChallengeSubmission(
+    env.ANTHROPIC_API_KEY,
+    record,
+    studentWorkText,
+    imageBase64 ? 'photo' : 'typed',
+  );
   if (!grade) {
     await refundCounters();
     return json(

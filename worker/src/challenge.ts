@@ -306,12 +306,28 @@ JSON SCHEMA:
   "feedback": "<one sentence: what they got right, OR where they went wrong>"
 }`;
 
+export type ChallengeInputKind = 'photo' | 'typed';
+
 export async function gradeChallengeSubmission(
   apiKey: string,
   record: ChallengeRecord,
   studentWorkText: string,
+  inputKind: ChallengeInputKind = 'photo',
 ): Promise<ChallengeGradeResult | null> {
-  const userMessage = `PROBLEM:
+  const userMessage =
+    inputKind === 'typed'
+      ? `PROBLEM:
+${record.problemText}
+
+EXPECTED ANSWER FORM: ${record.answerForm}
+
+STUDENT'S TYPED FINAL ANSWER (just the answer, no work — they want this graded directly):
+---
+${studentWorkText}
+---
+
+Compare the typed answer to the canonical answer. There is no "work" to inspect — grade the answer itself. Return JSON only.`
+      : `PROBLEM:
 ${record.problemText}
 
 EXPECTED ANSWER FORM: ${record.answerForm}
@@ -340,7 +356,14 @@ Grade this submission. Return JSON only.`;
           cache_control: { type: 'ephemeral' },
         },
       ],
-      messages: [{ role: 'user', content: userMessage }],
+      // Assistant prefill of `{` forces Claude to start emitting JSON
+      // immediately — eliminates the prose-explanation failure mode we saw
+      // on short typed answers ("9!" → Claude thinks it's incomplete and
+      // narrates instead of grading).
+      messages: [
+        { role: 'user', content: userMessage },
+        { role: 'assistant', content: '{' },
+      ],
     }),
   });
 
@@ -353,8 +376,10 @@ Grade this submission. Return JSON only.`;
   const data = (await resp.json()) as {
     content?: Array<{ type: string; text?: string }>;
   };
-  const text = data.content?.find((b) => b.type === 'text')?.text?.trim() ?? '';
-  if (!text) return null;
+  const continuation = data.content?.find((b) => b.type === 'text')?.text?.trim() ?? '';
+  if (!continuation) return null;
+  // Prepend the prefilled `{` so the assembled response is valid JSON.
+  const text = '{' + continuation;
 
   let parsed: { correct?: boolean; studentAnswer?: string; feedback?: string };
   try {
