@@ -13,6 +13,9 @@
  */
 
 const STREAK_KEY_PREFIX = 'streak:user:';
+// Index of users with a live streak, queryable via KV.list({ prefix: ... }).
+// Populated/updated by recordSolve, scanned by the daily reminder cron in index.ts.
+const STREAK_INDEX_PREFIX = 'streakIdx:';
 // TTL — long enough that even an inactive user keeps their record around to
 // see "your longest streak was N" on return.
 const STREAK_TTL_SECONDS = 365 * 24 * 60 * 60;
@@ -35,6 +38,81 @@ export interface StreakState {
 
 function key(userId: string): string {
   return `${STREAK_KEY_PREFIX}${userId}`;
+}
+
+function indexKey(userId: string): string {
+  return `${STREAK_INDEX_PREFIX}${userId}`;
+}
+
+export interface StreakIndexEntry {
+  userId: string;
+  current: number;
+  /** YYYY-MM-DD of the user's last solve. */
+  lastSolvedDate: string;
+  /** Freezes available — used by the cron to decide whether a 2-day gap is still recoverable. */
+  freezes: number;
+}
+
+async function upsertStreakIndex(
+  kv: KVNamespace,
+  userId: string,
+  state: StreakState,
+): Promise<void> {
+  if (state.current === 0 || !state.lastSolvedDate) {
+    await kv.delete(indexKey(userId));
+    return;
+  }
+  const entry: Omit<StreakIndexEntry, 'userId'> = {
+    current: state.current,
+    lastSolvedDate: state.lastSolvedDate,
+    freezes: state.freezes,
+  };
+  await kv.put(indexKey(userId), JSON.stringify(entry), {
+    expirationTtl: STREAK_TTL_SECONDS,
+  });
+}
+
+interface ListPage {
+  keys: { name: string }[];
+  list_complete: boolean;
+  cursor?: string;
+}
+
+/** Enumerate every user with a live streak. Used by the daily reminder cron. */
+export async function listActiveStreakers(kv: KVNamespace): Promise<StreakIndexEntry[]> {
+  const result: StreakIndexEntry[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = (await kv.list({
+      prefix: STREAK_INDEX_PREFIX,
+      cursor,
+    })) as ListPage;
+    const raws = await Promise.all(page.keys.map((k) => kv.get(k.name)));
+    for (let i = 0; i < page.keys.length; i++) {
+      const raw = raws[i];
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw) as Partial<StreakIndexEntry>;
+        if (
+          typeof parsed.current === 'number' &&
+          typeof parsed.lastSolvedDate === 'string' &&
+          typeof parsed.freezes === 'number'
+        ) {
+          result.push({
+            userId: page.keys[i].name.slice(STREAK_INDEX_PREFIX.length),
+            current: parsed.current,
+            lastSolvedDate: parsed.lastSolvedDate,
+            freezes: parsed.freezes,
+          });
+        }
+      } catch {
+        // malformed entry — ignore
+      }
+    }
+    if (page.list_complete || !page.cursor) break;
+    cursor = page.cursor;
+  }
+  return result;
 }
 
 const EMPTY_STATE: StreakState = {
@@ -140,6 +218,7 @@ export async function recordSolve(
   await kv.put(key(userId), JSON.stringify(next), {
     expirationTtl: STREAK_TTL_SECONDS,
   });
+  await upsertStreakIndex(kv, userId, next);
   // freezeConsumed is a per-response signal, not persisted state. Adding
   // it after the put so it doesn't end up in KV.
   return freezeConsumed ? { ...next, freezeConsumed: true } : next;
