@@ -349,6 +349,10 @@ export default {
       return handleUnsubscribe(request, env);
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/admin/run-reminders') {
+      return handleAdminRunReminders(request, env, cors);
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
       return handleHomeworkTranscribe(request, env, cors);
     }
@@ -2014,24 +2018,44 @@ function validatePriceConfig(env: Env, interval: SubscriptionInterval): string |
   return null;
 }
 
-async function runStreakReminders(env: Env): Promise<void> {
+interface ReminderRunStats {
+  configured: boolean;
+  sent: number;
+  skipped: number;
+  total: number;
+  skipReasons: Record<string, number>;
+}
+
+async function runStreakReminders(env: Env): Promise<ReminderRunStats> {
+  const streakers = await listActiveStreakers(env.USAGE);
   if (!env.RESEND_API_KEY || !env.REMINDER_FROM_EMAIL) {
     console.warn('[reminders] RESEND_API_KEY or REMINDER_FROM_EMAIL not set; skipping');
-    return;
+    return {
+      configured: false,
+      sent: 0,
+      skipped: streakers.length,
+      total: streakers.length,
+      skipReasons: { not_configured: streakers.length },
+    };
   }
   const today = todayUtcDateKey();
   const reminderSentKey = (uid: string) => `lastReminderSent:${uid}`;
   const unsubBase =
-    env.WORKER_PUBLIC_URL ?? 'https://mathiq-api.t-hamilton0416.workers.dev';
+    (env.WORKER_PUBLIC_URL && env.WORKER_PUBLIC_URL.length > 0)
+      ? env.WORKER_PUBLIC_URL
+      : 'https://mathiq-api.t-hamilton0416.workers.dev';
 
-  const streakers = await listActiveStreakers(env.USAGE);
   let sent = 0;
   let skipped = 0;
+  const skipReasons: Record<string, number> = {};
+  const bump = (reason: string) => {
+    skipReasons[reason] = (skipReasons[reason] ?? 0) + 1;
+    skipped++;
+  };
 
   for (const entry of streakers) {
-    // Already solved today — nothing to remind about.
     if (entry.lastSolvedDate === today) {
-      skipped++;
+      bump('already_solved_today');
       continue;
     }
     // Compute how stale the last solve is. The streak is only recoverable
@@ -2039,22 +2063,22 @@ async function runStreakReminders(env: Env): Promise<void> {
     const gap = daysBetweenUtcDates(entry.lastSolvedDate, today);
     const recoverable = gap === 1 || (gap === 2 && entry.freezes > 0);
     if (!recoverable) {
-      skipped++;
+      bump('streak_already_broken');
       continue;
     }
     // Idempotency: don't double-send if the cron retries within the same day.
     const already = await env.USAGE.get(reminderSentKey(entry.userId));
     if (already === today) {
-      skipped++;
+      bump('already_reminded_today');
       continue;
     }
     if (await isUnsubscribed(env.USAGE, entry.userId)) {
-      skipped++;
+      bump('unsubscribed');
       continue;
     }
     const user = await fetchClerkUser(env, entry.userId);
     if (!user) {
-      skipped++;
+      bump('clerk_lookup_failed');
       continue;
     }
     const token = await mintUnsubscribeToken(env.USAGE, entry.userId);
@@ -2075,10 +2099,33 @@ async function runStreakReminders(env: Env): Promise<void> {
       });
       sent++;
     } else {
-      skipped++;
+      bump('send_failed');
     }
   }
   console.log(`[reminders] sent=${sent} skipped=${skipped} total=${streakers.length}`);
+  return { configured: true, sent, skipped, total: streakers.length, skipReasons };
+}
+
+/** Manually trigger runStreakReminders. Gated by Clerk auth + MAX_USER_IDS
+ *  allowlist (admin only). Returns the stats so we can debug from the browser. */
+async function handleAdminRunReminders(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  const allowlist = (env.MAX_USER_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!allowlist.includes(authState.userId)) {
+    return json({ error: 'forbidden' }, 403, cors);
+  }
+  const stats = await runStreakReminders(env);
+  return json({ ok: true, ...stats }, 200, cors);
 }
 
 function daysBetweenUtcDates(prior: string, today: string): number {
