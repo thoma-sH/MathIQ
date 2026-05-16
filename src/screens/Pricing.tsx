@@ -115,13 +115,6 @@ const FEATURES: FeatureRow[] = [
     plus: false,
     pro: true,
   },
-  {
-    label: 'Daily Challenge LaTeX',
-    detail: 'Render your Daily Challenge work as a typeset PDF, 1 / day',
-    free: false,
-    plus: false,
-    pro: true,
-  },
 ];
 
 export function Pricing({ onBack }: PricingProps) {
@@ -321,7 +314,6 @@ export function Pricing({ onBack }: PricingProps) {
             'LaTeX Mode — typeset PDFs',
             'Exam Mode — generate full exams',
             'Exam grading',
-            'Daily Challenge LaTeX render',
             'Everything in Plus',
           ]}
           ribbon="Best for serious students"
