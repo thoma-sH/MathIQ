@@ -356,14 +356,39 @@ Grade this submission. Return JSON only.`;
           cache_control: { type: 'ephemeral' },
         },
       ],
-      // Assistant prefill of `{` forces Claude to start emitting JSON
-      // immediately — eliminates the prose-explanation failure mode we saw
-      // on short typed answers ("9!" → Claude thinks it's incomplete and
-      // narrates instead of grading).
-      messages: [
-        { role: 'user', content: userMessage },
-        { role: 'assistant', content: '{' },
+      messages: [{ role: 'user', content: userMessage }],
+      // Forced tool call — structured outputs without prose-escape risk.
+      // Sonnet 4.6 dropped support for assistant message prefill; tool use
+      // is the supported path to guaranteed JSON.
+      tools: [
+        {
+          name: 'submit_grade',
+          description:
+            "Submit the grade for the student's answer. Always call this — never reply in prose.",
+          input_schema: {
+            type: 'object',
+            properties: {
+              correct: {
+                type: 'boolean',
+                description:
+                  "Whether the student's final answer matches the canonical answer (with notation tolerance).",
+              },
+              studentAnswer: {
+                type: 'string',
+                description:
+                  "Short string of the student's final answer, e.g. 'x = 4', '362880', '1/2'.",
+              },
+              feedback: {
+                type: 'string',
+                description:
+                  'One sentence: what they got right OR where they went wrong.',
+              },
+            },
+            required: ['correct', 'studentAnswer', 'feedback'],
+          },
+        },
       ],
+      tool_choice: { type: 'tool', name: 'submit_grade' },
     }),
   });
 
@@ -374,26 +399,22 @@ Grade this submission. Return JSON only.`;
   }
 
   const data = (await resp.json()) as {
-    content?: Array<{ type: string; text?: string }>;
+    content?: Array<{
+      type: string;
+      input?: { correct?: boolean; studentAnswer?: string; feedback?: string };
+    }>;
   };
-  const continuation = data.content?.find((b) => b.type === 'text')?.text?.trim() ?? '';
-  if (!continuation) return null;
-  // Prepend the prefilled `{` so the assembled response is valid JSON.
-  const text = '{' + continuation;
-
-  let parsed: { correct?: boolean; studentAnswer?: string; feedback?: string };
-  try {
-    parsed = JSON.parse(stripCodeFences(text));
-  } catch {
-    console.error('[challenge-grade] malformed JSON', text.slice(0, 200));
+  const toolUse = data.content?.find((b) => b.type === 'tool_use');
+  if (!toolUse?.input || typeof toolUse.input.correct !== 'boolean') {
+    console.error('[challenge-grade] no tool_use in response');
     return null;
   }
-  if (typeof parsed.correct !== 'boolean') return null;
 
   return {
-    correct: parsed.correct,
-    studentAnswer: typeof parsed.studentAnswer === 'string' ? parsed.studentAnswer : '',
-    feedback: typeof parsed.feedback === 'string' ? parsed.feedback : '',
+    correct: toolUse.input.correct,
+    studentAnswer:
+      typeof toolUse.input.studentAnswer === 'string' ? toolUse.input.studentAnswer : '',
+    feedback: typeof toolUse.input.feedback === 'string' ? toolUse.input.feedback : '',
   };
 }
 
