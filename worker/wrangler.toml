@@ -102,7 +102,7 @@ STRIPE_PORTAL_RETURN_URL = "https://mathiq.io/"
 # Streak reminder email — RESEND_API_KEY is set as a secret. REMINDER_FROM_EMAIL
 # must use a domain verified in Resend (DKIM + SPF DNS records in place).
 # Example: "MathIQ <streaks@mathiq.io>".
-REMINDER_FROM_EMAIL = ""
+REMINDER_FROM_EMAIL = "math.iq.support@gmail.com"
 
 # Public origin used in email links (unsubscribe especially). Leave empty to
 # fall back to the workers.dev URL; set to a custom-domain origin once /api/email/*
