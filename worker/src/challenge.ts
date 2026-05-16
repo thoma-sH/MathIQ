@@ -317,20 +317,28 @@ export interface ChallengeGradeResult {
   feedback: string;
 }
 
-const GRADE_SYSTEM_PROMPT = `You are grading a single math problem. The student has submitted handwritten work that has been OCR'd to text. Your job: determine if their final answer is correct, identify what answer they arrived at, and give one sentence of feedback.
+const GRADE_SYSTEM_PROMPT = `You are grading a single math problem for the MathIQ Daily Challenge.
 
-RULES:
-- Output ONLY valid JSON conforming to the schema below. No prose before or after. No code fences.
-- Be charitable about notation: \\frac{a}{b} and a/b are the same. 0.5 and 1/2 are the same. x = 4 and "the answer is 4" are the same.
-- "correct" is true if the student's final answer matches the canonical answer, even if work has small errors along the way. We grade the answer, not the work.
-- If the student's work is unreadable or didn't reach a final answer, mark correct=false and say so in feedback.
+CORE RULE — we grade the FINAL ANSWER, not the work. Find the student's final answer somewhere in their submission: circled, boxed, written at the end, marked as their conclusion, or simply the only number present. Compare that final answer to the canonical answer. If they match — with notation tolerance — correct=true. The amount or quality of work shown does NOT affect correctness. A student who simply writes the right answer with no work whatsoever earns FULL MARKS.
 
-JSON SCHEMA:
-{
-  "correct": <boolean>,
-  "studentAnswer": "<short string, the final value/expression the student arrived at>",
-  "feedback": "<one sentence: what they got right, OR where they went wrong>"
-}`;
+NOTATION TOLERANCE (treat as equivalent):
+- -59  =  "negative 59"  =  "−59" (unicode minus)
+- 1/2  =  0.5  =  \\frac{1}{2}
+- pi/3 =  π/3  =  \\pi/3
+- x = 4  =  "x is 4"  =  "the answer is 4"  =  just "4"
+- 9! = 362880
+
+CORRECT vs INCORRECT:
+- correct=true: their identifiable final answer matches the canonical (with notation tolerance), even if work has errors or there is no work at all.
+- correct=false: their final answer differs from the canonical, OR no final answer is identifiable anywhere in the submission.
+
+FEEDBACK (one sentence — be specific and warm):
+- Correct + clean work shown → specific positive reinforcement about what they did well (e.g. "Clean binomial expansion — every coefficient lined up.").
+- Correct + minimal/no work → brief acknowledgment ("Spot on.").
+- Incorrect + work shown → helpful tip pointing at the likely mistake (e.g. "Looks like a sign slip when expanding (3x−2)^4 — every odd power of −2 flips negative.").
+- Incorrect + no work → quick suggestion to try working it through.
+
+Always submit via the submit_grade tool. Never reply in prose.`;
 
 export type ChallengeInputKind = 'photo' | 'typed';
 
@@ -344,37 +352,34 @@ export async function gradeChallengeSubmission(
   // compares against it (fixed truth). When absent (legacy records), the
   // grader has to derive — that path is more error-prone, so newer records
   // always include canonicalAnswer.
-  const canonicalLine = record.canonicalAnswer
-    ? `CANONICAL ANSWER (already verified — trust this): ${record.canonicalAnswer}`
-    : `EXPECTED ANSWER FORM: ${record.answerForm}`;
-  const gradingNote = record.canonicalAnswer
-    ? `Compare the student's answer to the canonical answer above. Be charitable about notation (sign placement, fraction vs decimal, equivalent forms — e.g. -59 = "negative 59", 1/2 = 0.5, x=4 = "the answer is 4"). The canonical answer IS the truth — do not second-guess it.`
-    : `Compute the correct answer yourself, then compare to the student's submission with notation tolerance.`;
+  const truthLine = record.canonicalAnswer
+    ? `CANONICAL ANSWER (already verified — this IS the truth): ${record.canonicalAnswer}`
+    : `EXPECTED ANSWER FORM: ${record.answerForm}\n(No canonical stored for this record — compute the correct answer yourself, then grade.)`;
 
   const userMessage =
     inputKind === 'typed'
       ? `PROBLEM:
 ${record.problemText}
 
-${canonicalLine}
+${truthLine}
 
-STUDENT'S TYPED FINAL ANSWER (just the answer — there is no work to inspect):
+STUDENT'S TYPED SUBMISSION (likely just their final answer, may contain stray notes):
 ---
 ${studentWorkText}
 ---
 
-${gradingNote}`
+Find the student's logical final answer in this submission. If it matches the canonical (with notation tolerance), correct=true — even if they wrote nothing else. Then call submit_grade.`
       : `PROBLEM:
 ${record.problemText}
 
-${canonicalLine}
+${truthLine}
 
-STUDENT'S OCR'd WORK:
+STUDENT'S OCR'd WORK FROM PHOTO (may include scratch, false starts, crossed-out attempts, and the final answer somewhere within):
 ---
 ${studentWorkText}
 ---
 
-Grade this submission. ${gradingNote}`;
+Find the student's FINAL answer — circled, boxed, written at the end, marked as their conclusion, or simply the answer they arrived at. Compare that to the canonical with notation tolerance. If matching → correct=true with feedback noting any clean work. If not → correct=false with a helpful tip pointing at the likely mistake. A student who simply photographed the correct answer with no work shown earns full marks. Call submit_grade.`;
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
