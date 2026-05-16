@@ -126,10 +126,11 @@ function TrustIrisCard() {
         Trust Iris
       </h2>
       <p style={{ fontSize: 14, color: T.muted, lineHeight: 1.55, margin: '0 0 14px' }}>
-        Skip the &ldquo;Did you mean…?&rdquo; review on every upload and
-        auto-accept Iris&apos;s suggested corrections. Faster, recommended
-        after you&apos;ve run a few uploads and seen the quality. You can
-        flip this off any time to verify again.
+        Skip the &ldquo;Did you mean…?&rdquo; OCR-uncertainty review on every
+        upload. Math is never edited &mdash; this only affects operator-misread
+        checks where Mathpix wasn&apos;t sure (an <code>=</code> it read as a
+        <code> &minus;</code>, etc.). Recommended once you&apos;ve seen the
+        quality.
       </p>
       <label
         style={{
