@@ -89,14 +89,14 @@ const FEATURES: FeatureRow[] = [
   },
   {
     label: 'Handwritten to PDF',
-    detail: 'Upload your handwritten work, get a transcribed PDF',
+    detail: 'Photo in, faithful typeset PDF out — your work, just easier to read',
     free: false,
     plus: true,
     pro: true,
   },
   {
     label: 'LaTeX Mode',
-    detail: 'Compile your handwriting into a Computer Modern-typeset PDF',
+    detail: 'Compile your handwriting in true Computer Modern LaTeX — preserved byte-for-byte',
     free: false,
     plus: false,
     pro: true,
@@ -458,7 +458,7 @@ function LatexShowcase() {
           margin: '0 0 8px',
         }}
       >
-        Hand it in. Typed.
+        Your work, beautifully typeset.
       </h2>
       <p
         style={{
@@ -469,8 +469,10 @@ function LatexShowcase() {
           maxWidth: 560,
         }}
       >
-        Snap your handwritten work. Iris reads it, fixes notation, and renders a
-        Computer Modern PDF in the exact LaTeX a professor expects. Tap the
+        Snap a photo of your handwritten work. We transcribe it faithfully —
+        preserving every step exactly as you wrote it — and typeset the result
+        in Computer Modern LaTeX. Your math, just impossibly easy to read.
+        Built for people who love neat work; we never fix, never edit. Tap the
         page to see it transform.
       </p>
       <button
