@@ -353,6 +353,10 @@ export default {
       return handleAdminRunReminders(request, env, cors);
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/admin/reset-daily-counters') {
+      return handleAdminResetDailyCounters(request, env, cors);
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
       return handleHomeworkTranscribe(request, env, cors);
     }
@@ -2126,6 +2130,45 @@ async function handleAdminRunReminders(
   }
   const stats = await runStreakReminders(env);
   return json({ ok: true, ...stats }, 200, cors);
+}
+
+/** Reset the calling admin's per-day Daily Challenge counters so they can
+ *  re-grade and re-render during testing. Decrements both the grade counter
+ *  and the LaTeX render counter to zero. Gated by MAX_USER_IDS. */
+async function handleAdminResetDailyCounters(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  const allowlist = (env.MAX_USER_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!allowlist.includes(authState.userId)) {
+    return json({ error: 'forbidden' }, 403, cors);
+  }
+  const gradeCounter = userChallengeGradeCounter(env.USAGE_DO, authState.userId);
+  const latexCounter = userChallengeLatexCounter(env.USAGE_DO, authState.userId);
+  let gradeReset = 0;
+  while ((await peek(gradeCounter)) > 0) {
+    await decrement(gradeCounter);
+    gradeReset++;
+  }
+  let latexReset = 0;
+  while ((await peek(latexCounter)) > 0) {
+    await decrement(latexCounter);
+    latexReset++;
+  }
+  // Also clear today's attempt + saved LaTeX so a fresh grade isn't blocked
+  // by "you've already submitted today" lookups.
+  const today = todayUtcDateKey();
+  await env.USAGE.delete(`challenge-attempt:user:${authState.userId}:${today}`);
+  await env.USAGE.delete(`challenge-latex-pdf:user:${authState.userId}:${today}`);
+  return json({ ok: true, gradeReset, latexReset }, 200, cors);
 }
 
 function daysBetweenUtcDates(prior: string, today: string): number {
