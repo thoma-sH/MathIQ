@@ -197,6 +197,16 @@ interface ClassifyBody {
 }
 
 export default {
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    // Let the work continue past the handler return so KV writes and email
+    // sends don't get truncated by cold-start exit.
+    ctx.waitUntil(runStreakReminders(env));
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
@@ -2002,6 +2012,81 @@ function validatePriceConfig(env: Env, interval: SubscriptionInterval): string |
     return 'stripe secret key not configured';
   }
   return null;
+}
+
+async function runStreakReminders(env: Env): Promise<void> {
+  if (!env.RESEND_API_KEY || !env.REMINDER_FROM_EMAIL) {
+    console.warn('[reminders] RESEND_API_KEY or REMINDER_FROM_EMAIL not set; skipping');
+    return;
+  }
+  const today = todayUtcDateKey();
+  const reminderSentKey = (uid: string) => `lastReminderSent:${uid}`;
+  const unsubBase =
+    env.WORKER_PUBLIC_URL ?? 'https://mathiq-api.t-hamilton0416.workers.dev';
+
+  const streakers = await listActiveStreakers(env.USAGE);
+  let sent = 0;
+  let skipped = 0;
+
+  for (const entry of streakers) {
+    // Already solved today — nothing to remind about.
+    if (entry.lastSolvedDate === today) {
+      skipped++;
+      continue;
+    }
+    // Compute how stale the last solve is. The streak is only recoverable
+    // by today's solve if the gap is 1 day, OR 2 days with a freeze available.
+    const gap = daysBetweenUtcDates(entry.lastSolvedDate, today);
+    const recoverable = gap === 1 || (gap === 2 && entry.freezes > 0);
+    if (!recoverable) {
+      skipped++;
+      continue;
+    }
+    // Idempotency: don't double-send if the cron retries within the same day.
+    const already = await env.USAGE.get(reminderSentKey(entry.userId));
+    if (already === today) {
+      skipped++;
+      continue;
+    }
+    if (await isUnsubscribed(env.USAGE, entry.userId)) {
+      skipped++;
+      continue;
+    }
+    const user = await fetchClerkUser(env, entry.userId);
+    if (!user) {
+      skipped++;
+      continue;
+    }
+    const token = await mintUnsubscribeToken(env.USAGE, entry.userId);
+    const unsubscribeUrl = `${unsubBase}/api/email/unsubscribe?t=${token}`;
+    const ok = await sendReminderEmail({
+      to: user.email,
+      firstName: user.firstName,
+      streakDays: entry.current,
+      unsubscribeUrl,
+      resendApiKey: env.RESEND_API_KEY,
+      fromEmail: env.REMINDER_FROM_EMAIL,
+    });
+    if (ok) {
+      // 36-hour TTL — comfortably past tomorrow's cron run, when the key
+      // would no longer be relevant anyway (lastSolvedDate would have moved).
+      await env.USAGE.put(reminderSentKey(entry.userId), today, {
+        expirationTtl: 36 * 60 * 60,
+      });
+      sent++;
+    } else {
+      skipped++;
+    }
+  }
+  console.log(`[reminders] sent=${sent} skipped=${skipped} total=${streakers.length}`);
+}
+
+function daysBetweenUtcDates(prior: string, today: string): number {
+  const [py, pm, pd] = prior.split('-').map(Number);
+  const [ty, tm, td] = today.split('-').map(Number);
+  return Math.round(
+    (Date.UTC(ty, tm - 1, td) - Date.UTC(py, pm - 1, pd)) / (24 * 60 * 60 * 1000),
+  );
 }
 
 async function fetchClerkUserEmail(env: Env, userId: string): Promise<string | undefined> {
