@@ -99,7 +99,13 @@ import {
   todayUtcDateKey,
   type ChallengeRecord,
 } from './challenge';
-import { getStreak, recordSolve } from './streak';
+import { getStreak, recordSolve, listActiveStreakers } from './streak';
+import {
+  consumeUnsubscribeToken,
+  isUnsubscribed,
+  mintUnsubscribeToken,
+  sendReminderEmail,
+} from './email';
 import {
   consumeTrial,
   getRemainingTrials,
@@ -153,6 +159,16 @@ interface Env {
   // (logged as a warning). Set via `wrangler secret put TURNSTILE_SECRET_KEY`
   // once you've created a Turnstile site in the Cloudflare dashboard.
   TURNSTILE_SECRET_KEY?: string;
+  // Resend API key for outbound streak-reminder emails. If unset, the
+  // scheduled reminder cron skips silently (logs a warning).
+  // Set via `wrangler secret put RESEND_API_KEY`.
+  RESEND_API_KEY?: string;
+  // Verified sender for reminder emails, e.g. "MathIQ <streaks@mathiq.io>".
+  // Set as a [vars] entry in wrangler.toml.
+  REMINDER_FROM_EMAIL?: string;
+  // Public origin used in email links (unsubscribe especially). Defaults to
+  // the workers.dev hostname when unset.
+  WORKER_PUBLIC_URL?: string;
 }
 
 const CLASSIFY_MODEL = 'claude-sonnet-4-6';
@@ -197,9 +213,11 @@ export default {
     // Some endpoints are public-by-design and must work without an Origin
     // header. iframe loads and direct PDF downloads don't send Origin on
     // GET navigations, so the share endpoints have to be exempt — they're
-    // the whole point of shareable links.
+    // the whole point of shareable links. Email-link clicks (unsubscribe)
+    // come from third-party mail clients with no Origin either.
     const publicEndpoint =
       url.pathname === '/api/health' ||
+      url.pathname === '/api/email/unsubscribe' ||
       (request.method === 'GET' && url.pathname.startsWith('/api/share/'));
     if (!originAllowed && !publicEndpoint) {
       return new Response('forbidden origin', { status: 403 });
@@ -312,6 +330,13 @@ export default {
         return handleSharePdf(request, env, cors, rest.slice(0, -'/pdf'.length));
       }
       return handleShareGet(request, env, cors, rest);
+    }
+
+    if (
+      url.pathname === '/api/email/unsubscribe' &&
+      (request.method === 'GET' || request.method === 'POST')
+    ) {
+      return handleUnsubscribe(request, env);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
@@ -1980,21 +2005,85 @@ function validatePriceConfig(env: Env, interval: SubscriptionInterval): string |
 }
 
 async function fetchClerkUserEmail(env: Env, userId: string): Promise<string | undefined> {
+  const user = await fetchClerkUser(env, userId);
+  return user?.email;
+}
+
+async function fetchClerkUser(
+  env: Env,
+  userId: string,
+): Promise<{ email: string; firstName: string | null } | null> {
   try {
     const resp = await fetch(`https://api.clerk.com/v1/users/${userId}`, {
       headers: { Authorization: `Bearer ${env.CLERK_SECRET_KEY}` },
     });
-    if (!resp.ok) return undefined;
+    if (!resp.ok) return null;
     const user = (await resp.json()) as {
       email_addresses?: Array<{ id: string; email_address: string }>;
       primary_email_address_id?: string | null;
+      first_name?: string | null;
     };
-    if (!user.email_addresses?.length) return undefined;
+    if (!user.email_addresses?.length) return null;
     const primary = user.email_addresses.find((e) => e.id === user.primary_email_address_id);
-    return (primary ?? user.email_addresses[0]).email_address;
+    const email = (primary ?? user.email_addresses[0]).email_address;
+    return { email, firstName: user.first_name?.trim() || null };
   } catch {
-    return undefined;
+    return null;
   }
+}
+
+async function handleUnsubscribe(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const token = url.searchParams.get('t');
+  if (!token) return unsubscribePage('Invalid unsubscribe link.', 400);
+
+  const userId = await consumeUnsubscribeToken(env.USAGE, token);
+  if (!userId) {
+    return unsubscribePage(
+      'That unsubscribe link has expired or already been used.',
+      400,
+    );
+  }
+  // RFC 8058 one-click POST — Gmail/Outlook require a successful body-less
+  // response, not the HTML confirmation page that humans see.
+  if (request.method === 'POST') {
+    return new Response('ok', { status: 200 });
+  }
+  return unsubscribePage(
+    'You have been unsubscribed from MathIQ streak reminders.',
+    200,
+  );
+}
+
+function unsubscribePage(message: string, status: number): Response {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MathIQ — Unsubscribe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',sans-serif;max-width:540px;margin:60px auto;padding:24px;color:#1a2b1a;background:#d4e26a;line-height:1.55;">
+  <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:0.18em;color:rgba(26,43,26,0.6);text-transform:uppercase;margin-bottom:10px;">
+    MATHIQ
+  </div>
+  <h1 style="font-size:22px;font-weight:700;line-height:1.2;letter-spacing:-0.01em;margin:0 0 20px;">
+    ${message.replace(/[&<>"']/g, (c) =>
+      c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+    )}
+  </h1>
+  <a href="https://mathiq.io/" style="display:inline-block;background:#1a4d6e;color:#d4e26a;padding:12px 22px;text-decoration:none;font-weight:600;font-size:14px;">
+    Back to MathIQ &rarr;
+  </a>
+</body>
+</html>`;
+  return new Response(html, {
+    status,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
 }
 
 // ─── Daily Challenge ──────────────────────────────────────────────────
