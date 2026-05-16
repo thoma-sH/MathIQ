@@ -270,13 +270,26 @@ export function Homework({ onNavigate }: HomeworkProps) {
           maxWidth: 560,
         }}
       >
-        Upload a PDF or photo of your handwritten work. Iris transcribes it,
-        then you can print a clean PDF to turn in
-        {isPro(tier) ? ' — or compile a fully typeset LaTeX PDF.' : '.'}
+        Upload a PDF or photo of your handwritten work. We transcribe it
+        faithfully and render a clean typeset PDF
+        {isPro(tier) ? ' — or compile it in true Computer Modern LaTeX.' : '.'}
       </p>
 
       {state.kind === 'idle' && (
         <>
+          <div
+            style={{
+              fontFamily: T.mono,
+              fontSize: 11,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: T.muted,
+              marginBottom: 18,
+              lineHeight: 1.5,
+            }}
+          >
+            PRESERVES YOUR WORK · NO MATH EDITS · OCR ONLY
+          </div>
           <OutputToggle output={output} onChange={setOutput} />
           {output === 'formatted' ? (
             <>
