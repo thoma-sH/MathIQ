@@ -702,13 +702,13 @@ const SHOWCASE: ShowcaseEntry[] = [
     tier: 'Plus',
     tierColor: 'var(--accent)',
     title: 'Handwritten to PDF',
-    sub: 'Upload a photo or scan of your handwritten work. Mathpix transcribes it, Iris cleans it up, you print a submission-ready PDF.',
+    sub: 'Photo of your handwriting in, a faithful typeset PDF out. Mathpix transcribes, we typeset — your exact work, just neater to read.',
   },
   {
     tier: 'Pro',
     tierColor: 'var(--accent-2)',
     title: 'LaTeX Mode',
-    sub: 'Same upload, but Pro compiles your handwriting into a Computer Modern-typeset PDF — indistinguishable from an Overleaf paper.',
+    sub: 'Same upload, but Pro typesets your handwriting in true Computer Modern LaTeX — preserved byte-for-byte, output looks like Overleaf.',
   },
   {
     tier: 'Pro',
