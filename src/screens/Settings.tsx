@@ -17,6 +17,8 @@ import {
   type SubscriptionStateResponse,
   type Tier as BillingTier,
 } from '../billing/client';
+import { listHistory } from '../walkthroughs/history';
+import { COURSES_BY_ID } from '../walkthroughs/courses';
 import type { Route } from '../router';
 
 interface SettingsProps {
@@ -69,6 +71,7 @@ export function Settings({ onNavigate }: SettingsProps) {
 
       <SignedIn>
         <NavCard onNavigate={onNavigate} />
+        <TopicsCard onNavigate={onNavigate} />
       </SignedIn>
 
       <PromptFlowCard />
@@ -168,6 +171,142 @@ function writeBoolPref(key: string, value: boolean): void {
   } catch {
     // ignore — private mode etc.
   }
+}
+
+interface TopicCount {
+  topicId: string;
+  topicTitle: string;
+  courseId: string;
+  courseTitle: string;
+  count: number;
+}
+
+function TopicsCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
+  const { getToken } = useAuth();
+  const [topics, setTopics] = useState<TopicCount[] | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      // First page only — most-recent first. A future worker /api/history/stats
+      // endpoint could aggregate the full 90-day window server-side.
+      const { items } = await listHistory({ getToken });
+      if (cancelled) return;
+      const counts = new Map<string, TopicCount>();
+      for (const item of items) {
+        const existing = counts.get(item.topicId);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          counts.set(item.topicId, {
+            topicId: item.topicId,
+            topicTitle: item.topicTitle,
+            courseId: item.courseId,
+            courseTitle: COURSES_BY_ID[item.courseId]?.title ?? item.courseId,
+            count: 1,
+          });
+        }
+      }
+      const sorted = Array.from(counts.values())
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
+      setTopics(sorted);
+      setTotalCount(items.length);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
+
+  if (topics === null) return null;
+  if (topics.length === 0) return null;
+
+  return (
+    <section
+      className="reveal reveal-3"
+      style={{
+        padding: '18px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginTop: 14,
+      }}
+    >
+      <div style={kicker()}>YOUR TOPICS</div>
+      <h2
+        style={{
+          fontFamily: T.sans,
+          fontSize: 18,
+          fontWeight: 700,
+          letterSpacing: '-0.01em',
+          margin: '8px 0 4px',
+        }}
+      >
+        {totalCount} walkthrough{totalCount === 1 ? '' : 's'} · last 90 days
+      </h2>
+      <p style={{ fontSize: 13, color: T.muted, lineHeight: 1.5, margin: '0 0 14px' }}>
+        The topics you've leaned on most. Tap to revisit.
+      </p>
+      <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {topics.map((t) => (
+          <li key={`${t.courseId}.${t.topicId}`}>
+            <button
+              type="button"
+              onClick={() =>
+                onNavigate({ name: 'topic', courseId: t.courseId, topicId: t.topicId })
+              }
+              className="btn-press"
+              style={{
+                width: '100%',
+                background: 'transparent',
+                border: 'none',
+                borderTop: `1px solid ${T.hair}`,
+                padding: '10px 0',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                color: T.ink,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+              }}
+            >
+              <span style={{ minWidth: 0 }}>
+                <span
+                  style={{
+                    fontFamily: T.mono,
+                    fontSize: 10,
+                    letterSpacing: '0.16em',
+                    textTransform: 'uppercase',
+                    color: T.muted,
+                    display: 'block',
+                    marginBottom: 2,
+                  }}
+                >
+                  {t.courseTitle}
+                </span>
+                <span style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.3 }}>
+                  {t.topicTitle}
+                </span>
+              </span>
+              <span
+                style={{
+                  fontFamily: T.mono,
+                  fontSize: 13,
+                  color: T.accent,
+                  fontWeight: 600,
+                  flexShrink: 0,
+                }}
+              >
+                ×{t.count}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function NavCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
