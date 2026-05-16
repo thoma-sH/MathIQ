@@ -7,7 +7,7 @@ import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
-import { fetchTodaysChallenge, type TodaysChallenge } from '../billing/challenge';
+import { fetchTodaysChallenge, fetchStreak, type TodaysChallenge, type StreakState } from '../billing/challenge';
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
@@ -29,7 +29,7 @@ function getTimeGreeting(hour: number): string {
 }
 
 export function Landing({ onNavigate }: LandingProps) {
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { user } = useUser();
   const { dayLabel, scribeSrc } = useMemo(() => getDailyContent(), []);
   const typedLabel = useTypedString(dayLabel, 40, 220);
@@ -46,6 +46,7 @@ export function Landing({ onNavigate }: LandingProps) {
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
   const [tier, setTier] = useState<Tier | null>(null);
   const [dailyTease, setDailyTease] = useState<TodaysChallenge | null>(null);
+  const [streak, setStreak] = useState<StreakState | null>(null);
   const { requireUpgrade } = useUpgradePrompt();
 
   useEffect(() => {
@@ -68,6 +69,23 @@ export function Landing({ onNavigate }: LandingProps) {
       cancelled = true;
     };
   }, []);
+
+  // Streak fetch is signed-in only — the worker rejects /api/streak without auth.
+  // Drives the daily card's urgency state when a streak is at risk.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    void fetchStreak({ getToken }).then((s) => {
+      if (!cancelled) setStreak(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken]);
+
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const streakAtRisk =
+    !!streak && streak.current > 0 && streak.lastSolvedDate !== todayUtc;
 
   function onHomeworkClick() {
     if (!isPaid(tier)) {
@@ -331,7 +349,9 @@ export function Landing({ onNavigate }: LandingProps) {
               marginTop: 8,
             }}
           >
-            Solve today
+            {streakAtRisk
+              ? `Streak · ${streak!.current} · ends tonight`
+              : 'Solve today'}
           </div>
         </a>
       )}
