@@ -887,14 +887,11 @@ function buildShareString(challenge: TodaysChallenge, response: ChallengeGradeRe
     response.streak && response.streak.current > 0
       ? `\nStreak · ${response.streak.current} day${response.streak.current === 1 ? '' : 's'}`
       : '';
-  const shareUrl = response.shareId
-    ? `https://mathiq.io/share/${response.shareId}`
-    : `https://mathiq.io/`;
   return [
     `MathIQ #${challenge.challengeNumber} · ${difficultyLabel(tier)}`,
     `${challenge.courseTitle} · ${challenge.topicTitle}`,
     `${verdict}${streakLine}`,
-    shareUrl,
+    `https://mathiq.io/share/${response.shareId}`,
   ].join('\n');
 }
 

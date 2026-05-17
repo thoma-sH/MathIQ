@@ -18,7 +18,6 @@ import { T } from '../design/tokens';
 import { CheckIcon, CrossIcon, DifficultyChip } from '../design/icons';
 import {
   fetchSharedAttempt,
-  sharedPdfUrl,
   type SharedChallenge,
 } from '../billing/challenge';
 
@@ -204,7 +203,7 @@ function SharedView({ data }: { data: SharedChallenge }) {
           padding: '20px 22px',
           border: `1px solid ${T.ink}`,
           background: data.grade.correct ? T.paper2 : T.paper,
-          marginBottom: data.hasPdf ? 18 : 28,
+          marginBottom: data.studentMmd ? 18 : 28,
         }}
       >
         <div style={{ ...kicker(), display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -243,55 +242,27 @@ function SharedView({ data }: { data: SharedChallenge }) {
         )}
       </section>
 
-      {/* Typeset PDF — the centerpiece for shared attempts that rendered one.
-       *  The LaTeX preamble uses A4 paper (210mm × 297mm), so the container
-       *  aspect ratio matches that, not US Letter. The `#zoom=page-width`
-       *  hash tells the browser's PDF viewer to fit horizontally on load
-       *  instead of opening at its default zoom (usually 100%, which gets
-       *  cropped). Honored by Chrome/Edge/pdf.js. */}
-      {data.hasPdf && (
+      {/* Their submitted work — rendered inline via KaTeX from the MMD the
+       *  student sent in (typed or OCR'd from a photo). No PDF round-trip;
+       *  the same renderer used for the problem above handles math here. */}
+      {data.studentMmd && (
         <section style={{ marginBottom: 28 }}>
-          <div style={{ ...kicker(), marginBottom: 8 }}>THEIR TYPESET WORK · LATEX</div>
+          <div style={{ ...kicker(), marginBottom: 8 }}>THEIR WORK</div>
           <div
             style={{
+              padding: '20px 22px',
               border: `1px solid ${T.ink}`,
               background: '#fff',
-              aspectRatio: '210 / 297',
-              width: '100%',
-              maxWidth: 720,
-              margin: '0 auto',
-              overflow: 'hidden',
-            }}
-          >
-            <iframe
-              src={`${sharedPdfUrl(data.shareId)}#zoom=page-width&view=FitH&toolbar=0`}
-              title="Typeset LaTeX submission"
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                display: 'block',
-              }}
-            />
-          </div>
-          <a
-            href={sharedPdfUrl(data.shareId)}
-            download={`mathiq-challenge-${data.date}.pdf`}
-            className="btn-press chamfer"
-            style={{
-              display: 'inline-block',
-              marginTop: 14,
-              background: 'transparent',
+              fontSize: 16,
+              lineHeight: 1.6,
               color: T.ink,
-              border: `1px solid ${T.ink}`,
-              padding: '10px 18px',
-              fontSize: 13,
-              fontFamily: T.sans,
-              textDecoration: 'none',
+              overflowX: 'auto',
             }}
           >
-            Download PDF ↓
-          </a>
+            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+              {data.studentMmd}
+            </ReactMarkdown>
+          </div>
         </section>
       )}
 

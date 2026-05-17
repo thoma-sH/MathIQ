@@ -41,9 +41,8 @@ export interface ChallengeGradeResponse {
   streak: StreakState | null;
   challengeNumber: number;
   anonymous: boolean;
-  /** Opaque share id minted by the worker on successful grade. Anonymous
-   *  submissions don't get one (we don't track anonymous attempts). */
-  shareId: string | null;
+  /** Opaque share id minted by the worker on every successful grade. */
+  shareId: string;
 }
 
 export interface SharedChallenge {
@@ -55,7 +54,8 @@ export interface SharedChallenge {
   difficulty: ChallengeDifficulty;
   problemText: string;
   grade: ChallengeGradeResult;
-  hasPdf: boolean;
+  /** Student's submitted work as Mathpix Markdown — rendered client-side via KaTeX. */
+  studentMmd: string;
 }
 
 /** Public read of a shared attempt. No auth required. */
@@ -63,11 +63,6 @@ export async function fetchSharedAttempt(shareId: string): Promise<SharedChallen
   const resp = await fetch(`${WORKER_URL}/api/share/${encodeURIComponent(shareId)}`);
   if (!resp.ok) return null;
   return (await resp.json()) as SharedChallenge;
-}
-
-/** Direct URL to the PDF for a shared attempt — drop this into an iframe src. */
-export function sharedPdfUrl(shareId: string): string {
-  return `${WORKER_URL}/api/share/${encodeURIComponent(shareId)}/pdf`;
 }
 
 interface AuthOpts {

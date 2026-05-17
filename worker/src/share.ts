@@ -1,29 +1,32 @@
 /**
  * Shareable Daily Challenge attempts.
  *
- * When a user grades the daily challenge, we auto-mint an opaque shareId
- * and return it in the grade response. The user copies a share URL
- * containing the id (e.g. https://mathiq.io/share/abc123def4567890) and
- * anyone clicking through gets a public read-only page showing the
- * challenge problem, the sharer's grade, and (if they rendered it) their
- * typeset LaTeX PDF.
+ * When a user grades the daily challenge — signed in OR anonymous — we
+ * auto-mint an opaque shareId and return it in the grade response. The
+ * user copies a share URL containing the id (e.g.
+ * https://mathiq.io/share/abc123def4567890) and anyone clicking through
+ * gets a public read-only page showing the challenge problem, the
+ * sharer's grade, and their typeset work rendered inline.
  *
- * Privacy posture: the share record holds only `{userId, date}` — no
- * email, name, or anything else identifiable. The public endpoint
- * resolves the userId to the attempt + PDF stored under that user, but
- * never reveals userId to the consumer.
+ * Privacy posture: the share record is self-contained — it holds the
+ * student's submitted work + grade + date, with no userId or email.
+ * That means anonymous attempts can be shared too, and the public
+ * endpoint never has anything identifiable to leak.
  *
  * KV:
  *   share:SHAREID  →  ShareRecord  (7-day TTL, same as the challenge itself)
  */
+import type { ChallengeGradeResult } from './challenge';
 
 const SHARE_KEY_PREFIX = 'share:';
 const SHARE_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 export interface ShareRecord {
   shareId: string;
-  userId: string;
   date: string; // YYYY-MM-DD
+  challengeNumber: number;
+  studentMmd: string;
+  grade: ChallengeGradeResult;
   createdAt: number;
 }
 
@@ -46,14 +49,20 @@ function generateShareId(): string {
 
 export async function createShare(
   kv: KVNamespace,
-  userId: string,
-  date: string,
+  args: {
+    date: string;
+    challengeNumber: number;
+    studentMmd: string;
+    grade: ChallengeGradeResult;
+  },
 ): Promise<ShareRecord> {
   const shareId = generateShareId();
   const record: ShareRecord = {
     shareId,
-    userId,
-    date,
+    date: args.date,
+    challengeNumber: args.challengeNumber,
+    studentMmd: args.studentMmd,
+    grade: args.grade,
     createdAt: Date.now(),
   };
   await kv.put(key(shareId), JSON.stringify(record), {

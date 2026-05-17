@@ -28,7 +28,7 @@ interface ShareApiResponse {
     studentAnswer: string;
     feedback: string;
   };
-  hasPdf: boolean;
+  studentMmd: string;
 }
 
 const DIFFICULTY_LABEL: Record<ShareApiResponse['difficulty'], string> = {
