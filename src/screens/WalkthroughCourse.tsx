@@ -1,15 +1,12 @@
-import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import { NotFound } from './NotFound';
-import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { fetchSubscriptionState } from '../billing/client';
 import { isPro } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
+import { MathMarkdown } from '../components/MathMarkdown';
+import { useAsync } from '../hooks/useAsync';
 import type { Topic } from '../walkthroughs/types';
 import type { Route } from '../router';
 
@@ -56,15 +53,13 @@ function TopicCard({
       >
         {topic.title}
       </div>
-      <div
+      <MathMarkdown
         className="markdown-body"
         style={{ fontSize: 13, color: T.muted, lineHeight: 1.4 }}
       >
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-          {topic.blurb}
-        </ReactMarkdown>
-      </div>
-      <div
+        {topic.blurb}
+      </MathMarkdown>
+      <MathMarkdown
         className="markdown-body"
         style={{
           marginTop: 4,
@@ -75,10 +70,8 @@ function TopicCard({
           overflowX: 'auto',
         }}
       >
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-          {topic.exampleProblem}
-        </ReactMarkdown>
-      </div>
+        {topic.exampleProblem}
+      </MathMarkdown>
       <span
         className="arrow-nudge"
         aria-hidden
@@ -100,18 +93,8 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
   const course = COURSES_BY_ID[courseId];
   const { getToken } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const [tier, setTier] = useState<Tier | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const sub = await fetchSubscriptionState({ getToken });
-      if (!cancelled) setTier(sub?.tier ?? null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const tier = subAsync.data?.tier ?? null;
 
   if (!course) {
     return (

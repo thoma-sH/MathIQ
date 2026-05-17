@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SignedIn,
   SignedOut,
@@ -8,17 +8,28 @@ import {
   useUser,
 } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
+import { kicker as kickerStyle } from '../design/primitives';
+import {
+  KEY_TRUST_IRIS,
+  fullKey,
+  readBool,
+  writeBool,
+} from '../lib/storage';
+
+// Local: Settings's kicker historically had marginBottom: 10. Pin that
+// default so the migration is pixel-identical.
+const kicker = () => kickerStyle(10);
 import { usePromptFlow, type PromptFlow } from '../state/promptFlow';
 import {
   fetchSubscriptionState,
   openCustomerPortal,
   startCheckout,
   type Interval,
-  type SubscriptionStateResponse,
   type Tier as BillingTier,
 } from '../billing/client';
 import { listHistory } from '../walkthroughs/history';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
+import { useAsync } from '../hooks/useAsync';
 import type { Route } from '../router';
 
 interface SettingsProps {
@@ -84,16 +95,16 @@ export function Settings({ onNavigate }: SettingsProps) {
 }
 
 function TrustIrisCard() {
-  const [trustIris, setTrustIris] = useState<boolean>(() => readBoolPref('mathiq:trustIris'));
+  const [trustIris, setTrustIris] = useState<boolean>(() => readBool(KEY_TRUST_IRIS));
 
   function onChange(next: boolean) {
     setTrustIris(next);
-    writeBoolPref('mathiq:trustIris', next);
+    writeBool(KEY_TRUST_IRIS, next);
     // Notify the Homework screen if it's mounted on a different tab.
     try {
       window.dispatchEvent(
         new StorageEvent('storage', {
-          key: 'mathiq:trustIris',
+          key: fullKey(KEY_TRUST_IRIS),
           newValue: next ? '1' : '0',
         }),
       );
@@ -156,24 +167,6 @@ function TrustIrisCard() {
   );
 }
 
-function readBoolPref(key: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(key) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function writeBoolPref(key: string, value: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, value ? '1' : '0');
-  } catch {
-    // ignore — private mode etc.
-  }
-}
-
 interface TopicCount {
   topicId: string;
   topicTitle: string;
@@ -184,41 +177,32 @@ interface TopicCount {
 
 function TopicsCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const { getToken } = useAuth();
-  const [topics, setTopics] = useState<TopicCount[] | null>(null);
-  const [totalCount, setTotalCount] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      // First page only — most-recent first. A future worker /api/history/stats
-      // endpoint could aggregate the full 90-day window server-side.
-      const { items } = await listHistory({ getToken });
-      if (cancelled) return;
-      const counts = new Map<string, TopicCount>();
-      for (const item of items) {
-        const existing = counts.get(item.topicId);
-        if (existing) {
-          existing.count += 1;
-        } else {
-          counts.set(item.topicId, {
-            topicId: item.topicId,
-            topicTitle: item.topicTitle,
-            courseId: item.courseId,
-            courseTitle: COURSES_BY_ID[item.courseId]?.title ?? item.courseId,
-            count: 1,
-          });
-        }
+  const historyAsync = useAsync(() => listHistory({ getToken }), [getToken]);
+  // First page only — most-recent first. A future worker /api/history/stats
+  // endpoint could aggregate the full 90-day window server-side.
+  const { topics, totalCount } = useMemo(() => {
+    if (!historyAsync.data) return { topics: null as TopicCount[] | null, totalCount: 0 };
+    const items = historyAsync.data.items;
+    const counts = new Map<string, TopicCount>();
+    for (const item of items) {
+      const existing = counts.get(item.topicId);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(item.topicId, {
+          topicId: item.topicId,
+          topicTitle: item.topicTitle,
+          courseId: item.courseId,
+          courseTitle: COURSES_BY_ID[item.courseId]?.title ?? item.courseId,
+          count: 1,
+        });
       }
-      const sorted = Array.from(counts.values())
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 5);
-      setTopics(sorted);
-      setTotalCount(items.length);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
+    }
+    const sorted = Array.from(counts.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+    return { topics: sorted, totalCount: items.length };
+  }, [historyAsync.data]);
 
   if (topics === null) return null;
   if (topics.length === 0) return null;
@@ -656,29 +640,13 @@ const PLAN_LABELS: Record<BillingTier, string> = {
 
 function BillingSection() {
   const { getToken } = useAuth();
-  const [loaded, setLoaded] = useState(false);
-  const [state, setState] = useState<SubscriptionStateResponse | null>(null);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  // "Loaded" means done trying — success OR failure both flip the gate.
+  const loaded = !subAsync.loading;
+  const state = subAsync.data;
   const [interval, setInterval] = useState<Interval>('annual');
   const [pending, setPending] = useState<BillingTier | 'portal' | null>(null);
   const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetchSubscriptionState({ getToken });
-        if (!cancelled) {
-          setState(res);
-          setLoaded(true);
-        }
-      } catch {
-        if (!cancelled) setLoaded(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
 
   async function upgrade(tier: BillingTier) {
     setErr(null);
@@ -944,13 +912,3 @@ function SignedOutCard() {
   );
 }
 
-function kicker(): React.CSSProperties {
-  return {
-    fontFamily: T.mono,
-    fontSize: 11,
-    letterSpacing: '0.18em',
-    textTransform: 'uppercase',
-    color: T.muted,
-    marginBottom: 10,
-  };
-}

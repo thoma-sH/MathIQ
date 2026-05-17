@@ -1,15 +1,10 @@
 import { useState } from 'react';
+import { KEY_PROMPT_FLOW, readString, writeString } from '../lib/storage';
 
 export type PromptFlow = 'step' | 'all';
 
-const KEY = 'mathiq:promptFlow';
-
 function read(): PromptFlow {
-  try {
-    return localStorage.getItem(KEY) === 'all' ? 'all' : 'step';
-  } catch {
-    return 'step';
-  }
+  return readString(KEY_PROMPT_FLOW) === 'all' ? 'all' : 'step';
 }
 
 export function getPromptFlow(): PromptFlow {
@@ -19,11 +14,7 @@ export function getPromptFlow(): PromptFlow {
 export function usePromptFlow(): [PromptFlow, (next: PromptFlow) => void] {
   const [value, setValue] = useState<PromptFlow>(read);
   function update(next: PromptFlow) {
-    try {
-      localStorage.setItem(KEY, next);
-    } catch {
-      // ignore
-    }
+    writeString(KEY_PROMPT_FLOW, next);
     setValue(next);
   }
   return [value, update];

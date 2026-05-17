@@ -8,18 +8,21 @@
  * No auth required. Anonymous viewers see the same content as signed-in.
  * Privacy: the page never reveals the sharer's userId or identity.
  */
-import { useEffect, useMemo, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+import { useMemo } from 'react';
 import katex from 'katex';
-import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
+import { kicker as kickerStyle } from '../design/primitives';
 import { CheckIcon, CrossIcon, DifficultyChip } from '../design/icons';
+import { MathMarkdown } from '../components/MathMarkdown';
+import { useAsync } from '../hooks/useAsync';
 import {
   fetchSharedAttempt,
   type SharedChallenge,
 } from '../billing/challenge';
+
+// Local: Share's kicker historically had no marginBottom — callers
+// override via spread when they want spacing. Pin to 0 to preserve that.
+const kicker = () => kickerStyle(0);
 
 /**
  * Render a short LaTeX string inline (no block wrapper). Used for the
@@ -50,25 +53,10 @@ interface ShareProps {
 }
 
 export function Share({ shareId }: ShareProps) {
-  const [data, setData] = useState<SharedChallenge | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void fetchSharedAttempt(shareId).then((d) => {
-      if (cancelled) return;
-      if (!d) {
-        setError("This shared challenge expired or wasn't found.");
-      } else {
-        setData(d);
-      }
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+  const { data, loading, error } = useAsync(async (signal) => {
+    const d = await fetchSharedAttempt(shareId, signal);
+    if (!d) throw new Error("This shared challenge expired or wasn't found.");
+    return d;
   }, [shareId]);
 
   return (
@@ -111,7 +99,7 @@ export function Share({ shareId }: ShareProps) {
         >
           <div style={kicker()}>SHARED CHALLENGE</div>
           <p style={{ marginTop: 12, fontSize: 15, color: T.muted, lineHeight: 1.55 }}>
-            {error}
+            {error.message}
           </p>
           <a
             href="/"
@@ -183,7 +171,7 @@ function SharedView({ data }: { data: SharedChallenge }) {
         }}
       >
         <div style={kicker()}>THE PROBLEM</div>
-        <div
+        <MathMarkdown
           style={{
             marginTop: 10,
             fontSize: 17,
@@ -191,10 +179,8 @@ function SharedView({ data }: { data: SharedChallenge }) {
             color: T.ink,
           }}
         >
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {data.problemText}
-          </ReactMarkdown>
-        </div>
+          {data.problemText}
+        </MathMarkdown>
       </section>
 
       {/* Verdict */}
@@ -248,7 +234,7 @@ function SharedView({ data }: { data: SharedChallenge }) {
       {data.studentMmd && (
         <section style={{ marginBottom: 28 }}>
           <div style={{ ...kicker(), marginBottom: 8 }}>THEIR WORK</div>
-          <div
+          <MathMarkdown
             style={{
               padding: '20px 22px',
               border: `1px solid ${T.ink}`,
@@ -259,10 +245,8 @@ function SharedView({ data }: { data: SharedChallenge }) {
               overflowX: 'auto',
             }}
           >
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {data.studentMmd}
-            </ReactMarkdown>
-          </div>
+            {data.studentMmd}
+          </MathMarkdown>
         </section>
       )}
 
@@ -325,16 +309,6 @@ function LoadingState() {
       <div style={{ height: 18, width: '70%', background: T.hair, marginTop: 6 }} />
     </div>
   );
-}
-
-function kicker(): React.CSSProperties {
-  return {
-    fontFamily: T.mono,
-    fontSize: 11,
-    letterSpacing: '0.18em',
-    textTransform: 'uppercase',
-    color: T.muted,
-  };
 }
 
 function formatDate(date: string): string {

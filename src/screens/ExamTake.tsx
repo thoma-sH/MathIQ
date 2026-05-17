@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@clerk/clerk-react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import { getExam, type ExamRecord } from '../walkthroughs/exam';
+import { MathMarkdown } from '../components/MathMarkdown';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
@@ -259,11 +256,9 @@ export function ExamTake({ courseId, recordId, onNavigate }: ExamTakeProps) {
             <div style={{ fontSize: 11, fontFamily: T.mono, letterSpacing: '0.14em', textTransform: 'uppercase', color: T.muted, marginBottom: 4 }}>
               Problem {p.index} · {p.topicTitle}
             </div>
-            <div className="markdown-body" style={{ fontSize: 15, lineHeight: 1.55 }}>
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {p.problemText}
-              </ReactMarkdown>
-            </div>
+            <MathMarkdown className="markdown-body" style={{ fontSize: 15, lineHeight: 1.55 }}>
+              {p.problemText}
+            </MathMarkdown>
           </article>
         ))}
       </div>
@@ -296,11 +291,9 @@ function ExamPrintHost({ record }: { record: ExamRecord }) {
           <section key={p.index} className="exam-problem">
             <div className="exam-problem-label">Problem {p.index}</div>
             <div className="exam-problem-topic">{p.topicTitle}</div>
-            <div className="markdown-body exam-problem-body">
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                {p.problemText}
-              </ReactMarkdown>
-            </div>
+            <MathMarkdown className="markdown-body exam-problem-body">
+              {p.problemText}
+            </MathMarkdown>
             <div className="exam-workspace" aria-hidden></div>
           </section>
         ))}

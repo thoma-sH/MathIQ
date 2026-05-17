@@ -63,6 +63,23 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
     }
   }, []);
 
+  // Track the latest captured URLs in refs so the unmount cleanup below
+  // sees the current set without re-firing whenever pages/reviewPage
+  // change. Without this, navigating away from the modal mid-capture
+  // leaks every Blob URL we created.
+  const pagesRef = useRef<ScannedPage[]>([]);
+  pagesRef.current = pages;
+  const reviewPageRef = useRef<ScannedPage | null>(null);
+  reviewPageRef.current = reviewPage;
+  useEffect(() => {
+    return () => {
+      pagesRef.current.forEach((p) => URL.revokeObjectURL(p.objectUrl));
+      if (reviewPageRef.current) {
+        URL.revokeObjectURL(reviewPageRef.current.objectUrl);
+      }
+    };
+  }, []);
+
   // Mount: try to open the rear camera. If anything fails, fall back to
   // library-only mode (the user can still upload via file picker).
   useEffect(() => {

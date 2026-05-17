@@ -1,11 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/clerk-react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
+import { kicker as kickerStyle, breadcrumb } from '../design/primitives';
 import {
   deleteHistoryRecord,
   getHistoryRecord,
@@ -13,9 +10,15 @@ import {
   type HistoryListItem,
   type HistoryRecord,
 } from '../walkthroughs/history';
-import { fetchSubscriptionState, type Tier } from '../billing/client';
+
+// Local: History's kicker historically had no marginBottom — callers
+// override via spread. Pin to 0 to preserve.
+const kicker = () => kickerStyle(0);
+import { fetchSubscriptionState } from '../billing/client';
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
+import { MathMarkdown } from '../components/MathMarkdown';
+import { useAsync } from '../hooks/useAsync';
 import type { Route } from '../router';
 
 interface HistoryProps {
@@ -79,41 +82,22 @@ export function History({ onNavigate }: HistoryProps) {
 
 function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const { getToken } = useAuth();
-  const [items, setItems] = useState<HistoryListItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const historyAsync = useAsync(() => listHistory({ getToken }), [getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const items = historyAsync.data?.items ?? null;
+  const error = historyAsync.error ? 'Failed to load history.' : null;
+  const tier = subAsync.data?.tier ?? null;
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [expandedRecord, setExpandedRecord] = useState<HistoryRecord | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [tier, setTier] = useState<Tier | null>(null);
+  const [overrideItems, setOverrideItems] = useState<HistoryListItem[] | null>(null);
   const [printRecord, setPrintRecord] = useState<HistoryRecord | null>(null);
   const { requireUpgrade } = useUpgradePrompt();
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await listHistory({ getToken });
-        if (!cancelled) setItems(res.items);
-      } catch {
-        if (!cancelled) setError('Failed to load history.');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const sub = await fetchSubscriptionState({ getToken });
-      if (!cancelled) setTier(sub?.tier ?? null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
+  // After a delete, we splice locally rather than refetching. useAsync's
+  // data is read-only; this overrideItems shadow lets the list update without
+  // a network roundtrip.
+  const effectiveItems = overrideItems ?? items;
 
   // When printRecord becomes truthy, React mounts the PrintHost (as a portal
   // under body); once it's committed, we invoke the print dialog and clear
@@ -150,7 +134,7 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
     const ok = await deleteHistoryRecord({ id, getToken });
     setDeletingId(null);
     if (!ok) return;
-    setItems((prev) => (prev ?? []).filter((it) => it.id !== id));
+    setOverrideItems((effectiveItems ?? []).filter((it) => it.id !== id));
     if (expandedId === id) {
       setExpandedId(null);
       setExpandedRecord(null);
@@ -159,7 +143,7 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
 
   // Group by day for readable scanning. Must be called before any early
   // return — React requires the same hook order on every render.
-  const groups = useMemo(() => groupByDay(items ?? []), [items]);
+  const groups = useMemo(() => groupByDay(effectiveItems ?? []), [effectiveItems]);
 
   if (error) {
     return (
@@ -168,10 +152,10 @@ function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
       </div>
     );
   }
-  if (items === null) {
+  if (effectiveItems === null) {
     return <div style={{ fontSize: 13, color: T.muted }}>Loading…</div>;
   }
-  if (items.length === 0) {
+  if (effectiveItems.length === 0) {
     return <EmptyState onNavigate={onNavigate} />;
   }
 
@@ -233,11 +217,9 @@ function PrintHost({ record }: { record: HistoryRecord }) {
           Walked through on {created}
           {record.modelUsed ? ` · ${record.modelUsed}` : ''}
         </div>
-        <div className="markdown-body">
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {record.walkthrough}
-          </ReactMarkdown>
-        </div>
+        <MathMarkdown className="markdown-body">
+          {record.walkthrough}
+        </MathMarkdown>
         <div className="print-footer">MathIQ · mathiq.io</div>
       </article>
     </div>,
@@ -309,14 +291,12 @@ function HistoryEntry({
           {loading && <div style={{ fontSize: 13, color: T.muted }}>Loading…</div>}
           {!loading && record && (
             <>
-              <div
+              <MathMarkdown
                 className="markdown-body"
                 style={{ fontSize: 15, lineHeight: 1.6 }}
               >
-                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                  {record.walkthrough}
-                </ReactMarkdown>
-              </div>
+                {record.walkthrough}
+              </MathMarkdown>
               <div style={{ display: 'flex', gap: 14, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   type="button"
@@ -506,27 +486,3 @@ function formatTime(ms: number): string {
   return new Date(ms).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
-function kicker(): React.CSSProperties {
-  return {
-    fontFamily: T.mono,
-    fontSize: 11,
-    letterSpacing: '0.18em',
-    textTransform: 'uppercase',
-    color: T.muted,
-  };
-}
-
-function breadcrumb(): React.CSSProperties {
-  return {
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    fontSize: 13,
-    fontFamily: T.mono,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    color: T.muted,
-    cursor: 'pointer',
-    marginBottom: 16,
-  };
-}

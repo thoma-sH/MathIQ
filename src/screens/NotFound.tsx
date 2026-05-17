@@ -1,7 +1,4 @@
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import { MathMarkdown, INLINE_COMPONENTS } from '../components/MathMarkdown';
 import { T } from '../design/tokens';
 import type { Route } from '../router';
 
@@ -77,9 +74,9 @@ export function NotFound({ message, onNavigate }: NotFoundProps) {
           fontWeight: 500,
         }}
       >
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
+        <MathMarkdown as="span" components={INLINE_COMPONENTS}>
           {'This page isn\'t in the span.'}
-        </ReactMarkdown>
+        </MathMarkdown>
       </p>
 
       <p

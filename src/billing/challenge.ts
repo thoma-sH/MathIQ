@@ -59,8 +59,14 @@ export interface SharedChallenge {
 }
 
 /** Public read of a shared attempt. No auth required. */
-export async function fetchSharedAttempt(shareId: string): Promise<SharedChallenge | null> {
-  const resp = await fetch(`${WORKER_URL}/api/share/${encodeURIComponent(shareId)}`);
+export async function fetchSharedAttempt(
+  shareId: string,
+  signal?: AbortSignal,
+): Promise<SharedChallenge | null> {
+  const resp = await fetch(
+    `${WORKER_URL}/api/share/${encodeURIComponent(shareId)}`,
+    { signal },
+  );
   if (!resp.ok) return null;
   return (await resp.json()) as SharedChallenge;
 }
@@ -76,10 +82,13 @@ async function authHeaders(getToken: AuthOpts['getToken']): Promise<Record<strin
   return headers;
 }
 
-export async function fetchTodaysChallenge(): Promise<TodaysChallenge | null> {
+export async function fetchTodaysChallenge(
+  signal?: AbortSignal,
+): Promise<TodaysChallenge | null> {
   // Public endpoint — no auth needed.
   const resp = await fetch(`${WORKER_URL}/api/challenge/today`, {
     method: 'GET',
+    signal,
   });
   if (!resp.ok) return null;
   return (await resp.json()) as TodaysChallenge;

@@ -8,9 +8,10 @@ import {
   ExamError,
   type ExamListEntry,
 } from '../walkthroughs/exam';
-import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { fetchSubscriptionState } from '../billing/client';
 import { isPro, isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
+import { useAsync } from '../hooks/useAsync';
 import { NotFound } from './NotFound';
 import type { Route, ExamId } from '../router';
 
@@ -57,8 +58,9 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
   const course = COURSES_BY_ID[courseId];
   const { getToken } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const [tier, setTier] = useState<Tier | null>(null);
-  const [tierLoaded, setTierLoaded] = useState(false);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const tier = subAsync.data?.tier ?? null;
+  const tierLoaded = !subAsync.loading;
   const [pendingExam, setPendingExam] = useState<ExamId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pastExams, setPastExams] = useState<ExamListEntry[] | null>(null);
@@ -75,20 +77,6 @@ export function Exams({ courseId, onNavigate }: ExamsProps) {
     }
     onNavigate({ name: 'homework' });
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const sub = await fetchSubscriptionState({ getToken });
-      if (!cancelled) {
-        setTier(sub?.tier ?? null);
-        setTierLoaded(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
 
   // Load past exams for this course (Pro only — endpoint 403s otherwise).
   useEffect(() => {

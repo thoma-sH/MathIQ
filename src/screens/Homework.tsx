@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAuth } from '@clerk/clerk-react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
+import { MathMarkdown } from '../components/MathMarkdown';
+import {
+  KEY_TRUST_IRIS,
+  KEY_TRUST_IRIS_TIP,
+  fullKey,
+  readBool,
+  writeBool,
+} from '../lib/storage';
+import { useAsync } from '../hooks/useAsync';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
 import { isPaid, isPro } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
@@ -59,16 +64,17 @@ type LatexState =
 export function Homework({ onNavigate }: HomeworkProps) {
   const { getToken, isSignedIn } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const [tier, setTier] = useState<Tier | null>(null);
-  const [tierLoaded, setTierLoaded] = useState(false);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const tier = subAsync.data?.tier ?? null;
+  const tierLoaded = !subAsync.loading;
   const [state, setState] = useState<UploadState>({ kind: 'idle' });
   const [output, setOutput] = useState<OutputKind>('formatted');
   const [mode, setMode] = useState<Mode>('plain');
   const [latex, setLatex] = useState<LatexState>({ kind: 'idle' });
   const [printing, setPrinting] = useState(false);
-  const [trustIris, setTrustIris] = useState<boolean>(() => readBoolPref('mathiq:trustIris'));
+  const [trustIris, setTrustIris] = useState<boolean>(() => readBool(KEY_TRUST_IRIS));
   const [tipDismissed, setTipDismissed] = useState<boolean>(() =>
-    readBoolPref('mathiq:trustIrisTipDismissed'),
+    readBool(KEY_TRUST_IRIS_TIP),
   );
   const [pastHomework, setPastHomework] = useState<HomeworkListEntry[] | null>(null);
   const [openingPast, setOpeningPast] = useState<string | null>(null);
@@ -76,11 +82,13 @@ export function Homework({ onNavigate }: HomeworkProps) {
   // Listen for cross-screen changes to the Trust Iris setting (Settings
   // page updates the localStorage entry directly).
   useEffect(() => {
+    const trustKey = fullKey(KEY_TRUST_IRIS);
+    const tipKey = fullKey(KEY_TRUST_IRIS_TIP);
     function onStorage(e: StorageEvent) {
-      if (e.key === 'mathiq:trustIris') {
+      if (e.key === trustKey) {
         setTrustIris(e.newValue === '1');
       }
-      if (e.key === 'mathiq:trustIrisTipDismissed') {
+      if (e.key === tipKey) {
         setTipDismissed(e.newValue === '1');
       }
     }
@@ -90,21 +98,8 @@ export function Homework({ onNavigate }: HomeworkProps) {
 
   function dismissTrustIrisTip() {
     setTipDismissed(true);
-    writeBoolPref('mathiq:trustIrisTipDismissed', true);
+    writeBool(KEY_TRUST_IRIS_TIP, true);
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const sub = await fetchSubscriptionState({ getToken });
-      if (cancelled) return;
-      setTier(sub?.tier ?? null);
-      setTierLoaded(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
 
   useEffect(() => {
     if (!printing) return;
@@ -488,24 +483,6 @@ function IdleCard({
       </p>
     </section>
   );
-}
-
-function readBoolPref(key: string): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    return window.localStorage.getItem(key) === '1';
-  } catch {
-    return false;
-  }
-}
-
-function writeBoolPref(key: string, value: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, value ? '1' : '0');
-  } catch {
-    // ignore — private mode etc.
-  }
 }
 
 /**
@@ -1683,11 +1660,9 @@ function PlainView({
         >
           {title}
         </h2>
-        <div className="markdown-body" style={{ fontSize: 15, lineHeight: 1.6 }}>
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {normalizeMmdForReact(mmd)}
-          </ReactMarkdown>
-        </div>
+        <MathMarkdown className="markdown-body" style={{ fontSize: 15, lineHeight: 1.6 }}>
+          {normalizeMmdForReact(mmd)}
+        </MathMarkdown>
       </article>
     </>
   );
@@ -1919,11 +1894,9 @@ function HomeworkPrintHost({ mmd, title }: { mmd: string; title: string }) {
           <h1 className="homework-title">{title}</h1>
           <div className="homework-meta">Submitted {date}</div>
         </header>
-        <div className="markdown-body homework-body">
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {normalizeMmdForReact(mmd)}
-          </ReactMarkdown>
-        </div>
+        <MathMarkdown className="markdown-body homework-body">
+          {normalizeMmdForReact(mmd)}
+        </MathMarkdown>
         <div className="print-footer">MathIQ · mathiq.io</div>
       </article>
     </div>,

@@ -15,13 +15,12 @@
  */
 import { useEffect, useState } from 'react';
 import { T } from '../design/tokens';
+import { KEY_INSTALL_DISMISSED, readBool, writeBool } from '../lib/storage';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 }
-
-const STORAGE_KEY = 'mathiq:installPromptDismissed';
 
 function isIosSafariNeedingPrompt(): boolean {
   if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
@@ -45,13 +44,7 @@ export function InstallPrompt() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    let dismissed = false;
-    try {
-      dismissed = localStorage.getItem(STORAGE_KEY) === '1';
-    } catch {
-      // ignore
-    }
-    if (dismissed) return;
+    if (readBool(KEY_INSTALL_DISMISSED)) return;
 
     const onBeforeInstall = (e: Event) => {
       e.preventDefault();
@@ -61,11 +54,7 @@ export function InstallPrompt() {
     const onAppInstalled = () => {
       setEvent(null);
       setHidden(true);
-      try {
-        localStorage.setItem(STORAGE_KEY, '1');
-      } catch {
-        // ignore
-      }
+      writeBool(KEY_INSTALL_DISMISSED, true);
     };
 
     window.addEventListener('beforeinstallprompt', onBeforeInstall);
@@ -85,11 +74,7 @@ export function InstallPrompt() {
   function dismiss() {
     setHidden(true);
     setIosVisible(false);
-    try {
-      localStorage.setItem(STORAGE_KEY, '1');
-    } catch {
-      // ignore
-    }
+    writeBool(KEY_INSTALL_DISMISSED, true);
   }
 
   async function install() {
@@ -99,11 +84,7 @@ export function InstallPrompt() {
     setEvent(null);
     setHidden(true);
     if (choice.outcome === 'dismissed') {
-      try {
-        localStorage.setItem(STORAGE_KEY, '1');
-      } catch {
-        // ignore
-      }
+      writeBool(KEY_INSTALL_DISMISSED, true);
     }
   }
 

@@ -9,13 +9,16 @@
  * Replaces the older ChallengeGradeFlow modal. Reached from the daily button
  * on Landing; the URL is a first-class deep link so shared bookmarks resolve.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import { useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import { SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
+import { kicker as kickerStyle } from '../design/primitives';
+import { MathMarkdown } from '../components/MathMarkdown';
+import { useAsync } from '../hooks/useAsync';
+
+// Local: DailyChallenge's kicker historically had no marginBottom —
+// callers override via spread. Pin to 0 to preserve.
+const kicker = () => kickerStyle(0);
 import { T } from '../design/tokens';
 import {
   CheckIcon,
@@ -56,28 +59,20 @@ const STREAK_MILESTONES = new Set([3, 7, 14, 30, 60, 100]);
 
 export function DailyChallenge() {
   const { getToken, isSignedIn } = useAuth();
-  const [challenge, setChallenge] = useState<TodaysChallenge | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const challengeAsync = useAsync(async (signal) => {
+    const c = await fetchTodaysChallenge(signal);
+    if (!c) throw new Error("Today's challenge is loading — try again in a moment.");
+    return c;
+  }, []);
+  const challenge = challengeAsync.data;
+  const loading = challengeAsync.loading;
+  const loadError = challengeAsync.error?.message ?? null;
   const [mode, setMode] = useState<EntryMode>('photo');
   const [state, setState] = useState<FlowState>({ kind: 'idle' });
   const [error, setError] = useState<string | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchTodaysChallenge().then((c) => {
-      if (cancelled) return;
-      if (!c) setLoadError("Today's challenge is loading — try again in a moment.");
-      else setChallenge(c);
-      setLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function gradeWithImage(file: File) {
     if (!ALLOWED_TYPES.has(file.type)) {
@@ -319,11 +314,11 @@ function ProblemBlock({ problemText }: { problemText: string }) {
       }}
     >
       <div style={kicker()}>THE PROBLEM</div>
-      <div style={{ marginTop: 10, fontSize: 17, lineHeight: 1.55, color: T.ink }}>
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-          {problemText}
-        </ReactMarkdown>
-      </div>
+      <MathMarkdown
+        style={{ marginTop: 10, fontSize: 17, lineHeight: 1.55, color: T.ink }}
+      >
+        {problemText}
+      </MathMarkdown>
     </section>
   );
 }
@@ -830,16 +825,6 @@ function InlineMath({ value }: { value: string }) {
     }
   }, [value]);
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
-}
-
-function kicker(): React.CSSProperties {
-  return {
-    fontFamily: T.mono,
-    fontSize: 11,
-    letterSpacing: '0.18em',
-    textTransform: 'uppercase',
-    color: T.muted,
-  };
 }
 
 function primaryButton(disabled: boolean): React.CSSProperties {

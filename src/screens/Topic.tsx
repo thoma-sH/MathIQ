@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SignInButton, useAuth } from '@clerk/clerk-react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
+import { kicker, breadcrumb } from '../design/primitives';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import {
   WalkthroughError,
@@ -20,6 +17,8 @@ import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
 import { CheckIcon } from '../design/icons';
+import { MathMarkdown, INLINE_COMPONENTS } from '../components/MathMarkdown';
+import { createRafBatcher } from '../lib/rafBatch';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
 
@@ -133,6 +132,14 @@ export function TopicScreen({
 
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
 
+  // Coalesce per-chunk setState into one commit per animation frame. setState
+  // setters are stable across renders, so creating the batchers once is safe.
+  const bufferBatcher = useMemo(() => createRafBatcher(setBuffer), []);
+  const whyHowStreamBatcher = useMemo(
+    () => createRafBatcher<{ index: number; text: string } | null>(setWhyHowStream),
+    [],
+  );
+
   // Auto-reveal the first segment as soon as it lands.
   useEffect(() => {
     if (revealCount === 0 && parsed.complete.length > 0) {
@@ -149,6 +156,8 @@ export function TopicScreen({
       whyHowAbortRef.current?.abort();
       classifyAbortRef.current?.abort();
       verifyAbortRef.current?.abort();
+      bufferBatcher.cancel();
+      whyHowStreamBatcher.cancel();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProblem, courseId, topicId]);
@@ -166,6 +175,8 @@ export function TopicScreen({
     walkthroughAbortRef.current?.abort();
     whyHowAbortRef.current?.abort();
     verifyAbortRef.current?.abort();
+    bufferBatcher.cancel();
+    whyHowStreamBatcher.cancel();
     setVerifyState('idle');
     setVerifyReason(null);
     setSaveState('idle');
@@ -204,8 +215,9 @@ export function TopicScreen({
         action,
       })) {
         accumulated += chunk;
-        setBuffer(accumulated);
+        bufferBatcher.push(accumulated);
       }
+      bufferBatcher.flush();
       setStreamDone(true);
       setStreaming((s) => (s === 'walkthrough' ? null : s));
       if (mode === 'all') {
@@ -236,6 +248,7 @@ export function TopicScreen({
       }
     } catch (err) {
       if (controller.signal.aborted) return;
+      bufferBatcher.cancel();
       setStreaming((s) => (s === 'walkthrough' ? null : s));
       handleStreamError(err);
     }
@@ -270,8 +283,9 @@ export function TopicScreen({
         walkthroughSoFar: cumulative,
       })) {
         accumulated += chunk;
-        setWhyHowStream({ index, text: accumulated });
+        whyHowStreamBatcher.push({ index, text: accumulated });
       }
+      whyHowStreamBatcher.flush();
       setWhyHow((p) => ({ ...p, [index]: accumulated }));
       setWhyHowStream(null);
       setStreaming((s) =>
@@ -279,6 +293,7 @@ export function TopicScreen({
       );
     } catch (err) {
       if (controller.signal.aborted) return;
+      whyHowStreamBatcher.cancel();
       setWhyHowStream(null);
       setStreaming((s) =>
         s && typeof s === 'object' && s.kind === 'why-how' && s.index === index ? null : s,
@@ -452,6 +467,24 @@ export function TopicScreen({
 
   const isPaid = rateInfo?.tier === 'plus' || rateInfo?.tier === 'pro';
 
+  // Stable callback for StepCard memoization. Reads dynamic state through a
+  // ref so the callback identity doesn't change as whyHow / isPaid update —
+  // only the step whose text or whyHowText actually changes will re-render.
+  const toggleCtxRef = useRef({ isPaid, whyHow, requireUpgrade, requestWhyHow });
+  toggleCtxRef.current = { isPaid, whyHow, requireUpgrade, requestWhyHow };
+  const handleToggleWhyHow = useCallback((i: number) => {
+    const c = toggleCtxRef.current;
+    if (!c.isPaid) {
+      c.requireUpgrade('why-how', { onTryFree: () => void c.requestWhyHow(i) });
+      return;
+    }
+    if (c.whyHow[i] !== undefined) {
+      setExpanded((p) => ({ ...p, [i]: !p[i] }));
+      return;
+    }
+    void c.requestWhyHow(i);
+  }, []);
+
   const finalAnswered = useMemo(
     () => streamDone && /\*\*Answer:\*\*/i.test(buffer),
     [streamDone, buffer],
@@ -510,11 +543,12 @@ export function TopicScreen({
         }}
       >
         <div style={kicker()}>STRATEGIC ANCHOR</div>
-        <div className="markdown-body" style={{ fontSize: 15, lineHeight: 1.55 }}>
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {topic.strategicAnchor}
-          </ReactMarkdown>
-        </div>
+        <MathMarkdown
+          className="markdown-body"
+          style={{ fontSize: 15, lineHeight: 1.55 }}
+        >
+          {topic.strategicAnchor}
+        </MathMarkdown>
       </section>
 
       <section className="reveal reveal-3" style={{ marginBottom: 20 }}>
@@ -528,11 +562,9 @@ export function TopicScreen({
             overflowX: 'auto',
           }}
         >
-          <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {topic.exampleProblem}
-            </ReactMarkdown>
-          </div>
+          <MathMarkdown className="markdown-body">
+            {topic.exampleProblem}
+          </MathMarkdown>
         </div>
       </section>
 
@@ -584,6 +616,8 @@ export function TopicScreen({
             onClick={() => {
               walkthroughAbortRef.current?.abort();
               whyHowAbortRef.current?.abort();
+              bufferBatcher.cancel();
+              whyHowStreamBatcher.cancel();
               setStreaming(null);
               setWhyHowStream(null);
             }}
@@ -712,11 +746,7 @@ export function TopicScreen({
             overflowX: 'auto',
           }}
         >
-          <div className="markdown-body">
-            <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-              {parsed.preamble}
-            </ReactMarkdown>
-          </div>
+          <MathMarkdown className="markdown-body">{parsed.preamble}</MathMarkdown>
         </section>
       )}
 
@@ -725,30 +755,17 @@ export function TopicScreen({
           key={i}
           index={i}
           text={stepText}
-          showWhyHow={true}
           whyHowText={whyHow[i]}
           whyHowExpanded={!!expanded[i]}
           whyHowStreaming={whyHowStream?.index === i ? whyHowStream.text : null}
-          onToggleWhyHow={() => {
-            if (!isPaid) {
-              // Free users get 5 lifetime why-how trials. The modal lets
-              // them spend one directly via the Try-free button.
-              requireUpgrade('why-how', { onTryFree: () => void requestWhyHow(i) });
-              return;
-            }
-            if (whyHow[i] !== undefined) {
-              setExpanded((p) => ({ ...p, [i]: !p[i] }));
-              return;
-            }
-            void requestWhyHow(i);
-          }}
+          onToggleWhyHow={handleToggleWhyHow}
           disabledWhyHow={isStreamingAnything}
         />
       ))}
 
       {/* In 'all' mode, show the streaming tail inline as it arrives. */}
       {sessionMode === 'all' && parsed.streamingTail && (
-        <article
+        <MathMarkdown
           className="markdown-body"
           style={{
             marginTop: 16,
@@ -759,10 +776,8 @@ export function TopicScreen({
             lineHeight: 1.6,
           }}
         >
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {parsed.streamingTail}
-          </ReactMarkdown>
-        </article>
+          {parsed.streamingTail}
+        </MathMarkdown>
       )}
 
       {canRevealMore && (
@@ -1060,7 +1075,8 @@ export function TopicScreen({
               >
                 <span style={{ minWidth: 0 }}>
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{t.title}</span>
-                  <span
+                  <MathMarkdown
+                    as="span"
                     className="markdown-body"
                     style={{
                       fontSize: 13,
@@ -1068,15 +1084,10 @@ export function TopicScreen({
                       marginLeft: 8,
                       display: 'inline',
                     }}
+                    components={INLINE_COMPONENTS}
                   >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={{ p: ({ children }) => <>{children}</> }}
-                    >
-                      {t.blurb}
-                    </ReactMarkdown>
-                  </span>
+                    {t.blurb}
+                  </MathMarkdown>
                 </span>
                 <span className="arrow-nudge" style={{ color: T.muted }}>
                   →
@@ -1090,106 +1101,102 @@ export function TopicScreen({
   );
 }
 
-function StepCard({
+interface StepCardProps {
+  index: number;
+  text: string;
+  whyHowText: string | undefined;
+  whyHowExpanded: boolean;
+  whyHowStreaming: string | null;
+  onToggleWhyHow: (index: number) => void;
+  disabledWhyHow: boolean;
+}
+
+const STEP_CARD_STYLE: React.CSSProperties = {
+  marginTop: 16,
+  border: `1px solid ${T.ink}`,
+  background: T.paper,
+};
+
+const STEP_BODY_STYLE: React.CSSProperties = {
+  padding: '20px 22px',
+  fontSize: 15,
+  lineHeight: 1.6,
+};
+
+const STEP_TOGGLE_ROW_STYLE: React.CSSProperties = {
+  borderTop: `1px solid ${T.hair}`,
+  padding: '10px 16px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+};
+
+const STEP_WHY_HOW_STYLE: React.CSSProperties = {
+  borderTop: `1px solid ${T.hair}`,
+  padding: '16px 22px',
+  background: T.paper2,
+  fontSize: 14,
+  lineHeight: 1.55,
+};
+
+const StepCard = memo(function StepCard({
   index,
   text,
-  showWhyHow,
   whyHowText,
   whyHowExpanded,
   whyHowStreaming,
   onToggleWhyHow,
   disabledWhyHow,
-}: {
-  index: number;
-  text: string;
-  showWhyHow: boolean;
-  whyHowText: string | undefined;
-  whyHowExpanded: boolean;
-  whyHowStreaming: string | null;
-  onToggleWhyHow: () => void;
-  disabledWhyHow: boolean;
-}) {
+}: StepCardProps) {
   const liveStreaming = whyHowStreaming !== null;
   const showWhyHowBlock =
     liveStreaming || (whyHowExpanded && whyHowText !== undefined);
+  const buttonDisabled = disabledWhyHow && !liveStreaming;
   return (
-    <article
-      style={{
-        marginTop: 16,
-        border: `1px solid ${T.ink}`,
-        background: T.paper,
-      }}
-    >
-      <div
-        className="markdown-body"
-        style={{
-          padding: '20px 22px',
-          fontSize: 15,
-          lineHeight: 1.6,
-        }}
-      >
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-          {text}
-        </ReactMarkdown>
-      </div>
-      {showWhyHow && (
-        <div
+    <article style={STEP_CARD_STYLE}>
+      <MathMarkdown className="markdown-body" style={STEP_BODY_STYLE}>
+        {text}
+      </MathMarkdown>
+      <div style={STEP_TOGGLE_ROW_STYLE}>
+        <button
+          onClick={() => onToggleWhyHow(index)}
+          disabled={buttonDisabled}
+          className="btn-press"
           style={{
-            borderTop: `1px solid ${T.hair}`,
-            padding: '10px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            fontSize: 12,
+            fontFamily: T.mono,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: buttonDisabled ? T.hairStrong : T.accent,
+            cursor: buttonDisabled ? 'not-allowed' : 'pointer',
+            textDecoration: 'underline',
           }}
+          aria-expanded={showWhyHowBlock}
+          aria-controls={`why-how-${index}`}
         >
-          <button
-            onClick={onToggleWhyHow}
-            disabled={disabledWhyHow && !liveStreaming}
-            className="btn-press"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              fontSize: 12,
-              fontFamily: T.mono,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: disabledWhyHow && !liveStreaming ? T.hairStrong : T.accent,
-              cursor: disabledWhyHow && !liveStreaming ? 'not-allowed' : 'pointer',
-              textDecoration: 'underline',
-            }}
-            aria-expanded={showWhyHowBlock}
-            aria-controls={`why-how-${index}`}
-          >
-            {whyHowText !== undefined
-              ? whyHowExpanded
-                ? 'Hide why & how'
-                : 'Show why & how'
-              : 'Why & how?'}
-          </button>
-        </div>
-      )}
+          {whyHowText !== undefined
+            ? whyHowExpanded
+              ? 'Hide why & how'
+              : 'Show why & how'
+            : 'Why & how?'}
+        </button>
+      </div>
       {showWhyHowBlock && (
-        <div
+        <MathMarkdown
           id={`why-how-${index}`}
           className="markdown-body"
-          style={{
-            borderTop: `1px solid ${T.hair}`,
-            padding: '16px 22px',
-            background: T.paper2,
-            fontSize: 14,
-            lineHeight: 1.55,
-          }}
+          style={STEP_WHY_HOW_STYLE}
         >
-          <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-            {liveStreaming ? whyHowStreaming! : whyHowText!}
-          </ReactMarkdown>
-        </div>
+          {liveStreaming ? whyHowStreaming! : whyHowText!}
+        </MathMarkdown>
       )}
     </article>
   );
-}
+});
 
 function UsagePill({
   rate,
@@ -1243,32 +1250,6 @@ function formatReset(iso: string): string {
   } catch {
     return 'soon';
   }
-}
-
-function kicker(mb = 6): React.CSSProperties {
-  return {
-    fontFamily: T.mono,
-    fontSize: 11,
-    letterSpacing: '0.18em',
-    textTransform: 'uppercase',
-    color: T.muted,
-    marginBottom: mb,
-  };
-}
-
-function breadcrumb(): React.CSSProperties {
-  return {
-    background: 'transparent',
-    border: 'none',
-    padding: 0,
-    fontSize: 13,
-    fontFamily: T.mono,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase',
-    color: T.muted,
-    cursor: 'pointer',
-    marginBottom: 16,
-  };
 }
 
 function cta(): React.CSSProperties {

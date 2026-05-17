@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/clerk-react';
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
 import {
@@ -15,9 +11,11 @@ import {
 } from '../walkthroughs/exam';
 import { openScanner } from '../scanner';
 import { NotFound } from './NotFound';
-import { fetchSubscriptionState, type Tier } from '../billing/client';
+import { fetchSubscriptionState } from '../billing/client';
 import { isPro } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
+import { MathMarkdown } from '../components/MathMarkdown';
+import { useAsync } from '../hooks/useAsync';
 import type { Route } from '../router';
 
 interface ExamGradeProps {
@@ -36,20 +34,10 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
   const course = COURSES_BY_ID[courseId];
   const { getToken } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const [tier, setTier] = useState<Tier | null>(null);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const tier = subAsync.data?.tier ?? null;
   const [record, setRecord] = useState<ExamRecord | null>(null);
   const [state, setState] = useState<GradeState>({ kind: 'idle' });
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const sub = await fetchSubscriptionState({ getToken });
-      if (!cancelled) setTier(sub?.tier ?? null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -658,9 +646,7 @@ function ProblemCard({
           lineHeight: 1.55,
         }}
       >
-        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-          {p.feedback}
-        </ReactMarkdown>
+        <MathMarkdown>{p.feedback}</MathMarkdown>
         {p.score < 8 && (
           <button
             type="button"
