@@ -564,7 +564,7 @@ export function Landing({ onNavigate }: LandingProps) {
        *  these via tile/route navigation; cluttering their home doesn't
        *  add value. */}
       <SignedOut>
-        <FeaturesShowcase />
+        <FeaturesShowcase onNavigate={onNavigate} />
       </SignedOut>
 
       <footer
@@ -592,7 +592,9 @@ export function Landing({ onNavigate }: LandingProps) {
   );
 }
 
-function FeaturesShowcase() {
+function FeaturesShowcase({ onNavigate }: { onNavigate: (route: Route) => void }) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
   return (
     <section
       style={{
@@ -636,15 +638,39 @@ function FeaturesShowcase() {
           gap: 12,
         }}
       >
-        {SHOWCASE.map((f) => (
-          <article key={f.title} className="landing-feature-card">
-            <div className="cta-kicker" style={{ color: f.tierColor }}>
-              {f.tier}
-            </div>
-            <h3 className="feature-card-title">{f.title}</h3>
-            <p className="feature-card-sub">{f.sub}</p>
-          </article>
-        ))}
+        {SHOWCASE.map((f, i) => {
+          const isExpanded = expanded === i;
+          return (
+            <article
+              key={f.title}
+              className={`landing-feature-card${isExpanded ? ' is-expanded' : ''}`}
+              style={isExpanded ? { gridColumn: '1 / -1' } : undefined}
+            >
+              <button
+                type="button"
+                className="feature-card-header"
+                aria-expanded={isExpanded}
+                aria-controls={`feature-details-${i}`}
+                onClick={() => setExpanded(isExpanded ? null : i)}
+              >
+                <div className="cta-kicker" style={{ color: f.tierColor }}>
+                  {f.tier}
+                </div>
+                <h3 className="feature-card-title">{f.title}</h3>
+                <p className="feature-card-sub">{f.sub}</p>
+                <span aria-hidden className="feature-card-indicator">
+                  {isExpanded ? '−' : '+'}
+                </span>
+              </button>
+              {isExpanded && (
+                <div id={`feature-details-${i}`} className="feature-card-details">
+                  <p className="feature-card-deep">{f.deep}</p>
+                  <FeatureCta cta={f.cta} onNavigate={onNavigate} />
+                </div>
+              )}
+            </article>
+          );
+        })}
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', marginTop: 22 }}>
         <a
@@ -672,11 +698,42 @@ function FeaturesShowcase() {
   );
 }
 
+function FeatureCta({
+  cta,
+  onNavigate,
+}: {
+  cta: ShowcaseCta;
+  onNavigate: (route: Route) => void;
+}) {
+  if (cta.kind === 'route') {
+    return (
+      <button
+        type="button"
+        onClick={() => onNavigate(cta.route)}
+        className="btn-press chamfer feature-card-cta"
+      >
+        {cta.label} →
+      </button>
+    );
+  }
+  return (
+    <a href={cta.href} className="btn-press chamfer feature-card-cta">
+      {cta.label} →
+    </a>
+  );
+}
+
+type ShowcaseCta =
+  | { kind: 'route'; label: string; route: Route }
+  | { kind: 'href'; label: string; href: string };
+
 interface ShowcaseEntry {
   tier: string;
   tierColor: string;
   title: string;
   sub: string;
+  deep: string;
+  cta: ShowcaseCta;
 }
 
 const SHOWCASE: ShowcaseEntry[] = [
@@ -685,35 +742,47 @@ const SHOWCASE: ShowcaseEntry[] = [
     tierColor: 'var(--muted)',
     title: 'Step-by-step walkthroughs',
     sub: 'Iris explains every move — not just the answer. Five free per day across nine college subjects.',
+    deep: 'Each step lands one line at a time with a short note on why that move is the right one. You set the pace — tap forward when you\'re ready, back up, or jump ahead. Spans algebra, precalc, calc 1/2/3, discrete, combinatorics, linear algebra, and number theory.',
+    cta: { kind: 'route', label: 'Pick a subject', route: { name: 'subjects' } },
   },
   {
     tier: 'Plus',
     tierColor: 'var(--accent)',
     title: 'Why & how reflection',
     sub: 'Tap any step to see the strategic reason behind it. The shift from "what to do" to "when this is the right move."',
+    deep: 'Most tutorials show what to do. Reflection surfaces when it\'s the right move and what would change if the problem were slightly different. Same line, viewed through the pattern recognition you\'ll need at exam time.',
+    cta: { kind: 'href', label: 'See the Plus plan', href: '/pricing' },
   },
   {
     tier: 'Plus',
     tierColor: 'var(--accent)',
     title: 'Photo input',
     sub: 'Snap a problem from your textbook. Iris extracts the LaTeX and walks you through it.',
+    deep: 'Point your phone at the page. Mathpix extracts the problem — equations and all — into clean LaTeX. Iris reads it back so you can confirm the transcription, then walks you through it like you\'d typed it yourself.',
+    cta: { kind: 'href', label: 'See the Plus plan', href: '/pricing' },
   },
   {
     tier: 'Plus',
     tierColor: 'var(--accent)',
     title: 'Handwritten to PDF',
     sub: 'Photo of your handwriting in, a faithful typeset PDF out. Mathpix transcribes, we typeset — your exact work, just neater to read.',
+    deep: 'Your work, transcribed: messy fractions, crossed-out lines, and all. Pages out as a clean PDF that reads like a textbook — same answers, same approach, just legible. Built for homework you\'ve already done and need to turn in.',
+    cta: { kind: 'href', label: 'See the Plus plan', href: '/pricing' },
   },
   {
     tier: 'Pro',
     tierColor: 'var(--accent-2)',
     title: 'LaTeX Mode',
     sub: 'Same upload, but Pro typesets your handwriting in true Computer Modern LaTeX — preserved byte-for-byte, output looks like Overleaf.',
+    deep: 'Same upload as Handwritten to PDF, but the output is real Computer Modern LaTeX. Useful for proof-heavy classes where presentation matters.',
+    cta: { kind: 'href', label: 'See the Pro plan', href: '/pricing' },
   },
   {
     tier: 'Pro',
     tierColor: 'var(--accent-2)',
     title: 'Exam Mode + grading',
     sub: 'Generate full college exams, print them, upload your handwritten attempt. Per-problem scores with topic-level breakdown.',
+    deep: 'Pick a course and the topics you want covered, get a printable exam scaled to your level. Take it on paper, snap it back in, and get per-problem feedback with a topic-level breakdown so you know exactly what to drill next.',
+    cta: { kind: 'href', label: 'See the Pro plan', href: '/pricing' },
   },
 ];
