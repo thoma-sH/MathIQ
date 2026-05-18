@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
@@ -109,13 +110,16 @@ export default function App() {
   const realPath = getRealUrlPath();
   if (realPath) {
     return (
-      <Suspense fallback={<RouteSkeleton />}>
-        {realPath.kind === 'terms' && <Terms />}
-        {realPath.kind === 'privacy' && <Privacy />}
-        {realPath.kind === 'pricing' && <Pricing />}
-        {realPath.kind === 'daily' && <DailyChallenge />}
-        {realPath.kind === 'share' && <Share shareId={realPath.shareId} />}
-      </Suspense>
+      <>
+        <Suspense fallback={<RouteSkeleton />}>
+          {realPath.kind === 'terms' && <Terms />}
+          {realPath.kind === 'privacy' && <Privacy />}
+          {realPath.kind === 'pricing' && <Pricing />}
+          {realPath.kind === 'daily' && <DailyChallenge />}
+          {realPath.kind === 'share' && <Share shareId={realPath.shareId} />}
+        </Suspense>
+        <Analytics />
+      </>
     );
   }
   return <MathIQApp />;
@@ -197,6 +201,7 @@ function MathIQApp() {
         </Suspense>
       </Page>
       <InstallPrompt />
+      <Analytics />
     </UpgradeProvider>
   );
 }
