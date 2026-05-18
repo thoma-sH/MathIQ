@@ -86,7 +86,7 @@ export function Privacy() {
       </Section>
 
       <Section title="Cookies and storage">
-        We use localStorage for small preferences (walkthrough pace setting, dismissed install prompt). Clerk uses cookies for authentication. We do not use third-party analytics or advertising cookies.
+        We use localStorage for small preferences (walkthrough pace setting, dismissed install prompt). Clerk uses cookies for authentication. We use Vercel Web Analytics — a cookieless, privacy-friendly aggregate visit counter that does not track individuals. We do not use advertising cookies or personal identifiers.
       </Section>
 
       <Section title="Security">
