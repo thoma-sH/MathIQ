@@ -33,6 +33,15 @@ const FORMAT_REINFORCEMENT = `Format reinforcement (priority — these override 
 
 export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
 
+/** Token accounting from a single Anthropic call. Cache fields are 0 when
+ *  the call didn't touch the ephemeral cache. */
+export interface AnthropicUsage {
+  input_tokens: number;
+  cache_creation_input_tokens: number;
+  cache_read_input_tokens: number;
+  output_tokens: number;
+}
+
 export interface AnthropicCallParams {
   apiKey: string;
   model: 'claude-opus-4-6' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
@@ -49,6 +58,10 @@ export interface AnthropicCallParams {
    *  initial POST and the in-flight body read so Anthropic stops generating
    *  (and billing) tokens nobody will see. */
   signal?: AbortSignal;
+  /** Called exactly once on natural stream completion with the final usage
+   *  block. Not called if the client disconnects mid-stream — partial usage
+   *  isn't billable info we want to record. */
+  onUsage?: (usage: AnthropicUsage) => Promise<void> | void;
 }
 
 export interface AnthropicCallResult {
@@ -73,6 +86,7 @@ export async function callAnthropicStream(
     action = 'walkthrough',
     walkthroughSoFar,
     signal,
+    onUsage,
   } = params;
   // why-how is bounded by the prompt at "2-4 short paragraphs" (~1-1.5K
   // tokens). Haiku (anonymous + free tiers) almost never fills more than
@@ -131,7 +145,7 @@ export async function callAnthropicStream(
   return {
     ok: true,
     status: resp.status,
-    body: transformAnthropicSse(resp.body),
+    body: transformAnthropicSse(resp.body, onUsage),
   };
 }
 
@@ -156,6 +170,7 @@ function buildConversation(
 
 function transformAnthropicSse(
   body: ReadableStream<Uint8Array>,
+  onUsage?: (usage: AnthropicUsage) => Promise<void> | void,
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -165,6 +180,16 @@ function transformAnthropicSse(
     async start(controller) {
       reader = body.getReader();
       let buffer = '';
+      // message_start carries input + cache token counts; message_delta
+      // carries the FINAL output_tokens. We accumulate both before invoking
+      // onUsage on natural close.
+      const usage: AnthropicUsage = {
+        input_tokens: 0,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        output_tokens: 0,
+      };
+      let sawMessageDelta = false;
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -184,6 +209,14 @@ function transformAnthropicSse(
               ) {
                 const text = event.delta.text as string;
                 if (text) controller.enqueue(encoder.encode(text));
+              } else if (event.type === 'message_start' && event.message?.usage) {
+                const u = event.message.usage;
+                usage.input_tokens = u.input_tokens ?? 0;
+                usage.cache_creation_input_tokens = u.cache_creation_input_tokens ?? 0;
+                usage.cache_read_input_tokens = u.cache_read_input_tokens ?? 0;
+              } else if (event.type === 'message_delta' && event.usage) {
+                usage.output_tokens = event.usage.output_tokens ?? usage.output_tokens;
+                sawMessageDelta = true;
               }
             } catch {
               // skip malformed event lines
@@ -193,6 +226,16 @@ function transformAnthropicSse(
       } catch (err) {
         controller.error(err);
         return;
+      }
+      // Only fire onUsage on a clean run — partial usage from a half-read
+      // stream would skew the cache-hit-ratio aggregate.
+      if (sawMessageDelta && onUsage) {
+        try {
+          await onUsage(usage);
+        } catch (err) {
+          // Don't fail the stream over an instrumentation error.
+          console.error('anthropic onUsage callback failed', err);
+        }
       }
       controller.close();
     },

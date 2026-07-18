@@ -97,12 +97,20 @@ export interface CheckoutSessionArgs {
   existingCustomerId?: string;
 }
 
+// Plus gets a 7-day free trial on its recurring (monthly + annual) SKUs.
+// Card is captured at checkout (Stripe's default for subscription mode), so
+// the trial converts to a real charge automatically unless the user cancels.
+// Pro is excluded — a heavier-spend tier doesn't need a trial to convert.
+// Semester pass is `mode: 'payment'` and can't carry a trial.
+const PLUS_TRIAL_DAYS = 7;
+
 export async function createCheckoutSession(
   stripe: Stripe,
   env: StripeEnv,
   args: CheckoutSessionArgs,
 ): Promise<Stripe.Checkout.Session> {
   const price = priceIdFor(env, args.tier, args.interval);
+  const eligibleForTrial = args.tier === 'plus' && args.interval !== 'semester';
 
   return stripe.checkout.sessions.create({
     mode: 'subscription',
@@ -115,6 +123,7 @@ export async function createCheckoutSession(
     metadata: { userId: args.userId, tier: args.tier, interval: args.interval },
     subscription_data: {
       metadata: { userId: args.userId },
+      ...(eligibleForTrial ? { trial_period_days: PLUS_TRIAL_DAYS } : {}),
     },
     allow_promotion_codes: true,
   });

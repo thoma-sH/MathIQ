@@ -33,7 +33,7 @@ import {
   type Tier,
   type TierDecision,
 } from './tier';
-import { callAnthropicStream } from './anthropic';
+import { callAnthropicStream, type AnthropicUsage } from './anthropic';
 import { callOpenRouterStream } from './openrouter';
 import { getIrisPrompts } from './prompt';
 import { normalizeLatexDelimiters } from './normalize';
@@ -352,6 +352,10 @@ export default {
       return handleAdminResetDailyCounters(request, env, cors);
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/admin/cache-stats') {
+      return handleAdminCacheStats(request, env, cors);
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
       return handleHomeworkTranscribe(request, env, cors);
     }
@@ -550,6 +554,7 @@ async function handleWalkthrough(
 
   // Provider dispatch
   const prompts = getIrisPrompts(env);
+  const modelIdForMetrics = model.id;
   const upstream =
     model.provider === 'anthropic'
       ? await callAnthropicStream({
@@ -562,6 +567,7 @@ async function handleWalkthrough(
           action: walkAction,
           walkthroughSoFar: walkthroughSoFarClean,
           signal: request.signal,
+          onUsage: (usage) => recordCacheMetrics(env, modelIdForMetrics, usage),
         })
       : await callOpenRouterStream({
           apiKey: env.OPENROUTER_API_KEY,
@@ -2164,6 +2170,138 @@ async function handleAdminResetDailyCounters(
   await env.USAGE.delete(`challenge-attempt:user:${authState.userId}:${today}`);
   await env.USAGE.delete(`challenge-latex-pdf:user:${authState.userId}:${today}`);
   return json({ ok: true, gradeReset, latexReset }, 200, cors);
+}
+
+// ─── Cache metrics ──────────────────────────────────────────────────────
+// Records per-walkthrough Anthropic usage to a per-day KV entry so we can
+// audit the prompt-cache hit ratio. The 90% input discount on cache hits
+// is load-bearing for the unit economics, so we want a visible signal if
+// the cache stops working.
+
+interface ModelMetrics {
+  walkthroughs: number;
+  cache_read: number;
+  cache_creation: number;
+  fresh_input: number;
+  output: number;
+}
+
+interface DailyCacheMetrics {
+  day: string; // YYYY-MM-DD (UTC)
+  walkthroughs: number;
+  cache_read: number;
+  cache_creation: number;
+  fresh_input: number;
+  output: number;
+  by_model: Record<string, ModelMetrics>;
+}
+
+const CACHE_METRICS_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days
+
+function utcDateKey(d = new Date()): string {
+  return d.toISOString().slice(0, 10);
+}
+
+async function recordCacheMetrics(
+  env: Env,
+  model: string,
+  usage: AnthropicUsage,
+): Promise<void> {
+  // Read-modify-write on a single per-day key. KV has no atomic increment,
+  // so concurrent walkthroughs can race and lose a small number of writes.
+  // Acceptable for instrumentation: we care about ratios, not exact counts.
+  const day = utcDateKey();
+  const key = `metrics:cache:${day}`;
+  let existing: DailyCacheMetrics | null = null;
+  try {
+    existing = await env.USAGE.get<DailyCacheMetrics>(key, 'json');
+  } catch {
+    existing = null;
+  }
+  const totals: DailyCacheMetrics = existing ?? {
+    day,
+    walkthroughs: 0,
+    cache_read: 0,
+    cache_creation: 0,
+    fresh_input: 0,
+    output: 0,
+    by_model: {},
+  };
+  totals.walkthroughs += 1;
+  totals.cache_read += usage.cache_read_input_tokens;
+  totals.cache_creation += usage.cache_creation_input_tokens;
+  totals.fresh_input += usage.input_tokens;
+  totals.output += usage.output_tokens;
+  const m = totals.by_model[model] ?? {
+    walkthroughs: 0,
+    cache_read: 0,
+    cache_creation: 0,
+    fresh_input: 0,
+    output: 0,
+  };
+  m.walkthroughs += 1;
+  m.cache_read += usage.cache_read_input_tokens;
+  m.cache_creation += usage.cache_creation_input_tokens;
+  m.fresh_input += usage.input_tokens;
+  m.output += usage.output_tokens;
+  totals.by_model[model] = m;
+  await env.USAGE.put(key, JSON.stringify(totals), {
+    expirationTtl: CACHE_METRICS_TTL_SECONDS,
+  });
+}
+
+/** Returns the last N days of cache-hit metrics. Gated by MAX_USER_IDS so the
+ *  endpoint stays admin-only. Default window is 7 days; ?days=30 widens it. */
+async function handleAdminCacheStats(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  const allowlist = (env.MAX_USER_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!allowlist.includes(authState.userId)) {
+    return json({ error: 'forbidden' }, 403, cors);
+  }
+  const url = new URL(request.url);
+  const requested = Number(url.searchParams.get('days') ?? '7');
+  const days = Math.min(Math.max(Number.isFinite(requested) ? requested : 7, 1), 90);
+  const out: DailyCacheMetrics[] = [];
+  const now = new Date();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now);
+    d.setUTCDate(d.getUTCDate() - i);
+    const key = `metrics:cache:${utcDateKey(d)}`;
+    const v = await env.USAGE.get<DailyCacheMetrics>(key, 'json');
+    if (v) out.push(v);
+  }
+  // Roll up totals across the window and compute the hit ratio.
+  const total: Omit<DailyCacheMetrics, 'day' | 'by_model'> = {
+    walkthroughs: 0,
+    cache_read: 0,
+    cache_creation: 0,
+    fresh_input: 0,
+    output: 0,
+  };
+  for (const d of out) {
+    total.walkthroughs += d.walkthroughs;
+    total.cache_read += d.cache_read;
+    total.cache_creation += d.cache_creation;
+    total.fresh_input += d.fresh_input;
+    total.output += d.output;
+  }
+  const denom = total.cache_read + total.cache_creation + total.fresh_input;
+  const cacheHitRatio = denom > 0 ? total.cache_read / denom : 0;
+  return json(
+    { window_days: days, total, cache_hit_ratio: cacheHitRatio, days: out },
+    200,
+    cors,
+  );
 }
 
 function daysBetweenUtcDates(prior: string, today: string): number {
