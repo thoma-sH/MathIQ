@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { T } from '../design/tokens';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { pagesToPdf } from './scanToPdf';
 
 const CAPTURE_JPEG_QUALITY = 0.92;
@@ -47,8 +48,10 @@ type CameraState = 'pending' | 'live' | 'denied' | 'unsupported';
 export function Scanner({ mode, output, filename, onComplete, onCancel }: ScannerProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const libraryInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  useDialogFocus(dialogRef);
 
   const [camera, setCamera] = useState<CameraState>('pending');
   const [pages, setPages] = useState<ScannedPage[]>([]);
@@ -297,12 +300,25 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
     onCancel();
   }
 
+  // Escape closes the scanner like any other modal.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // cancel reads current pages/reviewPage each call; re-binding per render
+    // keeps it fresh without a ref dance.
+  });
+
   const showLiveCamera = camera === 'live' && !reviewPage;
   const showReview = !!reviewPage;
   const showLibraryOnly = camera === 'denied' || camera === 'unsupported';
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       role="dialog"
       aria-label="Document scanner"
       aria-modal="true"
@@ -315,6 +331,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
         display: 'flex',
         flexDirection: 'column',
         fontFamily: T.sans,
+        outline: 'none',
       }}
     >
       <header

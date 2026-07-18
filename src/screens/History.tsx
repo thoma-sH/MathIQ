@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SignedIn, SignedOut, SignInButton, useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
@@ -353,23 +353,7 @@ function HistoryEntry({
                     Save as PDF — Plus →
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  disabled={deleting}
-                  className="btn-press"
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    padding: 0,
-                    fontSize: 12,
-                    color: T.muted,
-                    cursor: deleting ? 'not-allowed' : 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  {deleting ? 'Removing…' : 'remove from history'}
-                </button>
+                <DeleteButton deleting={deleting} onDelete={onDelete} />
               </div>
             </>
           )}
@@ -381,6 +365,56 @@ function HistoryEntry({
         </div>
       )}
     </article>
+  );
+}
+
+// Deleting is permanent (no undo endpoint), so the first click arms the
+// button and the second confirms. Disarms after 4s or on blur.
+function DeleteButton({ deleting, onDelete }: { deleting: boolean; onDelete: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const disarmTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (disarmTimer.current !== null) window.clearTimeout(disarmTimer.current);
+    };
+  }, []);
+
+  function onClick() {
+    if (armed) {
+      setArmed(false);
+      onDelete();
+      return;
+    }
+    setArmed(true);
+    if (disarmTimer.current !== null) window.clearTimeout(disarmTimer.current);
+    disarmTimer.current = window.setTimeout(() => setArmed(false), 4000);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onBlur={() => setArmed(false)}
+      disabled={deleting}
+      className="btn-press"
+      style={{
+        background: 'transparent',
+        border: 'none',
+        padding: '12px 10px',
+        margin: '-12px -10px',
+        minHeight: 44,
+        display: 'inline-flex',
+        alignItems: 'center',
+        fontSize: 12,
+        color: armed ? T.ink : T.muted,
+        fontWeight: armed ? 600 : 400,
+        cursor: deleting ? 'not-allowed' : 'pointer',
+        textDecoration: 'underline',
+      }}
+    >
+      {deleting ? 'Removing…' : armed ? 'Really remove? This is permanent' : 'remove from history'}
+    </button>
   );
 }
 

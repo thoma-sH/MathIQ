@@ -395,6 +395,7 @@ function FlowOption({
   return (
     <button
       onClick={() => onSelect(value)}
+      aria-pressed={selected}
       className="btn-press"
       style={{
         background: selected ? T.paper : 'transparent',
@@ -554,11 +555,16 @@ function AccountCard() {
               <button
                 type="button"
                 onClick={clearPhoto}
+                aria-label="Remove profile photo"
                 className="btn-press"
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  padding: 0,
+                  padding: '12px 10px',
+                  margin: '-12px -10px',
+                  minHeight: 44,
+                  display: 'inline-flex',
+                  alignItems: 'center',
                   fontSize: 12,
                   color: T.muted,
                   cursor: 'pointer',
@@ -705,7 +711,11 @@ function BillingSection() {
         )}
         {expiryText && (
           <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
-            {isPass ? `Expires ${expiryText} · no auto-renew` : `Renews ${expiryText}`}
+            {isPass
+              ? `Expires ${expiryText} · no auto-renew`
+              : state.status === 'trialing'
+                ? `Trial ends ${expiryText} · billing starts then`
+                : `Renews ${expiryText}`}
           </div>
         )}
         {state.manageable && stripeActive && (
@@ -790,6 +800,7 @@ function IntervalChip({
     <button
       type="button"
       onClick={() => onSelect(value)}
+      aria-pressed={selected}
       className="btn-press"
       style={{
         background: selected ? T.ink : 'transparent',

@@ -415,7 +415,6 @@ export function Landing({ onNavigate }: LandingProps) {
               fontFamily: T.mono,
               resize: 'vertical',
               color: T.ink,
-              outline: 'none',
               lineHeight: 1.5,
               marginBottom: 14,
             }}
@@ -741,7 +740,7 @@ const SHOWCASE: ShowcaseEntry[] = [
     tier: 'Free',
     tierColor: 'var(--muted)',
     title: 'Step-by-step walkthroughs',
-    sub: 'Iris explains every move — not just the answer. Five free per day across nine college subjects.',
+    sub: 'Iris explains every move — not just the answer. Three free per day across nine college subjects.',
     deep: 'Each step lands one line at a time with a short note on why that move is the right one. You set the pace — tap forward when you\'re ready, back up, or jump ahead. Spans algebra, precalc, calc 1/2/3, discrete, combinatorics, linear algebra, and number theory.',
     cta: { kind: 'route', label: 'Pick a subject', route: { name: 'subjects' } },
   },
@@ -771,7 +770,7 @@ const SHOWCASE: ShowcaseEntry[] = [
   },
   {
     tier: 'Pro',
-    tierColor: 'var(--accent-2)',
+    tierColor: 'var(--accent)',
     title: 'LaTeX Mode',
     sub: 'Same upload, but Pro typesets your handwriting in true Computer Modern LaTeX — preserved byte-for-byte, output looks like Overleaf.',
     deep: 'Same upload as Handwritten to PDF, but the output is real Computer Modern LaTeX. Useful for proof-heavy classes where presentation matters.',
@@ -779,7 +778,7 @@ const SHOWCASE: ShowcaseEntry[] = [
   },
   {
     tier: 'Pro',
-    tierColor: 'var(--accent-2)',
+    tierColor: 'var(--accent)',
     title: 'Exam Mode + grading',
     sub: 'Generate full college exams, print them, upload your handwritten attempt. Per-problem scores with topic-level breakdown.',
     deep: 'Pick a course and the topics you want covered, get a printable exam scaled to your level. Take it on paper, snap it back in, and get per-problem feedback with a topic-level breakdown so you know exactly what to drill next.',

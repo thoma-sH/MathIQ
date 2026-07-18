@@ -27,6 +27,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -44,6 +45,7 @@ import {
   type Tier as PaidTier,
 } from '../billing/client';
 import { fetchTrials, type TrialFeature, type TrialState } from '../billing/trials';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 // ── Feature catalog ─────────────────────────────────────────────────────────
 
@@ -250,6 +252,8 @@ function UpgradeModal({
 }) {
   const meta = FEATURE_META[feature];
   const { getToken } = useAuth();
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useDialogFocus(cardRef);
   const [interval, setIntervalChoice] = useState<Interval>('annual');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -322,12 +326,15 @@ function UpgradeModal({
       className="upgrade-backdrop"
     >
       <div
+        ref={cardRef}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         className="upgrade-card"
         style={{
           background: T.paper,
           border: `1px solid ${T.ink}`,
           color: T.ink,
+          outline: 'none',
         }}
       >
         <button
@@ -337,11 +344,16 @@ function UpgradeModal({
           className="btn-press"
           style={{
             position: 'absolute',
-            top: 14,
-            right: 14,
+            top: 4,
+            right: 4,
             background: 'transparent',
             border: 'none',
             padding: 6,
+            minWidth: 44,
+            minHeight: 44,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             cursor: 'pointer',
             color: T.muted,
             fontSize: 20,
@@ -501,6 +513,7 @@ function UpgradeModal({
               display: 'flex',
               gap: 8,
               alignItems: 'center',
+              flexWrap: 'wrap',
               fontSize: 13,
               color: T.muted,
             }}
@@ -595,16 +608,19 @@ function UpgradeModal({
  *  prefers-reduced-motion by holding the after frame. */
 function HandwrittenPreview() {
   const [flipped, setFlipped] = useState(false);
+  // A manual tap hands control to the user — the auto-flip stops for good
+  // (WCAG 2.2.2: auto-updating content needs a way to pause).
+  const [manual, setManual] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || manual) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setFlipped(true);
       return;
     }
     const id = window.setInterval(() => setFlipped((f) => !f), 3000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [manual]);
 
   return (
     <div style={{ marginBottom: 18 }}>
@@ -622,7 +638,10 @@ function HandwrittenPreview() {
       </div>
       <button
         type="button"
-        onClick={() => setFlipped((f) => !f)}
+        onClick={() => {
+          setManual(true);
+          setFlipped((f) => !f);
+        }}
         aria-label={flipped ? 'Show original handwritten page' : 'Show typeset PDF'}
         className="btn-press"
         style={{
@@ -690,6 +709,7 @@ function IntervalChip({
     <button
       type="button"
       onClick={() => onSelect(value)}
+      aria-pressed={active}
       className="btn-press"
       style={{
         background: active ? T.ink : 'transparent',

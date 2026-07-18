@@ -8,6 +8,7 @@ export const T = {
   hair: 'var(--hair)',
   hairStrong: 'var(--hair-strong)',
   muted: 'var(--muted)',
+  doc: 'var(--doc-paper)',
   serif: 'var(--font-serif)',
   slab: 'var(--font-slab)',
   sans: 'var(--font-sans)',

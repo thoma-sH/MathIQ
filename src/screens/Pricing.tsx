@@ -75,7 +75,7 @@ const FEATURES: FeatureRow[] = [
   },
   {
     label: 'Walkthrough history',
-    detail: '90 days of past work, searchable',
+    detail: '90 days of past work, grouped by day',
     free: false,
     plus: true,
     pro: true,
@@ -195,7 +195,7 @@ export function Pricing({ onBack }: PricingProps) {
         Exam Mode — the things you actually pay for.
       </p>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center', flexWrap: 'wrap' }}>
         <span
           style={{
             fontSize: 11,
@@ -298,10 +298,24 @@ export function Pricing({ onBack }: PricingProps) {
           accent
         >
           <SubscribeButton
-            label="Start MathIQ+"
+            label={interval === 'semester' ? 'Start MathIQ+' : 'Start 7-day free trial'}
             pending={pending === 'plus'}
             onClick={() => onSubscribe('plus')}
           />
+          {interval !== 'semester' && (
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 11,
+                fontFamily: T.mono,
+                letterSpacing: '0.08em',
+                color: T.muted,
+                textTransform: 'uppercase',
+              }}
+            >
+              Cancel anytime · card required
+            </div>
+          )}
         </TierCard>
 
         <TierCard
@@ -375,12 +389,12 @@ export function Pricing({ onBack }: PricingProps) {
         >
           <thead>
             <tr>
-              <th style={featureMatrixHeaderCell} aria-label="Feature">
+              <th scope="col" style={featureMatrixHeaderCell}>
                 Feature
               </th>
-              <th style={featureMatrixHeaderCellCenter}>Free</th>
-              <th style={featureMatrixHeaderCellCenter}>MathIQ+</th>
-              <th style={featureMatrixHeaderCellCenter}>MathIQ Pro</th>
+              <th scope="col" style={featureMatrixHeaderCellCenter}>Free</th>
+              <th scope="col" style={featureMatrixHeaderCellCenter}>MathIQ+</th>
+              <th scope="col" style={featureMatrixHeaderCellCenter}>MathIQ Pro</th>
             </tr>
           </thead>
           <tbody>
@@ -791,6 +805,7 @@ function IntervalChip({
     <button
       type="button"
       onClick={() => onSelect(value)}
+      aria-pressed={active}
       className="btn-press"
       style={{
         background: active ? T.ink : 'transparent',

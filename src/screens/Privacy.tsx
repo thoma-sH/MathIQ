@@ -73,8 +73,9 @@ export function Privacy() {
           <li><strong>Stripe</strong> — processes payments. Stores your card and billing details.</li>
           <li><strong>Cloudflare</strong> — hosts our worker and stores your walkthrough history (KV).</li>
           <li><strong>Vercel</strong> — hosts the frontend.</li>
+          <li><strong>TikTok</strong> — an ad-measurement pixel reports page-visit events so we can measure ad performance. It can set cookies and may associate visits with a TikTok profile. It never sees your problems, walkthroughs, or account data.</li>
         </ul>
-        We don't sell your data, don't share it with advertisers, and don't use it for any purpose beyond delivering the Service.
+        We don't sell your data, and beyond the ad measurement described above we don't share it with advertisers or use it for any purpose beyond delivering the Service.
       </Section>
 
       <Section title="Retention">
@@ -86,7 +87,7 @@ export function Privacy() {
       </Section>
 
       <Section title="Cookies and storage">
-        We use localStorage for small preferences (walkthrough pace setting, dismissed install prompt). Clerk uses cookies for authentication. We use Vercel Web Analytics — a cookieless, privacy-friendly aggregate visit counter that does not track individuals. We do not use advertising cookies or personal identifiers.
+        We use localStorage for small preferences (walkthrough pace setting, dismissed install prompt). Clerk uses cookies for authentication. We use Vercel Web Analytics — a cookieless, privacy-friendly aggregate visit counter that does not track individuals. The TikTok ad-measurement pixel described above is the one exception: it can set advertising cookies to attribute visits to TikTok ads.
       </Section>
 
       <Section title="Security">

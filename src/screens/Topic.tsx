@@ -625,7 +625,11 @@ export function TopicScreen({
             style={{
               background: 'transparent',
               border: 'none',
-              padding: 0,
+              padding: '12px 10px',
+              margin: '-12px -10px',
+              minHeight: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
               fontSize: 12,
               color: T.muted,
               cursor: 'pointer',
@@ -667,7 +671,7 @@ export function TopicScreen({
             lineHeight: 1.5,
           }}
         >
-          <strong>You've used your {rateInfo.premiumAllotment ?? 20} Opus walkthroughs today.</strong>{' '}
+          <strong>You've used your {rateInfo.premiumAllotment ?? 5} Opus walkthroughs today.</strong>{' '}
           Now on Sonnet 4.6 for the rest of today — still strong, just not the top of the stack.
         </div>
       )}
@@ -862,7 +866,7 @@ export function TopicScreen({
             letterSpacing: '0.12em',
             textTransform: 'uppercase',
             color:
-              verifyState === 'correct' ? T.accent3 :
+              verifyState === 'correct' ? T.accent :
               verifyState === 'incorrect' ? T.ink :
               T.muted,
           }}
@@ -959,6 +963,7 @@ export function TopicScreen({
             if (submitHint) setSubmitHint(null);
           }}
           onPaste={onCustomTextareaPaste}
+          aria-label="Type your own problem"
           placeholder={`Paste a ${topic.title.toLowerCase()} problem (or anything from ${course.title} — Iris will route).`}
           rows={3}
           style={{
@@ -970,7 +975,6 @@ export function TopicScreen({
             fontFamily: T.mono,
             resize: 'vertical',
             color: T.ink,
-            outline: 'none',
           }}
         />
         <div
@@ -979,6 +983,7 @@ export function TopicScreen({
             alignItems: 'center',
             gap: 12,
             marginTop: 10,
+            flexWrap: 'wrap',
           }}
         >
           <button

@@ -9,7 +9,7 @@
  * Replaces the older ChallengeGradeFlow modal. Reached from the daily button
  * on Landing; the URL is a first-class deep link so shared bookmarks resolve.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import katex from 'katex';
 import { SignedIn, SignedOut, useAuth } from '@clerk/clerk-react';
 import { kicker as kickerStyle } from '../design/primitives';
@@ -31,9 +31,11 @@ import { Confetti } from '../components/Confetti';
 import { TurnstileWidget } from '../components/TurnstileWidget';
 import {
   fetchTodaysChallenge,
+  fetchStreak,
   submitChallengeGrade,
   renderChallengeLatex,
   type ChallengeGradeResponse,
+  type StreakState,
   type TodaysChallenge,
 } from '../billing/challenge';
 
@@ -72,7 +74,22 @@ export function DailyChallenge() {
   const [error, setError] = useState<string | null>(null);
   const [typedAnswer, setTypedAnswer] = useState('');
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [idleStreak, setIdleStreak] = useState<StreakState | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Streak is signed-in only (the worker rejects /api/streak without auth).
+  // Fetched up front so the panel is on screen before the user solves, not
+  // only on the reveal screen.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    void fetchStreak({ getToken }).then((s) => {
+      if (!cancelled && s) setIdleStreak(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn, getToken]);
 
   async function gradeWithImage(file: File) {
     if (!ALLOWED_TYPES.has(file.type)) {
@@ -80,7 +97,7 @@ export function DailyChallenge() {
       return;
     }
     if (file.size > MAX_BYTES) {
-      setError('That image is too large. Try a photo under 9MB.');
+      setError('That image is too large. Try a photo under 12MB.');
       return;
     }
     setError(null);
@@ -203,6 +220,12 @@ export function DailyChallenge() {
           <Header challenge={challenge} />
           <ProblemBlock problemText={challenge.problemText} />
 
+          <SignedIn>
+            {(state.kind === 'idle' || state.kind === 'grading') && idleStreak && (
+              <StreakPanel streak={idleStreak} />
+            )}
+          </SignedIn>
+
           {state.kind === 'idle' && (
             <IdleStage
               mode={mode}
@@ -239,7 +262,6 @@ export function DailyChallenge() {
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
-            capture="environment"
             style={{ display: 'none' }}
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -379,6 +401,7 @@ function IdleStage({
           <textarea
             value={typedAnswer}
             onChange={(e) => setTypedAnswer(e.target.value)}
+            aria-label="Your final answer"
             placeholder="Type your final answer — keep it short. For example: x = 4 or 1/2 or pi/3"
             rows={3}
             maxLength={MAX_TYPED_CHARS}
@@ -391,7 +414,6 @@ function IdleStage({
               fontFamily: T.mono,
               resize: 'vertical',
               color: T.ink,
-              outline: 'none',
               lineHeight: 1.5,
               marginTop: 16,
               marginBottom: 12,
@@ -627,24 +649,7 @@ function RevealStage({
       </div>
 
       <SignedIn>
-        {streak && grade.correct && (
-          <div
-            style={{
-              padding: '10px 14px',
-              background: streak.freezeConsumed ? T.accent : T.paper2,
-              color: streak.freezeConsumed ? T.paper : T.ink,
-              border: `1px solid ${streak.freezeConsumed ? T.accent : T.hair}`,
-              fontSize: 13,
-              marginBottom: 14,
-              fontFamily: T.mono,
-              letterSpacing: '0.06em',
-            }}
-          >
-            {streak.freezeConsumed
-              ? `Freeze saved · Streak · ${streak.current} day${streak.current === 1 ? '' : 's'} intact`
-              : `Streak · ${streak.current} day${streak.current === 1 ? '' : 's'} · Longest ${streak.longest}`}
-          </div>
-        )}
+        {streak && grade.correct && <StreakPanel streak={streak} />}
       </SignedIn>
 
       <div
@@ -754,6 +759,247 @@ function RevealStage({
       </SignedIn>
 
       {error && <ErrorRow message={error} />}
+    </section>
+  );
+}
+
+// ── Streak panel ─────────────────────────────────────────────────────────
+// Big count + last-7-days cell strip + longest/freeze stats + a meter to the
+// next milestone. Duolingo's structure drawn in GitHub's filled-square
+// language, flat on the pistachio/ink system — no icons beyond geometry.
+
+/** Ascending milestone ladder for the "next milestone" meter. Mirrors
+ *  STREAK_MILESTONES (which stays a Set for the confetti check). */
+const MILESTONE_LADDER = [3, 7, 14, 30, 60, 100];
+
+/** Whole days since epoch for a YYYY-MM-DD string, in UTC (challenge days
+ *  are UTC on the worker). */
+function utcDayNumber(date: string): number {
+  const [y, m, d] = date.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86_400_000;
+}
+
+interface DayCell {
+  label: string;
+  solved: boolean;
+  isToday: boolean;
+}
+
+/** The last 7 UTC days ending today, marked solved by walking `current`
+ *  back from `lastSolvedDate`. A freeze-bridged gap renders as solved —
+ *  the panel is a motivator, not an audit log. */
+function lastSevenDays(streak: StreakState): DayCell[] {
+  const today = utcDayNumber(new Date().toISOString().slice(0, 10));
+  const last = streak.lastSolvedDate ? utcDayNumber(streak.lastSolvedDate) : null;
+  const cells: DayCell[] = [];
+  for (let off = 6; off >= 0; off--) {
+    const day = today - off;
+    const solved = last !== null && day <= last && day > last - streak.current;
+    cells.push({
+      label: new Date(day * 86_400_000).toLocaleDateString(undefined, {
+        weekday: 'narrow',
+        timeZone: 'UTC',
+      }),
+      solved,
+      isToday: off === 0,
+    });
+  }
+  return cells;
+}
+
+/** Small geometric diamond for streak freezes. */
+function FreezeIcon() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 12 12"
+      aria-hidden
+      style={{ display: 'inline-block', flexShrink: 0 }}
+    >
+      <path
+        d="M6 1.2 L10.8 6 L6 10.8 L1.2 6 Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.4}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StreakPanel({ streak }: { streak: StreakState }) {
+  const solvedToday =
+    streak.lastSolvedDate === new Date().toISOString().slice(0, 10);
+  const cells = lastSevenDays(streak);
+  const started = streak.current > 0;
+  const next = MILESTONE_LADDER.find((m) => m > streak.current) ?? null;
+
+  return (
+    <section
+      aria-label={`Streak: ${streak.current} day${streak.current === 1 ? '' : 's'}. Longest: ${streak.longest}. Freezes left: ${streak.freezes}.`}
+      style={{
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        padding: '16px 18px 14px',
+        marginBottom: 16,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 84 }}>
+          <div
+            style={{
+              fontFamily: T.sans,
+              fontSize: 'clamp(40px, 11vw, 52px)',
+              fontWeight: 700,
+              lineHeight: 1,
+              letterSpacing: '-0.03em',
+              color: T.ink,
+            }}
+          >
+            {streak.current}
+          </div>
+          <div
+            style={{
+              fontFamily: T.mono,
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              color: T.ink,
+              marginTop: 5,
+            }}
+          >
+            {started ? 'day streak' : 'start today'}
+          </div>
+        </div>
+
+        <div
+          aria-label={`Last 7 days: ${cells.filter((c) => c.solved).length} solved`}
+          style={{ display: 'flex', gap: 7 }}
+        >
+          {cells.map((c, i) => (
+            <div
+              key={i}
+              aria-hidden
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span
+                style={{
+                  width: 24,
+                  height: 24,
+                  boxSizing: 'border-box',
+                  background: c.solved ? T.accent : 'transparent',
+                  border: c.isToday
+                    ? `2px solid ${T.accent}`
+                    : `1px solid ${c.solved ? T.ink : T.hairStrong}`,
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: T.mono,
+                  fontSize: 10,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: T.ink,
+                }}
+              >
+                {c.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: 14,
+          paddingTop: 12,
+          borderTop: `1px solid ${T.hair}`,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          flexWrap: 'wrap',
+          fontFamily: T.mono,
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: T.ink,
+        }}
+      >
+        <span>Longest · {streak.longest}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <FreezeIcon /> Freeze × {streak.freezes}
+        </span>
+        {started && (
+          <span style={{ color: T.accent, fontWeight: 600 }}>
+            {solvedToday ? 'Solved today' : 'Solve today to keep it'}
+          </span>
+        )}
+      </div>
+
+      {next !== null && (
+        <div style={{ marginTop: 10 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              fontFamily: T.mono,
+              fontSize: 10,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: T.ink,
+              marginBottom: 4,
+            }}
+          >
+            <span>Next milestone</span>
+            <span>
+              {streak.current} / {next}
+            </span>
+          </div>
+          <div
+            aria-hidden
+            style={{
+              height: 5,
+              background: T.hair,
+              border: `1px solid ${T.hairStrong}`,
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: `${Math.min(100, Math.round((streak.current / next) * 100))}%`,
+                background: T.accent,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {streak.freezeConsumed && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: '8px 12px',
+            background: T.accent,
+            color: T.paper,
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+          }}
+        >
+          Freeze used · streak saved
+        </div>
+      )}
     </section>
   );
 }

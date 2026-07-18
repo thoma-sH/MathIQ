@@ -238,7 +238,7 @@ function SharedView({ data }: { data: SharedChallenge }) {
             style={{
               padding: '20px 22px',
               border: `1px solid ${T.ink}`,
-              background: '#fff',
+              background: T.doc,
               fontSize: 16,
               lineHeight: 1.6,
               color: T.ink,

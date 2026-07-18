@@ -5,6 +5,7 @@ import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
 import { UpgradeProvider } from './upgrade/UpgradePrompt';
 import { T } from './design/tokens';
+import { COURSES_BY_ID } from './walkthroughs/courses';
 import type { Route } from './router';
 
 // All non-home screens are split off into their own chunks so the initial
@@ -31,7 +32,11 @@ interface PageProps {
 }
 
 function Page({ routeKey, children }: PageProps) {
-  return <div key={routeKey} className="page-enter">{children}</div>;
+  return (
+    <div key={routeKey} id="main-content" tabIndex={-1} className="page-enter" style={{ outline: 'none' }}>
+      {children}
+    </div>
+  );
 }
 
 // Fade-in is delayed 200ms so chunks that load fast never flash the skeleton;
@@ -64,6 +69,28 @@ function pageKey(route: Route): string {
   if (route.name === 'exam-take') return `exam-take-${route.recordId}`;
   if (route.name === 'exam-grade') return `exam-grade-${route.recordId}`;
   return route.name;
+}
+
+// Human-readable label per route — drives document.title and the polite
+// screen-reader announcement on navigation (SPA route changes are otherwise
+// silent for assistive tech).
+function routeLabel(route: Route): string {
+  switch (route.name) {
+    case 'home': return 'Home';
+    case 'subjects': return 'Subjects';
+    case 'walkthrough': return COURSES_BY_ID[route.courseId]?.title ?? 'Course';
+    case 'topic': {
+      const course = COURSES_BY_ID[route.courseId];
+      const topic = course?.topics.find((t) => t.id === route.topicId);
+      return topic?.title ?? course?.title ?? 'Topic';
+    }
+    case 'history': return 'History';
+    case 'settings': return 'Settings';
+    case 'exams': return `Exams · ${COURSES_BY_ID[route.courseId]?.title ?? 'Course'}`;
+    case 'exam-take': return 'Take exam';
+    case 'exam-grade': return 'Grade exam';
+    case 'homework': return 'Handwritten to PDF';
+  }
 }
 
 function escapeTarget(route: Route): Route | null {
@@ -106,8 +133,22 @@ function getRealUrlPath(): RealUrl | null {
   return null;
 }
 
+const REAL_URL_TITLES: Record<RealUrl['kind'], string> = {
+  terms: 'Terms · MathIQ',
+  privacy: 'Privacy · MathIQ',
+  pricing: 'Pricing · MathIQ',
+  daily: 'Daily Challenge · MathIQ',
+  share: 'Shared challenge · MathIQ',
+};
+
 export default function App() {
   const realPath = getRealUrlPath();
+  useEffect(() => {
+    if (realPath) document.title = REAL_URL_TITLES[realPath.kind];
+    // realPath is derived from location.pathname, which never changes without
+    // a full navigation — mount-only is correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   if (realPath) {
     return (
       <>
@@ -176,6 +217,16 @@ function MathIQApp() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
+      // Escape belongs to whatever the user is interacting with first:
+      // a focused text field (first press blurs it, typed work intact —
+      // the next press navigates) or an open modal dialog (ours or
+      // Clerk's — they close on the same keypress).
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
+        t.blur();
+        return;
+      }
+      if (document.querySelector('[aria-modal="true"]')) return;
       const target = escapeTarget(route);
       if (target) navigate(target);
     };
@@ -183,8 +234,25 @@ function MathIQApp() {
     return () => document.removeEventListener('keydown', onKey);
   }, [route, navigate]);
 
+  // Title + polite announcement per route. The announcement is skipped on
+  // first mount — page load is already announced by the browser.
+  const [announcement, setAnnouncement] = useState('');
+  useEffect(() => {
+    const label = routeLabel(route);
+    document.title =
+      route.name === 'home' ? 'MathIQ — math problems, walked through' : `${label} · MathIQ`;
+    if (route.name !== 'home' || announcement !== '') setAnnouncement(label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route]);
+
   return (
     <UpgradeProvider>
+      <a href="#main-content" className="skip-link chamfer">
+        Skip to content
+      </a>
+      <div aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
       <Header route={route} onNavigate={navigate} />
       <Page routeKey={pageKey(route)}>
         <Suspense fallback={<RouteSkeleton />}>
