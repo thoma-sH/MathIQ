@@ -50,26 +50,9 @@ PRO_USER_IDS = ""
 # Set to empty string if no manual grants.
 MAX_USER_IDS = "user_3DYnEzyeFI36j2JWovhFyBEvRPe"
 
-# Stripe price IDs.
-#
-# TARGET PRICING (new, not yet reflected in the IDs below):
-#   Plus  $7.99/mo · $5.99/mo annual ($71.88/yr, save 25%) · $25.99 semester
-#   Pro   $12.99/mo · $9.99/mo annual ($119.88/yr, save 23%) · $41.99 semester
-#
-# The IDs below are still bound to the PREVIOUS prices ($7.99/$3.99/$25.99
-# Plus, $19.99/$8.99/$64.99 Pro). Before pushing the new frontend display
-# to prod:
-#   1. Create six new Price products in the Stripe dashboard at the target
-#      amounts above (Monthly + Annual recurring + Semester one-time, for
-#      both Plus and Pro).
-#   2. Move the six current IDs below into the grandfathered `_OLD` slots
-#      (extending the schema in `priceIdToTierInterval` if more than three
-#      OLD slots are needed) so existing subscribers' renewal webhooks still
-#      resolve correctly.
-#   3. Paste the six new IDs into the slots below.
-#
-# Until step 3 is done, the frontend will display the new prices but
-# checkout will charge the legacy amounts — fix this before the deploy.
+# Live Stripe price IDs — six SKUs (Monthly + Annual recurring, Semester
+# one-time, for both Plus and Pro). When prices are reshaped, move the
+# outgoing IDs into the `_OLD` slots below before pasting the new ones here.
 STRIPE_PRICE_PLUS_MONTHLY = "price_1TXDrnHJHOfcH2xmMhvhYKx9"
 STRIPE_PRICE_PLUS_ANNUAL  = "price_1TXDs8HJHOfcH2xmi2Bjh9X0"
 STRIPE_PRICE_PLUS_SEMESTER = "price_1TXDt5HJHOfcH2xmqfwfvHOL"
