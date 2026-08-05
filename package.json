@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Mental math trainer — speed drills + AI tutor across arithmetic → calculus.",
+  "description": "Guided step-by-step math walkthroughs across nine college courses.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
