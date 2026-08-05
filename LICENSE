@@ -1,0 +1,39 @@
+MathIQ — Source-Available License
+
+Copyright (c) 2026 Thomas H. All rights reserved.
+
+The source code in this repository is published for reference, study, and
+evaluation. It is not open-source software.
+
+YOU MAY:
+
+  - Read, browse, and study this source code.
+  - Fork or clone it for personal study and experimentation.
+  - Quote or cite portions of it, with attribution, in articles, reviews,
+    teaching materials, and technical discussion.
+
+YOU MAY NOT, without prior written permission from the copyright holder:
+
+  - Redistribute this source code, in whole or in substantial part, whether
+    modified or unmodified.
+  - Deploy this software, or any derivative of it, as a hosted or public
+    service.
+  - Use this software, or any derivative of it, for commercial purposes.
+  - Use the MathIQ name, the Iris name, or the associated branding, marks,
+    or visual identity.
+
+The prompts, course and topic catalog, visual design, and product copy are
+part of this work and carry the same restrictions as the code.
+
+Third-party dependencies are governed by their own licenses.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
+FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
+
+For permissions beyond the scope of this license, open an issue on the
+repository.
