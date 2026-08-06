@@ -150,7 +150,8 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
       >
         Upload a PDF or photo of your completed attempt — PDFs work best for
         multi-page exams. Iris will score each problem, flag the topics you missed,
-        and recommend what to review.
+        and recommend what to review. Grading runs on Opus 4.6 and spends one of
+        your daily Max slots.
       </p>
 
       {state.kind === 'idle' && record && <IdleCard onFile={onFile} />}

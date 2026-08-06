@@ -635,8 +635,8 @@ const PLAN_PRICES: Record<BillingTier, Record<Interval, { display: string; tagli
 };
 
 const PLAN_BLURBS: Record<BillingTier, string> = {
-  plus: '5 Opus 4.6 walkthroughs, then 20 Sonnet 4.6 (25 total daily, 100 Opus / month). Why & how on every step.',
-  pro: '8 Opus 4.6 walkthroughs, then 30 Sonnet 4.6 (38 total daily, 150 Opus / month). LaTeX Mode + Exam Mode.',
+  plus: '25 walkthroughs daily on Sonnet 4.6, with 5 Max walkthroughs a day on Opus 4.6 you spend when you choose (100 Opus / month). Why & how on every step.',
+  pro: '38 walkthroughs daily on Sonnet 4.6, with 8 Max walkthroughs a day on Opus 4.6 you spend when you choose (150 Opus / month). LaTeX Mode + Exam Mode.',
 };
 
 const PLAN_LABELS: Record<BillingTier, string> = {

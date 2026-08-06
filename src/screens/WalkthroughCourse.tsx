@@ -195,6 +195,9 @@ export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCoursePro
           <span style={{ fontSize: 12, opacity: 0.75, fontWeight: 400, fontFamily: T.mono, letterSpacing: '0.1em' }}>
             4 EXAMS · GENERATED + GRADED · PRO
           </span>
+          <span style={{ fontSize: 12, opacity: 0.75, fontWeight: 400, fontFamily: T.mono, letterSpacing: '0.1em' }}>
+            RUNS ON OPUS · SPENDS 1 MAX SLOT
+          </span>
         </span>
         <span aria-hidden style={{ fontSize: 18 }}>→</span>
       </button>

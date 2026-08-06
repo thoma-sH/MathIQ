@@ -289,7 +289,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.plus[interval].sub}
           blurb="The premium model, photo input, why-how, and Handwritten to PDF."
           highlights={[
-            '25 walkthroughs / day (5 Opus + 20 Sonnet)',
+            '25 walkthroughs / day, 5 on Max (Opus 4.6)',
             'Why & how reflection',
             'Photo input',
             'Handwritten to PDF',
@@ -324,7 +324,7 @@ export function Pricing({ onBack }: PricingProps) {
           subline={PLAN_PRICES.pro[interval].sub}
           blurb="Everything in Plus, plus LaTeX Mode, Exam Mode, and grading."
           highlights={[
-            '38 walkthroughs / day (8 Opus + 30 Sonnet)',
+            '38 walkthroughs / day, 8 on Max (Opus 4.6)',
             'LaTeX Mode — typeset PDFs',
             'Exam Mode — generate full exams',
             'Exam grading',
