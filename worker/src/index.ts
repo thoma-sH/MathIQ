@@ -14,22 +14,26 @@ import {
   decrement,
   increment,
   nextMidnightUtc,
+  nextMonthStartUtc,
   peek,
   userChallengeGradeCounter,
   userChallengeLatexCounter,
   userCounter,
   userExamDailyCounter,
+  userOpusDailyCounter,
   userOpusMonthlyCounter,
   type CounterRef,
 } from './rateLimit';
 export { UsageCounter } from './counterDO';
 import {
+  dailyOpusLimit,
   decideTier,
+  FREE_LIMIT,
   monthlyOpusLimit,
-  OPUS,
   resolveTier,
   SONNET,
   type ModelKey,
+  type ModelPreference,
   type Tier,
   type TierDecision,
 } from './tier';
@@ -190,6 +194,21 @@ interface WalkthroughBody {
   problem?: string;
   action?: 'walkthrough' | 'why-how' | 'practice';
   walkthroughSoFar?: string;
+  /** Paid-tier model choice. 'max' burns a daily + monthly Opus slot,
+   *  'standard' burns only a daily total slot. Absent or unrecognized means
+   *  'auto' — the pre-picker behavior every older client sends. */
+  model?: 'max' | 'standard';
+}
+
+/** Never throws and never 400s. A stale client, a lapsed subscriber, or a
+ *  garbage value all resolve to 'auto' and get served normally — this field
+ *  grants no access the tier doesn't already grant, and a deploy that bricks
+ *  every open tab is a far worse failure than a silently ignored preference. */
+function parseModelPreference(raw: unknown, tier: Tier): ModelPreference {
+  if (tier !== 'plus' && tier !== 'pro') return 'auto'; // Haiku-only tiers
+  if (raw === 'max') return 'max';
+  if (raw === 'standard') return 'standard';
+  return 'auto';
 }
 
 interface ClassifyBody {
@@ -239,7 +258,7 @@ export default {
           'Access-Control-Allow-Methods': 'POST, OPTIONS, GET',
           'Access-Control-Allow-Headers': 'content-type, authorization',
           'Access-Control-Expose-Headers':
-            'X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Scope, X-Tier, X-Model-Used, X-Degraded, X-Premium-Allotment',
+            'X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-RateLimit-Scope, X-Tier, X-Model-Used, X-Degraded, X-Premium-Allotment, X-Opus-Daily-Limit, X-Opus-Daily-Remaining, X-Opus-Monthly-Limit, X-Opus-Monthly-Remaining, X-Opus-Monthly-Reset, X-Model-Preference, X-Downgrade-Reason',
           Vary: 'Origin',
         }
       : { Vary: 'Origin' };
@@ -266,6 +285,10 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/api/trials') {
       return handleTrialsGet(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/usage') {
+      return handleUsage(request, env, cors);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
@@ -417,38 +440,65 @@ async function handleWalkthrough(
           request.headers.get('CF-Connecting-IP') ?? 'unknown',
         );
 
-  // Monthly Opus is the cost ceiling that sits on top of the daily caps.
-  // Only signed-in users carry one — anonymous/free never reach Opus, so the
-  // counter is moot for them and we skip the round trip.
+  // Opus counters — daily is the budget the user spends deliberately, monthly
+  // is the cost ceiling on top of it. Only paid signed-in users carry either;
+  // anonymous/free never reach Opus, so we skip both round trips for them.
+  const paid = tier === 'plus' || tier === 'pro';
+  const opusDaily: CounterRef | null =
+    authState.kind === 'user' && paid
+      ? userOpusDailyCounter(env.USAGE_DO, authState.userId)
+      : null;
   const opusMonthly: CounterRef | null =
-    authState.kind === 'user'
+    authState.kind === 'user' && paid
       ? userOpusMonthlyCounter(env.USAGE_DO, authState.userId)
       : null;
 
-  const [usedToday, opusUsedMonth] = await Promise.all([
+  // The model decision has to happen before the authoritative request.json()
+  // below, so read the preference off the clone already parsed for why-how.
+  let preference = parseModelPreference(parsedBody?.model, tier);
+
+  const [usedToday, opusUsedToday, opusUsedMonth] = await Promise.all([
     peek(counter),
+    opusDaily ? peek(opusDaily) : Promise.resolve(0),
     opusMonthly ? peek(opusMonthly) : Promise.resolve(0),
   ]);
-  const decision: TierDecision = decideTier(tier, usedToday, opusUsedMonth);
+  const decision: TierDecision = decideTier(tier, usedToday, opusUsedMonth, {
+    preference,
+    opusUsedToday,
+  });
 
-  const baseHeaders = buildRateLimitHeaders(tier, usedToday, decision);
+  const baseHeaders = {
+    ...buildRateLimitHeaders(tier, usedToday, decision),
+    ...buildOpusHeaders(tier, opusUsedToday, opusUsedMonth, preference, decision),
+  };
+
+  // Single funnel for every early return, so none of them can forget to hand
+  // back the why-how trial that ensureFeatureAccess may have just consumed.
+  // No-ops for paid users and for requests that never consumed one.
+  const bail = async (
+    payload: unknown,
+    status: number,
+    headers: Record<string, string> = baseHeaders,
+  ): Promise<Response> => {
+    if (whyHowAccess) await refundAccess(env, authState, whyHowAccess);
+    return json(payload, status, { ...cors, ...headers });
+  };
 
   // Over the ceiling — 429 (signed-in) or 401 (anonymous, prompt to sign in)
   if (decision.model === null) {
     if (tier === 'anonymous') {
-      return json(
+      return bail(
         {
           error: 'sign_in_required',
-          message: `You've used your free walkthrough. Sign in for 5/day.`,
+          message: `You've used your free walkthrough. Sign in for ${FREE_LIMIT}/day.`,
           limit: decision.ceiling,
           used: usedToday,
           resetAt: nextMidnightUtc(),
         },
         401,
-        { ...cors, ...baseHeaders },
       );
     }
-    return json(
+    return bail(
       {
         error: 'rate_limit',
         message: `You've used all ${decision.ceiling} walkthroughs today.`,
@@ -457,7 +507,6 @@ async function handleWalkthrough(
         resetAt: nextMidnightUtc(),
       },
       429,
-      { ...cors, ...baseHeaders },
     );
   }
 
@@ -465,58 +514,49 @@ async function handleWalkthrough(
   try {
     body = await request.json();
   } catch {
-    return json({ error: 'invalid JSON body' }, 400, { ...cors, ...baseHeaders });
+    return bail({ error: 'invalid JSON body' }, 400);
   }
 
   const { courseId, topicId, problem, action, walkthroughSoFar } = body;
   if (typeof problem === 'string' && problem.length > MAX_PROBLEM_CHARS) {
-    return json(
-      { error: 'problem too long', limit: MAX_PROBLEM_CHARS },
-      413,
-      { ...cors, ...baseHeaders },
-    );
+    return bail({ error: 'problem too long', limit: MAX_PROBLEM_CHARS }, 413);
   }
   if (typeof walkthroughSoFar === 'string' && walkthroughSoFar.length > MAX_HISTORY_CHARS) {
-    return json(
-      { error: 'context too long', limit: MAX_HISTORY_CHARS },
-      413,
-      { ...cors, ...baseHeaders },
-    );
+    return bail({ error: 'context too long', limit: MAX_HISTORY_CHARS }, 413);
   }
   const walkAction: 'walkthrough' | 'why-how' | 'practice' =
     action === 'why-how' ? 'why-how' : action === 'practice' ? 'practice' : 'walkthrough';
   const walkthroughSoFarClean =
     typeof walkthroughSoFar === 'string' ? walkthroughSoFar : undefined;
   if (!courseId || !topicId) {
-    return json(
-      { error: 'courseId and topicId required' },
-      400,
-      { ...cors, ...baseHeaders },
-    );
+    return bail({ error: 'courseId and topicId required' }, 400);
   }
 
   const found = findTopic(courseId, topicId);
   if (!found) {
-    return json(
-      { error: 'unknown course or topic' },
-      404,
-      { ...cors, ...baseHeaders },
-    );
+    return bail({ error: 'unknown course or topic' }, 404);
   }
   const { course, topic } = found;
 
-  // Atomic increment — claims this slot in the user's daily quota.
-  // The DO is single-threaded per id, so concurrent requests can't both
-  // commit the same value.
+  // Re-derive the preference from the authoritative parse. Identical to the
+  // clone in practice; this just removes any doubt about which body won.
+  preference = parseModelPreference(body.model, tier);
+
+  // Claim 1 of 3 — the daily total slot. Atomic increment: the DO is
+  // single-threaded per id, so concurrent requests can't both commit the
+  // same value.
   const newCount = await increment(counter);
   const usedBefore = newCount - 1;
-  let finalDecision: TierDecision = decideTier(tier, usedBefore, opusUsedMonth);
+  const finalDecision: TierDecision = decideTier(tier, usedBefore, opusUsedMonth, {
+    preference,
+    opusUsedToday,
+  });
 
   // Race-lost case: another request from this user landed first and pushed us
   // over the ceiling. Refund the increment and 429.
   if (finalDecision.model === null) {
     await decrement(counter);
-    return json(
+    return bail(
       {
         error: 'rate_limit',
         message: `You've used all ${finalDecision.ceiling} walkthroughs today.`,
@@ -525,30 +565,63 @@ async function handleWalkthrough(
         resetAt: nextMidnightUtc(),
       },
       429,
-      { ...cors, ...buildRateLimitHeaders(tier, newCount, finalDecision) },
+      {
+        ...buildRateLimitHeaders(tier, newCount, finalDecision),
+        ...buildOpusHeaders(tier, opusUsedToday, opusUsedMonth, preference, finalDecision),
+      },
     );
   }
 
   // finalDecision.model is non-null here (early-return above handled null).
-  // Capture into a local `let` so the monthly-Opus downgrade can reassign
-  // without TS losing the type narrowing.
+  // Capture into locals so the Opus downgrade paths can reassign without TS
+  // losing the type narrowing.
   let model: ModelKey = finalDecision.model;
   let degraded = finalDecision.degraded;
+  let downgradeReason = finalDecision.downgradeReason;
 
-  // If we're about to serve Opus, atomically claim a monthly-Opus slot too.
-  // Post-increment > cap means another Opus request grabbed the last slot
-  // first — refund THIS one and downgrade it to Sonnet for the rest of the
-  // month. The daily slot still counts (the user got a walkthrough, just on
-  // the fallback model).
-  let monthlyOpusInc = false;
-  if (model.id === OPUS.id && opusMonthly) {
-    const newOpusMonth = await increment(opusMonthly);
-    if (newOpusMonth > monthlyOpusLimit(tier)) {
-      await decrement(opusMonthly);
+  // Post-claim truth for the response headers: seeded from the peek, then
+  // overwritten wherever we actually touched a counter.
+  let opusDayUsed = opusUsedToday;
+  let opusMonthUsed = opusUsedMonth;
+  let opusDailyClaimed = false;
+  let opusMonthlyClaimed = false;
+
+  // Claims 2 and 3 — only when this request will actually burn Opus. Sequential
+  // rather than parallel: if the daily claim loses its race there's no point
+  // spending a round trip on the monthly one.
+  if (finalDecision.claimsOpus && opusDaily && opusMonthly) {
+    const newOpusDay = await increment(opusDaily);
+    opusDayUsed = newOpusDay;
+
+    if (newOpusDay > dailyOpusLimit(tier)) {
+      // A concurrent request took the last max slot between our peek and this
+      // increment. Refund the Opus day slot and serve Sonnet. The daily TOTAL
+      // slot stays claimed — the user still gets a walkthrough.
+      await decrement(opusDaily);
+      opusDayUsed = newOpusDay - 1;
       model = SONNET;
       degraded = true;
+      downgradeReason = 'daily';
     } else {
-      monthlyOpusInc = true;
+      opusDailyClaimed = true;
+
+      const newOpusMonth = await increment(opusMonthly);
+      opusMonthUsed = newOpusMonth;
+
+      if (newOpusMonth > monthlyOpusLimit(tier)) {
+        await decrement(opusMonthly);
+        opusMonthUsed = newOpusMonth - 1;
+        // The daily Opus slot has to go back too. Without this the user
+        // permanently loses a max slot and gets a Sonnet answer for it.
+        await decrement(opusDaily);
+        opusDayUsed -= 1;
+        opusDailyClaimed = false;
+        model = SONNET;
+        degraded = true;
+        downgradeReason = 'monthly';
+      } else {
+        opusMonthlyClaimed = true;
+      }
     }
   }
 
@@ -583,20 +656,30 @@ async function handleWalkthrough(
 
   if (!upstream.ok || !upstream.body) {
     if (upstream.detail) console.error('upstream walkthrough failed', upstream.status, upstream.detail);
-    // Upstream failed — refund daily slot, monthly Opus, and the why-how
-    // trial (if any) so the user isn't charged for it.
+    // Upstream failed — unwind every claim in reverse order, plus the why-how
+    // trial (bail handles that), so the user isn't charged for it. baseHeaders
+    // is the right payload here precisely because all three counters are back
+    // at their pre-request values.
+    if (opusMonthlyClaimed && opusMonthly) await decrement(opusMonthly);
+    if (opusDailyClaimed && opusDaily) await decrement(opusDaily);
     await decrement(counter);
-    if (monthlyOpusInc && opusMonthly) await decrement(opusMonthly);
-    if (whyHowAccess) await refundAccess(env, authState, whyHowAccess);
-    return json(
+    return bail(
       { error: 'upstream_error', message: 'The walkthrough service is having trouble — try again in a moment.' },
       502,
-      { ...cors, ...baseHeaders },
     );
   }
 
-  // Re-build rate-limit headers reflecting the post-increment count.
-  const postHeaders = buildRateLimitHeaders(tier, newCount, finalDecision);
+  // Re-build headers reflecting the post-increment counts. The Opus half is
+  // built from the post-claim locals, not from finalDecision — model, degraded
+  // and downgradeReason may all have been reassigned during the claim.
+  const postHeaders = {
+    ...buildRateLimitHeaders(tier, newCount, finalDecision),
+    ...buildOpusHeaders(tier, opusDayUsed, opusMonthUsed, preference, {
+      ...finalDecision,
+      degraded,
+      downgradeReason,
+    }),
+  };
 
   return new Response(upstream.body.pipeThrough(normalizeLatexDelimiters()), {
     status: 200,
@@ -749,6 +832,131 @@ function buildRateLimitHeaders(
       ? { 'X-Premium-Allotment': String(decision.premiumAllotment) }
       : {}),
   };
+}
+
+/**
+ * Opus-budget headers. Kept separate from buildRateLimitHeaders because that
+ * one is also called from /api/homework/latex-pdf, which has no Opus counts to
+ * hand it. Returns {} for tiers that can't reach Opus at all.
+ *
+ * X-Downgrade-Reason is what makes the picker work on the client: a `user`
+ * reason means "you chose this, no banner", while daily/monthly means "here's
+ * the wall you hit". X-Degraded stays for clients that predate this.
+ */
+function buildOpusHeaders(
+  tier: Tier,
+  opusUsedToday: number,
+  opusUsedMonth: number,
+  preference: ModelPreference,
+  decision: TierDecision,
+): Record<string, string> {
+  if (tier !== 'plus' && tier !== 'pro') return {};
+  const dayCap = dailyOpusLimit(tier);
+  const monthCap = monthlyOpusLimit(tier);
+  return {
+    'X-Opus-Daily-Limit': String(dayCap),
+    'X-Opus-Daily-Remaining': String(Math.max(0, dayCap - opusUsedToday)),
+    'X-Opus-Monthly-Limit': String(monthCap),
+    'X-Opus-Monthly-Remaining': String(Math.max(0, monthCap - opusUsedMonth)),
+    'X-Opus-Monthly-Reset': nextMonthStartUtc(),
+    'X-Model-Preference': preference,
+    ...(decision.downgradeReason
+      ? { 'X-Downgrade-Reason': decision.downgradeReason }
+      : {}),
+  };
+}
+
+interface UsageBucket {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+function usageBucket(used: number, limit: number): UsageBucket {
+  return { used, limit, remaining: Math.max(0, limit - used) };
+}
+
+/**
+ * Pre-flight quota snapshot. The response headers on /api/walkthrough only
+ * arrive *after* a walkthrough, but the model picker has to show "3 of 5 max
+ * left" before the user has typed anything — hence a readable endpoint.
+ *
+ * opusDaily/opusMonthly are null (not zeroed) for tiers that can't choose, so
+ * the client renders the locked state from one truthiness check.
+ */
+async function handleUsage(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const headers = { ...cors, 'cache-control': 'no-store' };
+  const authState = await authenticate(request, env);
+
+  // Anonymous — and expired/invalid tokens — get a real answer, not a 401.
+  // This feeds a display chip; a stale Clerk token must not become an error.
+  if (authState.kind !== 'user') {
+    const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+    const used = await peek(anonymousCounter(env.USAGE_DO, ip));
+    return json(
+      {
+        tier: 'anonymous',
+        scope: 'anonymous',
+        resetAt: nextMidnightUtc(),
+        monthlyResetAt: null,
+        daily: usageBucket(used, decideTier('anonymous', used).ceiling),
+        opusDaily: null,
+        opusMonthly: null,
+        canChooseModel: false,
+      },
+      200,
+      headers,
+    );
+  }
+
+  const tier = await resolveTier(authState, env);
+  const counter = userCounter(env.USAGE_DO, authState.userId);
+
+  if (tier !== 'plus' && tier !== 'pro') {
+    const used = await peek(counter);
+    return json(
+      {
+        tier,
+        scope: 'user',
+        resetAt: nextMidnightUtc(),
+        monthlyResetAt: null,
+        daily: usageBucket(used, decideTier(tier, used).ceiling),
+        opusDaily: null,
+        opusMonthly: null,
+        canChooseModel: false,
+      },
+      200,
+      headers,
+    );
+  }
+
+  const [used, opusDay, opusMonth] = await Promise.all([
+    peek(counter),
+    peek(userOpusDailyCounter(env.USAGE_DO, authState.userId)),
+    peek(userOpusMonthlyCounter(env.USAGE_DO, authState.userId)),
+  ]);
+
+  return json(
+    {
+      tier,
+      scope: 'user',
+      resetAt: nextMidnightUtc(),
+      monthlyResetAt: nextMonthStartUtc(),
+      daily: usageBucket(
+        used,
+        decideTier(tier, used, opusMonth, { opusUsedToday: opusDay }).ceiling,
+      ),
+      opusDaily: usageBucket(opusDay, dailyOpusLimit(tier)),
+      opusMonthly: usageBucket(opusMonth, monthlyOpusLimit(tier)),
+      canChooseModel: true,
+    },
+    200,
+    headers,
+  );
 }
 
 function json(body: unknown, status: number, cors: Record<string, string>) {
@@ -1288,13 +1496,16 @@ async function handleExamGenerate(
     return json({ error: 'unknown courseId' }, 400, cors);
   }
 
-  // Exam Mode has three counters:
+  // Exam Mode has four counters:
   //   1. examCounter   — per-day cap on exam generations (EXAM_DAILY_CAP = 2)
   //   2. counter       — the shared daily walkthrough/feature slot
-  //   3. opusMonthly   — the monthly Opus ceiling (exam always uses Opus)
-  // The 2/day cap is the real ceiling; daily and monthly are belt-and-suspenders.
+  //   3. opusDaily     — the daily Opus budget (exam always uses Opus, so it
+  //                      spends one of the same max slots as a walkthrough)
+  //   4. opusMonthly   — the monthly Opus ceiling
+  // The 2/day cap is the real ceiling; the rest are belt-and-suspenders.
   const examCounter = userExamDailyCounter(env.USAGE_DO, authState.userId);
   const counter = userCounter(env.USAGE_DO, authState.userId);
+  const opusDaily = userOpusDailyCounter(env.USAGE_DO, authState.userId);
   const opusMonthly = userOpusMonthlyCounter(env.USAGE_DO, authState.userId);
 
   const [examUsedToday, usedToday] = await Promise.all([
@@ -1365,6 +1576,10 @@ async function handleExamGenerate(
     );
   }
 
+  // Generation is hardcoded to Opus, so it spends a max slot. No extra gate:
+  // EXAM_DAILY_CAP already bounds this, and the daily Opus budget is allowed
+  // to bottom out at zero rather than growing a second denial path.
+  await increment(opusDaily);
   await increment(opusMonthly);
 
   const result = await generateExam(
@@ -1378,8 +1593,10 @@ async function handleExamGenerate(
   );
 
   if (!result.ok || !result.record) {
-    // Refund all four slots on upstream failure (daily, exam, monthly Opus, trial).
+    // Refund every slot on upstream failure (daily, exam, Opus daily +
+    // monthly, trial).
     await decrement(opusMonthly);
+    await decrement(opusDaily);
     await decrement(examCounter);
     await decrement(counter);
     if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
@@ -1462,6 +1679,7 @@ async function handleExamGrade(
   // slot AND the monthly Opus ceiling, but not the exam-per-day cap — that's
   // only on generation.
   const counter = userCounter(env.USAGE_DO, authState.userId);
+  const opusDaily = userOpusDailyCounter(env.USAGE_DO, authState.userId);
   const opusMonthly = userOpusMonthlyCounter(env.USAGE_DO, authState.userId);
   const usedToday = await peek(counter);
   const decision = decideTier(tier, usedToday);
@@ -1528,7 +1746,10 @@ async function handleExamGrade(
     return json({ error: 'ocr_failed', message }, 502, cors);
   }
 
+  // Grading is hardcoded to Opus, so it spends a max slot alongside the
+  // daily one — same rule as generation.
   await increment(counter);
+  await increment(opusDaily);
   await increment(opusMonthly);
 
   const prompts = getIrisPrompts(env);
@@ -1542,6 +1763,7 @@ async function handleExamGrade(
 
   if (!result.ok || !result.result) {
     await decrement(opusMonthly);
+    await decrement(opusDaily);
     await decrement(counter);
     if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     if (result.detail) console.error('exam grade failed', result.status, result.detail);
