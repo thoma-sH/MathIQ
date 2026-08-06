@@ -44,6 +44,18 @@ export function userOpusMonthlyCounter(
   return { ns, name: `user:${userId}:opus:${month}`, period: month };
 }
 
+/** Daily Opus counter — the budget behind "3 of 5 max walkthroughs left today".
+ *  Deliberately separate from the daily TOTAL counter: a user who picks the
+ *  standard model, or who spends a slot on homework/LaTeX, shouldn't burn a max
+ *  slot. Named `opus-daily` rather than `opus` so it can't be confused with
+ *  userOpusMonthlyCounter, which differs only by the shape of its date suffix. */
+export function userOpusDailyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:opus-daily:${dateKey()}` };
+}
+
 /** Daily Exam Mode counter — caps Pro users at N exam generations per day
  *  so one user can't generate 20 exams (20 × Opus × 15 problems each) overnight. */
 export function userExamDailyCounter(
@@ -125,4 +137,10 @@ export function nextMidnightUtc(d = new Date()): string {
   const next = new Date(d);
   next.setUTCHours(24, 0, 0, 0);
   return next.toISOString();
+}
+
+/** First instant of the next UTC month — when the monthly Opus counter rolls
+ *  over. Companion to nextMidnightUtc() for the daily one. */
+export function nextMonthStartUtc(d = new Date()): string {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString();
 }
