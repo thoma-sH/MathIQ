@@ -6,8 +6,11 @@ import { COURSES_BY_ID } from '../walkthroughs/courses';
 import {
   WalkthroughError,
   streamWalkthrough,
+  type ModelChoice,
   type RateLimitInfo,
 } from '../walkthroughs/generate';
+import { fetchUsage } from '../walkthroughs/usage';
+import { ModelPicker } from '../components/ModelPicker';
 import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { saveHistoryRecord } from '../walkthroughs/history';
@@ -103,6 +106,15 @@ export function TopicScreen({
   const [buffer, setBuffer] = useState('');
   const [streamDone, setStreamDone] = useState(false);
   const [sessionMode, setSessionMode] = useState<PromptFlow>('step');
+  // Max is opt-in per problem and never sticks — after a run this drops back
+  // to 'standard' so the budget can only ever be spent deliberately.
+  const [modelChoice, setModelChoice] = useState<ModelChoice>('standard');
+  const [sessionModel, setSessionModel] = useState<ModelChoice>('standard');
+  // Practice runs invent a fresh problem each time, so they can't be re-run
+  // on Max — it wouldn't be the same problem.
+  const [sessionPractice, setSessionPractice] = useState(false);
+  const [maxRemaining, setMaxRemaining] = useState<number | undefined>();
+  const [canChooseModel, setCanChooseModel] = useState(false);
   const [revealCount, setRevealCount] = useState(0);
   const [problemForSession, setProblemForSession] = useState<string | undefined>();
   const [streaming, setStreaming] = useState<StreamTarget>(null);
@@ -146,6 +158,18 @@ export function TopicScreen({
       setRevealCount(1);
     }
   }, [parsed.complete.length, revealCount]);
+
+  // Seed the Max budget before the user types anything. Response headers keep
+  // it current after that, so this runs once per mount.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void fetchUsage({ getToken, signal: ctrl.signal }).then((usage) => {
+      if (ctrl.signal.aborted || !usage) return;
+      setCanChooseModel(usage.canChooseModel);
+      setMaxRemaining(usage.opusDaily?.remaining);
+    });
+    return () => ctrl.abort();
+  }, [getToken]);
 
   useEffect(() => {
     if (initialProblem && course && topic) {
@@ -191,11 +215,32 @@ export function TopicScreen({
     setLimitDetail(null);
   }
 
-  async function runWalkthrough(problem?: string, opts?: { practice?: boolean }) {
+  // Every response carries the current budget, so the picker stays accurate
+  // without a refetch.
+  function handleRateInfo(info: RateLimitInfo) {
+    setRateInfo(info);
+    if (info.opusDailyRemaining !== undefined) {
+      setMaxRemaining(info.opusDailyRemaining);
+      setCanChooseModel(true);
+    }
+  }
+
+  async function runWalkthrough(
+    problem?: string,
+    opts?: { practice?: boolean; model?: ModelChoice },
+  ) {
     resetSession();
     const mode = getPromptFlow();
     setSessionMode(mode);
     setProblemForSession(problem);
+
+    // Snapshot the model for this run, so changing the chips mid-stream can't
+    // misreport what produced the output. An auto-run from the landing page
+    // passes nothing and gets Standard — an implicit run is never a
+    // deliberate spend.
+    const model = opts?.model ?? modelChoice;
+    setSessionModel(model);
+    setSessionPractice(!!opts?.practice);
 
     walkthroughAbortRef.current?.abort();
     const controller = new AbortController();
@@ -211,8 +256,9 @@ export function TopicScreen({
         problem,
         signal: controller.signal,
         getToken,
-        onRateLimitInfo: setRateInfo,
+        onRateLimitInfo: handleRateInfo,
         action,
+        model,
       })) {
         accumulated += chunk;
         bufferBatcher.push(accumulated);
@@ -220,6 +266,8 @@ export function TopicScreen({
       bufferBatcher.flush();
       setStreamDone(true);
       setStreaming((s) => (s === 'walkthrough' ? null : s));
+      // Max never carries over to the next problem.
+      setModelChoice('standard');
       if (mode === 'all') {
         // Reveal everything immediately.
         const { complete } = parseStream(accumulated, true);
@@ -278,9 +326,11 @@ export function TopicScreen({
         problem: problemForSession,
         signal: controller.signal,
         getToken,
-        onRateLimitInfo: setRateInfo,
+        onRateLimitInfo: handleRateInfo,
         action: 'why-how',
         walkthroughSoFar: cumulative,
+        // A follow-up explanation isn't worth a Max slot.
+        model: 'standard',
       })) {
         accumulated += chunk;
         whyHowStreamBatcher.push({ index, text: accumulated });
@@ -569,7 +619,15 @@ export function TopicScreen({
       </section>
 
       {!hasOutput && !limitStatus && !isStreamingAnything && (
-        <div className="reveal reveal-4" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div className="reveal reveal-4">
+          <ModelPicker
+            value={modelChoice}
+            onChange={setModelChoice}
+            canChoose={canChooseModel}
+            maxRemaining={maxRemaining}
+            onLocked={() => requireUpgrade('max-model')}
+          />
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => runWalkthrough()}
             className="btn-press chamfer"
@@ -594,6 +652,7 @@ export function TopicScreen({
           >
             Try one like this →
           </button>
+          </div>
         </div>
       )}
 
@@ -660,21 +719,37 @@ export function TopicScreen({
         </div>
       )}
 
-      {rateInfo?.degraded && rateInfo.tier === 'plus' && (hasOutput || isStreamingAnything) && (
-        <div
-          style={{
-            border: `1px solid ${T.ink}`,
-            background: T.paper2,
-            padding: '12px 16px',
-            marginBottom: 12,
-            fontSize: 14,
-            lineHeight: 1.5,
-          }}
-        >
-          <strong>You've used your {rateInfo.premiumAllotment ?? 5} Opus walkthroughs today.</strong>{' '}
-          Now on Sonnet 4.6 for the rest of today — still strong, just not the top of the stack.
-        </div>
-      )}
+      {/* Only when the user *wanted* Max and couldn't have it. Choosing
+          Standard yourself is not a downgrade and gets no notice. */}
+      {rateInfo?.degraded &&
+        rateInfo.downgradeReason !== 'user' &&
+        (hasOutput || isStreamingAnything) && (
+          <div
+            style={{
+              border: `1px solid ${T.ink}`,
+              background: T.paper2,
+              padding: '12px 16px',
+              marginBottom: 12,
+              fontSize: 14,
+              lineHeight: 1.5,
+            }}
+          >
+            {rateInfo.downgradeReason === 'monthly' ? (
+              <>
+                <strong>You've used this month's Max walkthroughs.</strong> Back on
+                Sonnet 4.6 until your monthly allowance resets.
+              </>
+            ) : (
+              <>
+                <strong>
+                  You've used your {rateInfo.premiumAllotment ?? 5} Max walkthroughs today.
+                </strong>{' '}
+                Now on Sonnet 4.6 for the rest of today — still strong, just not the top
+                of the stack.
+              </>
+            )}
+          </div>
+        )}
 
       {limitStatus === 'sign-in-required' && (
         <div style={errorBox()}>
@@ -920,6 +995,47 @@ export function TopicScreen({
         </div>
       )}
 
+      {/* The moment the budget exists for: this answer wasn't good enough, so
+          spend a Max slot on it. Also the only way to reach Max on a
+          walkthrough auto-started from the landing page. */}
+      {walkthroughFinished &&
+        !sessionPractice &&
+        sessionModel === 'standard' &&
+        canChooseModel &&
+        maxRemaining !== undefined &&
+        maxRemaining > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() => void runWalkthrough(problemForSession, { model: 'max' })}
+              className="btn-press chamfer"
+              style={{
+                background: 'transparent',
+                color: T.ink,
+                border: `1px solid ${T.ink}`,
+                padding: '10px 18px',
+                minHeight: 44,
+                fontSize: 14,
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: T.sans,
+              }}
+            >
+              Redo on Max →
+            </button>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 12,
+                color: T.muted,
+                lineHeight: 1.4,
+              }}
+            >
+              Runs this problem again on Opus 4.6. {maxRemaining} left today.
+            </div>
+          </div>
+        )}
+
       {saveState !== 'idle' && (
         <div
           role="status"
@@ -976,6 +1092,14 @@ export function TopicScreen({
             resize: 'vertical',
             color: T.ink,
           }}
+        />
+        <ModelPicker
+          value={modelChoice}
+          onChange={setModelChoice}
+          canChoose={canChooseModel}
+          maxRemaining={maxRemaining}
+          onLocked={() => requireUpgrade('max-model')}
+          disabled={classifying || isStreamingAnything}
         />
         <div
           style={{

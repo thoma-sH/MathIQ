@@ -57,7 +57,8 @@ export type LockedFeature =
   | 'homework-plain'
   | 'homework-latex'
   | 'why-how'
-  | 'photo-input';
+  | 'photo-input'
+  | 'max-model';
 
 /** Map UI feature keys to trial-counter keys (worker side). Features without
  *  a trial entry (e.g. walkthrough-pdf) get upgrade-only treatment in the modal. */
@@ -107,7 +108,7 @@ const FEATURE_META: Record<LockedFeature, FeatureMeta> = {
     kicker: 'DAILY LIMIT · PLUS',
     title: 'More walkthroughs every day.',
     blurb:
-      "You've used today's free walkthroughs. Plus gives you 25/day on Sonnet 4.6 plus 5 on Opus 4.6. Pro doubles that with 38/day total and 8 on Opus.",
+      "You've used today's free walkthroughs. Plus gives you 25/day on Sonnet 4.6, plus 5 Max walkthroughs on Opus 4.6 you spend when you choose. Pro raises that to 38/day and 8 on Max.",
     requiredTier: 'plus',
   },
   'homework-plain': {
@@ -136,6 +137,13 @@ const FEATURE_META: Record<LockedFeature, FeatureMeta> = {
     title: 'Snap a photo instead of typing.',
     blurb:
       "Take a picture of a textbook problem or your own handwriting. Iris extracts the LaTeX automatically — no more retyping integrals.",
+    requiredTier: 'plus',
+  },
+  'max-model': {
+    kicker: 'MAX MODEL · PLUS',
+    title: 'Bring the strongest model to hard problems.',
+    blurb:
+      'Free walkthroughs run on Haiku 4.5. Plus runs Sonnet 4.6 by default and gives you 5 Max walkthroughs a day on Opus 4.6, saved for the problems that actually need it. Pro raises that to 8.',
     requiredTier: 'plus',
   },
 };

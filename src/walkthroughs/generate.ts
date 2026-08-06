@@ -24,6 +24,9 @@ export class WalkthroughError extends Error {
   }
 }
 
+/** What the user asked for. 'standard' banks the Opus slot; 'max' spends it. */
+export type ModelChoice = 'max' | 'standard';
+
 export interface RateLimitInfo {
   limit: number;
   remaining: number;
@@ -33,11 +36,19 @@ export interface RateLimitInfo {
   tier: 'anonymous' | 'free' | 'plus' | 'pro';
   /** Which model the worker actually used for this response. */
   modelUsed?: string;
-  /** True if the user is on the degraded (fallback) model because they
-   *  exhausted their premium allotment. Only meaningful for Pro tier. */
+  /** True if the user *wanted* the premium model and couldn't have it.
+   *  Never set when they chose the standard model themselves. */
   degraded: boolean;
-  /** For Pro: how many premium walkthroughs they get before degrading. */
+  /** For paid tiers: how many premium walkthroughs before degrading. */
   premiumAllotment?: number;
+  /** Why this response isn't on the premium model. 'user' means they picked
+   *  standard — don't show a downgrade notice for that. */
+  downgradeReason?: 'user' | 'daily' | 'monthly';
+  /** Max walkthroughs left today. Undefined for tiers that can't choose. */
+  opusDailyRemaining?: number;
+  opusDailyLimit?: number;
+  /** Max walkthroughs left this month, and when that resets. */
+  opusMonthlyRemaining?: number;
 }
 
 export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
@@ -56,6 +67,9 @@ export interface GenerateRequest {
   action?: WalkthroughAction;
   /** For action='why-how': the walkthrough text up to and including the step being explained. */
   walkthroughSoFar?: string;
+  /** Paid-tier model choice. Omitted means the server decides as it always
+   *  has. Free/anonymous callers are ignored server-side. */
+  model?: ModelChoice;
 }
 
 export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<string> {
@@ -72,6 +86,7 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
       problem: req.problem,
       action: req.action ?? 'walkthrough',
       walkthroughSoFar: req.walkthroughSoFar,
+      model: req.model,
     }),
     signal: req.signal,
   });
@@ -153,6 +168,12 @@ function emitRateLimit(
   const allotmentHeader = resp.headers.get('X-Premium-Allotment');
   const premiumAllotment = allotmentHeader ? parseInt(allotmentHeader, 10) : undefined;
 
+  const reasonHeader = resp.headers.get('X-Downgrade-Reason');
+  const downgradeReason =
+    reasonHeader === 'user' || reasonHeader === 'daily' || reasonHeader === 'monthly'
+      ? reasonHeader
+      : undefined;
+
   cb({
     limit,
     remaining,
@@ -161,5 +182,16 @@ function emitRateLimit(
     modelUsed,
     degraded,
     premiumAllotment: Number.isFinite(premiumAllotment as number) ? premiumAllotment : undefined,
+    downgradeReason,
+    opusDailyRemaining: intHeader(resp, 'X-Opus-Daily-Remaining'),
+    opusDailyLimit: intHeader(resp, 'X-Opus-Daily-Limit'),
+    opusMonthlyRemaining: intHeader(resp, 'X-Opus-Monthly-Remaining'),
   });
+}
+
+function intHeader(resp: Response, name: string): number | undefined {
+  const raw = resp.headers.get(name);
+  if (raw === null) return undefined;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : undefined;
 }
