@@ -163,11 +163,16 @@ export function TopicScreen({
   // it current after that, so this runs once per mount.
   useEffect(() => {
     const ctrl = new AbortController();
-    void fetchUsage({ getToken, signal: ctrl.signal }).then((usage) => {
-      if (ctrl.signal.aborted || !usage) return;
-      setCanChooseModel(usage.canChooseModel);
-      setMaxRemaining(usage.opusDaily?.remaining);
-    });
+    fetchUsage({ getToken, signal: ctrl.signal })
+      .then((usage) => {
+        if (ctrl.signal.aborted || !usage) return;
+        setCanChooseModel(usage.canChooseModel);
+        setMaxRemaining(usage.opusDaily?.remaining);
+      })
+      .catch(() => {
+        // Unmounted mid-flight, or the snapshot didn't load. The picker stays
+        // in its locked state and the response headers fill it in instead.
+      });
     return () => ctrl.abort();
   }, [getToken]);
 

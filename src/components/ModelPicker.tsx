@@ -66,8 +66,11 @@ export function ModelPicker({
         Model
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {/* Standard reads as selected even when locked — it's genuinely what
+            will run, so leaving both chips blank would look like an unmade
+            choice rather than an unavailable one. */}
         <ModelChip
-          active={canChoose && value === 'standard'}
+          active={value === 'standard'}
           onClick={() => pick('standard')}
           label="Standard"
           sublabel={canChoose ? 'Sonnet 4.6' : 'Haiku 4.5'}
