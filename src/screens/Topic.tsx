@@ -10,6 +10,10 @@ import {
   type RateLimitInfo,
 } from '../walkthroughs/generate';
 import { fetchUsage } from '../walkthroughs/usage';
+import { fetchSubscriptionState } from '../billing/client';
+// Aliased: this component already has a local `isPaid` boolean for the
+// current walkthrough's tier.
+import { isPaid as isPaidTier } from '../walkthroughs/tier';
 import { ModelPicker } from '../components/ModelPicker';
 import { classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
@@ -169,17 +173,26 @@ export function TopicScreen({
     const ctrl = new AbortController();
     // A new auth state invalidates the previous answer.
     setUsageResolved(false);
-    fetchUsage({ getToken, signal: ctrl.signal })
-      .then((usage) => {
-        if (ctrl.signal.aborted || !usage) return;
+    void (async () => {
+      const usage = await fetchUsage({ getToken, signal: ctrl.signal }).catch(() => null);
+      if (ctrl.signal.aborted) return;
+      if (usage) {
         setCanChooseModel(usage.canChooseModel);
         setMaxRemaining(usage.opusDaily?.remaining);
         setUsageResolved(true);
-      })
-      .catch(() => {
-        // Unmounted mid-flight, or the snapshot didn't load. The picker stays
-        // in its locked state and the response headers fill it in instead.
-      });
+        return;
+      }
+      // No snapshot. Entitlement still decides whether the picker works at
+      // all, and the billing endpoint can answer that on its own, so fall
+      // back to the tier rather than leaving the control dead. The budget
+      // stays unknown, which renders Max without a count instead of not at
+      // all.
+      const sub = await fetchSubscriptionState({ getToken }).catch(() => null);
+      if (ctrl.signal.aborted) return;
+      setCanChooseModel(isPaidTier(sub?.tier));
+      setMaxRemaining(undefined);
+      setUsageResolved(true);
+    })();
     return () => ctrl.abort();
   }, [isSignedIn, getToken]);
 
