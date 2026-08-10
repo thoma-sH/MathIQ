@@ -211,8 +211,6 @@ instead of upgrading. "admin" means a valid Clerk session *and* membership in
 
 ## The secret sauce — prompt engineering
 
-The model is the engine, but the prompts are the car.
-
 **The foundation prompt is ~19 KB** and is split across **four worker
 secrets** (`IRIS_FOUNDATION_PROMPT_1` through `_4`). The split is a
 deploy-time convenience: Cloudflare caps a single secret at ~5 KB. They
@@ -304,8 +302,7 @@ The cleanup pass is the secret. Mathpix is great at recognizing
 strokes but doesn't know that an `=` sign on the third line of an
 algebra step is *probably* a `−`. Sonnet — given the original image
 *and* the raw MMD — applies confident operator-flip fixes silently and
-flags the uncertain ones for the user to resolve. No other OCR-only
-tool does the second pass.
+flags the uncertain ones for the user to resolve.
 
 The LaTeX step has two paths. Sonnet writing the `.tex` directly produces
 proper `enumerate`/`section` environments and reads as if a human typeset it;
