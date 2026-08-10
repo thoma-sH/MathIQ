@@ -17,6 +17,10 @@ interface ModelPickerProps {
   onChange: (next: ModelChoice) => void;
   /** False for free/anonymous — chips render locked and clicks call onLocked. */
   canChoose: boolean;
+  /** True once entitlement is actually known. Until then `canChoose` is just
+   *  its default of false, which is indistinguishable from a settled free
+   *  user — so the picker must not act on it. */
+  ready: boolean;
   /** Max walkthroughs left today. Undefined while the count is still loading. */
   maxRemaining?: number;
   onLocked: () => void;
@@ -27,6 +31,7 @@ export function ModelPicker({
   value,
   onChange,
   canChoose,
+  ready,
   maxRemaining,
   onLocked,
   disabled = false,
@@ -34,15 +39,23 @@ export function ModelPicker({
   // No budget left today — Max would silently serve Sonnet, so don't offer it.
   const maxExhausted = canChoose && maxRemaining === 0;
 
-  const maxSublabel = !canChoose
-    ? 'Plus or Pro'
-    : maxRemaining === undefined
-      ? 'Opus 4.6'
-      : maxExhausted
-        ? 'None left today'
-        : `Opus 4.6 · ${maxRemaining} left`;
+  // Max is Opus on every tier, so that half stays honest while we wait. Which
+  // model "Standard" means does depend on tier, so it holds until we know.
+  const maxSublabel = !ready
+    ? 'Opus 4.6'
+    : !canChoose
+      ? 'Plus or Pro'
+      : maxRemaining === undefined
+        ? 'Opus 4.6'
+        : maxExhausted
+          ? 'None left today'
+          : `Opus 4.6 · ${maxRemaining} left`;
 
   function pick(next: ModelChoice) {
+    // Entitlement still in flight. A click here would open the upgrade modal
+    // for a paid user, which then closes itself the instant the real tier
+    // lands — the phantom popup. Do nothing until we actually know.
+    if (!ready) return;
     if (!canChoose) {
       onLocked();
       return;
@@ -73,16 +86,18 @@ export function ModelPicker({
           active={value === 'standard'}
           onClick={() => pick('standard')}
           label="Standard"
-          sublabel={canChoose ? 'Sonnet 4.6' : 'Haiku 4.5'}
+          sublabel={!ready ? '…' : canChoose ? 'Sonnet 4.6' : 'Haiku 4.5'}
           locked={false}
           disabled={disabled}
         />
+        {/* Unknown entitlement must not render as locked — that's what invites
+            the click that opens a modal we're about to close again. */}
         <ModelChip
           active={canChoose && value === 'max'}
           onClick={() => pick('max')}
           label="Max"
           sublabel={maxSublabel}
-          locked={!canChoose || maxExhausted}
+          locked={ready && (!canChoose || maxExhausted)}
           disabled={disabled}
         />
       </div>

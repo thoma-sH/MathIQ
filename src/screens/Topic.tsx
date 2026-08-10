@@ -100,7 +100,7 @@ export function TopicScreen({
 }: TopicScreenProps) {
   const course = COURSES_BY_ID[courseId];
   const topic = course?.topics.find((t) => t.id === topicId);
-  const { getToken, isSignedIn } = useAuth();
+  const { getToken, isSignedIn, isLoaded } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
 
   const [buffer, setBuffer] = useState('');
@@ -115,6 +115,7 @@ export function TopicScreen({
   const [sessionPractice, setSessionPractice] = useState(false);
   const [maxRemaining, setMaxRemaining] = useState<number | undefined>();
   const [canChooseModel, setCanChooseModel] = useState(false);
+  const [usageResolved, setUsageResolved] = useState(false);
   const [revealCount, setRevealCount] = useState(0);
   const [problemForSession, setProblemForSession] = useState<string | undefined>();
   const [streaming, setStreaming] = useState<StreamTarget>(null);
@@ -166,11 +167,14 @@ export function TopicScreen({
   // picker for the rest of the session without the refetch.
   useEffect(() => {
     const ctrl = new AbortController();
+    // A new auth state invalidates the previous answer.
+    setUsageResolved(false);
     fetchUsage({ getToken, signal: ctrl.signal })
       .then((usage) => {
         if (ctrl.signal.aborted || !usage) return;
         setCanChooseModel(usage.canChooseModel);
         setMaxRemaining(usage.opusDaily?.remaining);
+        setUsageResolved(true);
       })
       .catch(() => {
         // Unmounted mid-flight, or the snapshot didn't load. The picker stays
@@ -178,6 +182,10 @@ export function TopicScreen({
       });
     return () => ctrl.abort();
   }, [isSignedIn, getToken]);
+
+  // The pre-hydration fetch resolves too, but with the anonymous snapshot —
+  // so a resolved fetch only counts once Clerk has settled.
+  const modelReady = isLoaded && usageResolved;
 
   useEffect(() => {
     if (initialProblem && course && topic) {
@@ -230,6 +238,7 @@ export function TopicScreen({
     if (info.opusDailyRemaining !== undefined) {
       setMaxRemaining(info.opusDailyRemaining);
       setCanChooseModel(true);
+      setUsageResolved(true);
     }
   }
 
@@ -632,6 +641,7 @@ export function TopicScreen({
             value={modelChoice}
             onChange={setModelChoice}
             canChoose={canChooseModel}
+            ready={modelReady}
             maxRemaining={maxRemaining}
             onLocked={() => requireUpgrade('max-model')}
           />
@@ -1105,6 +1115,7 @@ export function TopicScreen({
           value={modelChoice}
           onChange={setModelChoice}
           canChoose={canChooseModel}
+          ready={modelReady}
           maxRemaining={maxRemaining}
           onLocked={() => requireUpgrade('max-model')}
           disabled={classifying || isStreamingAnything}
