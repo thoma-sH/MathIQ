@@ -34,9 +34,11 @@ like Iris.
 - [API surface](#api-surface)
 - [The secret sauce — prompt engineering](#the-secret-sauce--prompt-engineering)
 - [How the API calls help each other](#how-the-api-calls-help-each-other)
+  - [LaTeX Mode — your work, beautifully typeset](#latex-mode--your-work-beautifully-typeset)
 - [Where the secrets live](#where-the-secrets-live)
 - [Stack](#stack)
 - [Quickstart (local)](#quickstart-local)
+- [Testing](#testing)
 - [Project structure](#project-structure)
 - [Architecture notes](#architecture-notes)
 - [Security & privacy posture](#security--privacy-posture)
@@ -46,6 +48,10 @@ like Iris.
 ---
 
 ## What it is
+
+![The MathIQ landing screen — a daily challenge card, a single prompt to type a problem, and entry points to the course list and Handwritten to PDF](docs/img/landing.png)
+
+*One question on landing: what do you want to learn today?*
 
 Nine courses, 108 topics, four tiers:
 
@@ -72,6 +78,10 @@ including anonymous visitors, with Wordle-style streaks and shareable results.
 The landing page rotates a different ancient-Greek scribe and tagline by day
 of week.
 
+![The course picker — nine cards covering College Algebra through Differential Equations, each listing its topic areas](docs/img/subjects.png)
+
+*Nine courses. Pick one, type a problem, walk through it.*
+
 ---
 
 ## How a walkthrough actually works
@@ -79,6 +89,12 @@ of week.
 The streaming endpoint is the heart of the product. Every visible
 behavior — daily caps, model selection, the live token stream, the
 "verified" badge — comes out of this one request flow.
+
+![A multinomial-coefficient problem solved in four numbered steps, each with a "why & how?" expander, ending in a "trigger to remember" summary](docs/img/walkthrough.png)
+
+*Every step is numbered, rendered in KaTeX, and expandable into the
+strategic reasoning behind the move. The usage pill tracks the daily
+allowance and names the model that actually served the request.*
 
 ```
   CLIENT                  WORKER                       UPSTREAM (Claude)
@@ -310,6 +326,22 @@ the hand-rolled `mmdToTex` + `wrapTexSource` is the fallback when that call
 fails. The user is only charged a slot when the Claude path actually ran — the
 fallback costs nothing upstream, so it costs nothing downstream.
 
+### LaTeX Mode — your work, beautifully typeset
+
+The point of the pipeline above, end to end. Photograph a page of
+handwriting; get back real Computer Modern LaTeX. The transcription is
+deliberately *faithful* rather than corrected — every step is preserved
+exactly as it was written, wrong turns included. We typeset your work; we
+don't grade it or fix it.
+
+| Before — handwritten | After — Computer Modern LaTeX |
+|---|---|
+| ![Handwritten homework on lined paper](public/latex-before.jpg) | ![Same homework typeset as a Computer Modern LaTeX PDF](public/latex-after.jpg) |
+
+Note the generating-function result carried across untouched —
+`b₁₇ = 28,603,508,759` in both — with the `\section` structure and display
+math rebuilt around it.
+
 **Exam grading.** Same two-pass shape, with a twist:
 
 ```
@@ -489,7 +521,42 @@ npm run typecheck    # tsc -b --noEmit
 npm run build        # tsc -b && vite build
 ```
 
-There is no test runner.
+---
+
+## Testing
+
+The worker carries a unit suite over the logic that decides who gets what.
+Pure functions only — no network, no bindings, no Cloudflare runtime — so the
+whole thing runs in well under a second.
+
+```bash
+cd worker
+npm test             # vitest run
+npm run test:watch
+```
+
+Four files, each colocated beside what it covers:
+
+| File | Covers |
+|---|---|
+| `src/tier.test.ts` | `decideTier` — daily and monthly ceilings, Opus budget exhaustion, Standard-by-choice vs. degraded-by-quota |
+| `src/subscription.test.ts` | `isEntitled` across all six Stripe statuses, plus period-expiry boundaries |
+| `src/stripe.test.ts` | Price-ID mapping in both directions, including the grandfathered `_OLD` slots |
+| `src/rateLimit.test.ts` | UTC day and month rollovers — year boundaries, 31-day months, leap days |
+
+The bias is toward boundaries and state transitions rather than happy paths:
+the walkthrough that is one over the cap, the subscription that lapsed a
+second ago, the renewal webhook carrying a retired price ID. Those are the
+cases that quietly cost money or revoke a paying customer's access when they
+regress.
+
+A few tests deliberately pin behavior that is a product decision rather than
+an obvious correctness rule — `past_due` revoking access with no grace
+period, and total daily usage standing in for Opus usage when the caller
+omits the dedicated count. They are documented as such at the test, so the
+decision can't be reversed by accident.
+
+The frontend has no tests.
 
 ---
 
