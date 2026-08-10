@@ -56,9 +56,9 @@ const EXAMS: ExamSpec[] = [
 
 export function Exams({ courseId, onNavigate }: ExamsProps) {
   const course = COURSES_BY_ID[courseId];
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [isSignedIn, getToken]);
   const tier = subAsync.data?.tier ?? null;
   const tierLoaded = !subAsync.loading;
   const [pendingExam, setPendingExam] = useState<ExamId | null>(null);

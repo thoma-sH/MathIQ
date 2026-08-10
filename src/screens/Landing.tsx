@@ -58,7 +58,7 @@ export function Landing({ onNavigate }: LandingProps) {
     return () => {
       cancelled = true;
     };
-  }, [getToken]);
+  }, [isSignedIn, getToken]);
 
   useEffect(() => {
     let cancelled = false;

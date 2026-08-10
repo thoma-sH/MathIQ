@@ -160,7 +160,10 @@ export function TopicScreen({
   }, [parsed.complete.length, revealCount]);
 
   // Seed the Max budget before the user types anything. Response headers keep
-  // it current after that, so this runs once per mount.
+  // it current after that. Re-runs when `isSignedIn` settles: on first paint
+  // Clerk hasn't hydrated, so `getToken` yields null and /api/usage answers
+  // with the anonymous snapshot — a paid user would be stuck behind a locked
+  // picker for the rest of the session without the refetch.
   useEffect(() => {
     const ctrl = new AbortController();
     fetchUsage({ getToken, signal: ctrl.signal })
@@ -174,7 +177,7 @@ export function TopicScreen({
         // in its locked state and the response headers fill it in instead.
       });
     return () => ctrl.abort();
-  }, [getToken]);
+  }, [isSignedIn, getToken]);
 
   useEffect(() => {
     if (initialProblem && course && topic) {

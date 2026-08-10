@@ -64,7 +64,7 @@ type LatexState =
 export function Homework({ onNavigate }: HomeworkProps) {
   const { getToken, isSignedIn } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [isSignedIn, getToken]);
   const tier = subAsync.data?.tier ?? null;
   const tierLoaded = !subAsync.loading;
   const [state, setState] = useState<UploadState>({ kind: 'idle' });

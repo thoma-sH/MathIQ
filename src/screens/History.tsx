@@ -81,9 +81,9 @@ export function History({ onNavigate }: HistoryProps) {
 }
 
 function HistoryList({ onNavigate }: { onNavigate: (route: Route) => void }) {
-  const { getToken } = useAuth();
-  const historyAsync = useAsync(() => listHistory({ getToken }), [getToken]);
-  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const { getToken, isSignedIn } = useAuth();
+  const historyAsync = useAsync(() => listHistory({ getToken }), [isSignedIn, getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [isSignedIn, getToken]);
   const items = historyAsync.data?.items ?? null;
   const error = historyAsync.error ? 'Failed to load history.' : null;
   const tier = subAsync.data?.tier ?? null;

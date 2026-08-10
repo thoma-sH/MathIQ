@@ -32,9 +32,9 @@ type GradeState =
 
 export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
   const course = COURSES_BY_ID[courseId];
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [isSignedIn, getToken]);
   const tier = subAsync.data?.tier ?? null;
   const [record, setRecord] = useState<ExamRecord | null>(null);
   const [state, setState] = useState<GradeState>({ kind: 'idle' });

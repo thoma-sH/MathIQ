@@ -91,9 +91,9 @@ function TopicCard({
 
 export function WalkthroughCourse({ courseId, onNavigate }: WalkthroughCourseProps) {
   const course = COURSES_BY_ID[courseId];
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
-  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [isSignedIn, getToken]);
   const tier = subAsync.data?.tier ?? null;
 
   if (!course) {

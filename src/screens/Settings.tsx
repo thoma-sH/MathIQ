@@ -176,8 +176,8 @@ interface TopicCount {
 }
 
 function TopicsCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
-  const { getToken } = useAuth();
-  const historyAsync = useAsync(() => listHistory({ getToken }), [getToken]);
+  const { getToken, isSignedIn } = useAuth();
+  const historyAsync = useAsync(() => listHistory({ getToken }), [isSignedIn, getToken]);
   // First page only — most-recent first. A future worker /api/history/stats
   // endpoint could aggregate the full 90-day window server-side.
   const { topics, totalCount } = useMemo(() => {
@@ -645,8 +645,8 @@ const PLAN_LABELS: Record<BillingTier, string> = {
 };
 
 function BillingSection() {
-  const { getToken } = useAuth();
-  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [getToken]);
+  const { getToken, isSignedIn } = useAuth();
+  const subAsync = useAsync(() => fetchSubscriptionState({ getToken }), [isSignedIn, getToken]);
   // "Loaded" means done trying — success OR failure both flip the gate.
   const loaded = !subAsync.loading;
   const state = subAsync.data;
