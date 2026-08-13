@@ -92,7 +92,10 @@ async function probe(run: () => Promise<unknown>): Promise<CheckStatus> {
   } catch {
     return 'fail';
   } finally {
-    clearTimeout(timer);
+    // Guarded rather than passing `timer` straight through: workers-types
+    // declares clearTimeout as (number | null), so an unset handle doesn't
+    // typecheck there even though @types/node would accept it.
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
