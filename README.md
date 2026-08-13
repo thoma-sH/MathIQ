@@ -186,7 +186,7 @@ counter each endpoint claims → [`docs/API.md`](docs/API.md).**
 
 | Endpoint | Method | Auth | Tier | Purpose |
 |---|---|---|---|---|
-| `/api/health` | GET | — | — | Liveness probe |
+| `/api/health` | GET | — | — | Dependency probe — 200 healthy, 503 degraded |
 | `/api/walkthrough` | POST | optional | all | Stream a walkthrough, why-how, or practice problem |
 | `/api/classify` | POST | optional | all | Free text → `(courseId, topicId)` |
 | `/api/billing/state` | GET | required | all | Current plan, interval, renewal date |

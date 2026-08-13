@@ -38,6 +38,7 @@ import {
   type TierDecision,
 } from './tier';
 import { callAnthropicStream, type AnthropicUsage } from './anthropic';
+import { checkHealth } from './health';
 import { callOpenRouterStream } from './openrouter';
 import { getIrisPrompts } from './prompt';
 import { normalizeLatexDelimiters } from './normalize';
@@ -268,7 +269,11 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/api/health') {
-      return json({ ok: true }, 200, cors);
+      const report = await checkHealth(env);
+      // 503 on a failed dependency is the whole point — it's the signal an
+      // uptime monitor alerts on. no-store keeps a stale healthy response
+      // from being replayed while the worker is actually degraded.
+      return json(report, report.ok ? 200 : 503, { ...cors, 'cache-control': 'no-store' });
     }
 
     if (request.method === 'POST' && url.pathname === '/api/walkthrough') {
