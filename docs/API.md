@@ -1152,4 +1152,29 @@ for UTC midnight. It cannot touch another user's counters.
 
 ### `GET /api/health`
 
-**Auth** none. Exempt from the origin allowlist. **Response** `200 { "ok": true }`.
+**Auth** none. Exempt from the origin allowlist.
+
+Probes the dependencies the request paths actually need, so a monitor pointed
+here goes red when the worker is degraded — not only when it is entirely down.
+
+**Response** `200` when every check passes, `503` when any of them fails.
+Sent with `Cache-Control: no-store`.
+
+```json
+{
+  "ok": true,
+  "checks": { "kv": "ok", "durableObject": "ok", "config": "ok" }
+}
+```
+
+| Check | What it does |
+|---|---|
+| `kv` | One read from the `USAGE` namespace. The key need not exist — `null` is a healthy answer. Never writes. |
+| `durableObject` | One `/peek` against a fixed `UsageCounter` name. `/peek` is read-only, so it never mutates a real user's quota. |
+| `config` | Presence of `ANTHROPIC_API_KEY`, `CLERK_SECRET_KEY`, `STRIPE_SECRET_KEY`. |
+
+Presence, not validity. The route is unauthenticated, so it never makes a
+billable call to Anthropic, Stripe, or Clerk — otherwise a stranger could
+spend money by curling it in a loop. Each network probe is bounded at 3s and
+reports `fail` on timeout, so a hung dependency is named rather than left to
+the monitor's own timeout.
