@@ -40,7 +40,7 @@ import {
 import { callAnthropicStream, type AnthropicUsage } from './anthropic';
 import { checkHealth } from './health';
 import { callOpenRouterStream } from './openrouter';
-import { getIrisPrompts } from './prompt';
+import { getIrisPrompts, parsePracticeDifficulty } from './prompt';
 import { normalizeLatexDelimiters } from './normalize';
 import {
   clearSubscription,
@@ -199,6 +199,10 @@ interface WalkthroughBody {
    *  'standard' burns only a daily total slot. Absent or unrecognized means
    *  'auto' — the pre-picker behavior every older client sends. */
   model?: 'max' | 'standard';
+  /** For action='practice': 'easier' | 'standard' | 'harder'. Absent or
+   *  unrecognized means 'standard' — the pre-slider behavior every older
+   *  client sends. */
+  difficulty?: string;
 }
 
 /** Never throws and never 400s. A stale client, a lapsed subscriber, or a
@@ -533,6 +537,9 @@ async function handleWalkthrough(
     action === 'why-how' ? 'why-how' : action === 'practice' ? 'practice' : 'walkthrough';
   const walkthroughSoFarClean =
     typeof walkthroughSoFar === 'string' ? walkthroughSoFar : undefined;
+  // Never 400s: an unknown value degrades to 'standard' rather than bricking
+  // a client that shipped before this field existed.
+  const difficulty = parsePracticeDifficulty(body.difficulty);
   if (!courseId || !topicId) {
     return bail({ error: 'courseId and topicId required' }, 400);
   }
@@ -644,6 +651,7 @@ async function handleWalkthrough(
           problem,
           action: walkAction,
           walkthroughSoFar: walkthroughSoFarClean,
+          difficulty,
           signal: request.signal,
           onUsage: (usage) => recordCacheMetrics(env, modelIdForMetrics, usage),
         })
@@ -656,6 +664,7 @@ async function handleWalkthrough(
           problem,
           action: walkAction,
           walkthroughSoFar: walkthroughSoFarClean,
+          difficulty,
           signal: request.signal,
         });
 

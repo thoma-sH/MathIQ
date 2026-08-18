@@ -23,6 +23,15 @@ function safeSet(key: string, value: string): void {
   }
 }
 
+function safeRemove(key: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(PREFIX + key);
+  } catch {
+    // ignore
+  }
+}
+
 export function readBool(key: string): boolean {
   return safeGet(key) === '1';
 }
@@ -39,6 +48,10 @@ export function writeString(key: string, value: string): void {
   safeSet(key, value);
 }
 
+export function removeKey(key: string): void {
+  safeRemove(key);
+}
+
 // Returns the unprefixed `mathiq:` key so consumers can match against
 // `StorageEvent.key` (which is the *full* key the browser fires).
 export function fullKey(key: string): string {
@@ -51,3 +64,8 @@ export const KEY_TRUST_IRIS = 'trustIris';
 export const KEY_TRUST_IRIS_TIP = 'trustIrisTipDismissed';
 export const KEY_INSTALL_DISMISSED = 'installPromptDismissed';
 export const KEY_PROMPT_FLOW = 'promptFlow';
+// Snapshot of an in-progress walkthrough, so a reload or a sign-in round-trip
+// lands the student back where they were. See src/state/walkthroughSession.ts.
+export const KEY_WALKTHROUGH_SESSION = 'walkthroughSession';
+// Preferred difficulty for generated practice problems.
+export const KEY_PRACTICE_DIFFICULTY = 'practiceDifficulty';

@@ -6,6 +6,7 @@ import { Landing } from './screens/Landing';
 import { UpgradeProvider } from './upgrade/UpgradePrompt';
 import { T } from './design/tokens';
 import { COURSES_BY_ID } from './walkthroughs/courses';
+import { readSession } from './state/walkthroughSession';
 import type { Route } from './router';
 
 // All non-home screens are split off into their own chunks so the initial
@@ -166,8 +167,28 @@ export default function App() {
   return <MathIQApp />;
 }
 
+// How recently a walkthrough must have been touched for us to reopen it
+// automatically. Snapshots survive far longer than this (see
+// walkthroughSession), but taking over the landing page is only reasonable
+// when the student plausibly just got bounced — a sign-in redirect, an
+// accidental refresh. Past this window the snapshot still restores, just not
+// until they navigate back to the topic themselves.
+const AUTO_RESUME_WINDOW_MS = 30 * 60 * 1000;
+
+function initialRoute(): Route {
+  const saved = readSession();
+  if (!saved) return { name: 'home' };
+  if (Date.now() - saved.updatedAt > AUTO_RESUME_WINDOW_MS) return { name: 'home' };
+  const course = COURSES_BY_ID[saved.courseId];
+  if (!course?.topics.some((t) => t.id === saved.topicId)) return { name: 'home' };
+  // `problem` is deliberately omitted: setting it makes TopicScreen treat this
+  // as a fresh request and generate a new walkthrough. The problem text comes
+  // back through the snapshot instead.
+  return { name: 'topic', courseId: saved.courseId, topicId: saved.topicId };
+}
+
 function MathIQApp() {
-  const [route, setRoute] = useState<Route>({ name: 'home' });
+  const [route, setRoute] = useState<Route>(initialRoute);
 
   // Wraps setRoute so every internal navigation pushes a history entry.
   // That gives us a working browser back/forward button on web *and* the
@@ -181,18 +202,23 @@ function MathIQApp() {
     setRoute(target);
   }, []);
 
-  // Anchor the very first history entry to the home route so the user's
-  // first back press from anywhere lands cleanly here (or exits the app
-  // in PWA mode) instead of leaving an unexpected state behind.
+  // Anchor the very first history entry to the route we opened on, so the
+  // user's first back press lands cleanly (or exits the app in PWA mode)
+  // instead of leaving an unexpected state behind.
   useEffect(() => {
     try {
       const s = window.history.state as { name?: unknown } | null;
       if (!s || typeof s.name !== 'string') {
-        window.history.replaceState({ name: 'home' }, '');
+        // Anchor to whatever we actually rendered. On a resume that's the
+        // topic, so the first back press escapes to the course page as usual
+        // rather than to a home screen the student never saw.
+        window.history.replaceState(route, '');
       }
     } catch {
       // ignore
     }
+    // Mount-only: this seeds the very first history entry.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync state with the history stack whenever the user pops (browser

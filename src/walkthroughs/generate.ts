@@ -1,4 +1,5 @@
 import type { Course, Topic } from './types';
+import type { PracticeDifficulty } from '../state/practiceDifficulty';
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL ?? 'http://localhost:8787';
 
@@ -70,6 +71,9 @@ export interface GenerateRequest {
   /** Paid-tier model choice. Omitted means the server decides as it always
    *  has. Free/anonymous callers are ignored server-side. */
   model?: ModelChoice;
+  /** How hard the invented problem should be. Only meaningful for
+   *  action='practice'; ignored server-side for every other action. */
+  difficulty?: PracticeDifficulty;
 }
 
 export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<string> {
@@ -87,6 +91,7 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
       action: req.action ?? 'walkthrough',
       walkthroughSoFar: req.walkthroughSoFar,
       model: req.model,
+      difficulty: req.difficulty,
     }),
     signal: req.signal,
   });

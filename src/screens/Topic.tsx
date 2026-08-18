@@ -21,6 +21,18 @@ import { saveHistoryRecord } from '../walkthroughs/history';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { verifyWalkthrough, type Verdict } from '../walkthroughs/verify';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
+import {
+  usePracticeDifficulty,
+  type PracticeDifficulty,
+} from '../state/practiceDifficulty';
+import { DifficultyPicker } from '../components/DifficultyPicker';
+import {
+  clearSession,
+  markSessionSaved,
+  readSession,
+  writeSession,
+  type WalkthroughSession,
+} from '../state/walkthroughSession';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
 import { CheckIcon } from '../design/icons';
@@ -107,32 +119,57 @@ export function TopicScreen({
   const { getToken, isSignedIn, isLoaded } = useAuth();
   const { requireUpgrade } = useUpgradePrompt();
 
-  const [buffer, setBuffer] = useState('');
-  const [streamDone, setStreamDone] = useState(false);
-  const [sessionMode, setSessionMode] = useState<PromptFlow>('step');
+  // A walkthrough left in progress on this device. Read exactly once per
+  // mount, before any state is seeded, so a reload or a sign-in round-trip
+  // lands the student back on the step they were reading rather than on an
+  // empty topic page. The ref (rather than useMemo) guarantees the read can't
+  // repeat after we start writing snapshots of our own.
+  const restoredRef = useRef<WalkthroughSession | null | undefined>(undefined);
+  if (restoredRef.current === undefined) {
+    const saved = readSession();
+    const matches =
+      saved !== null &&
+      saved.courseId === courseId &&
+      saved.topicId === topicId &&
+      // Arriving with a *different* problem is a new request, not a resume —
+      // the snapshot must not suppress it or shadow it on screen.
+      (!initialProblem || saved.problem === initialProblem);
+    restoredRef.current = matches ? saved : null;
+  }
+  const restored = restoredRef.current;
+
+  const [buffer, setBuffer] = useState(() => restored?.buffer ?? '');
+  const [streamDone, setStreamDone] = useState(() => restored?.streamDone ?? false);
+  const [sessionMode, setSessionMode] = useState<PromptFlow>(() => restored?.mode ?? 'step');
   // Max is opt-in per problem and never sticks — after a run this drops back
   // to 'standard' so the budget can only ever be spent deliberately.
   const [modelChoice, setModelChoice] = useState<ModelChoice>('standard');
   const [sessionModel, setSessionModel] = useState<ModelChoice>('standard');
   // Practice runs invent a fresh problem each time, so they can't be re-run
   // on Max — it wouldn't be the same problem.
-  const [sessionPractice, setSessionPractice] = useState(false);
+  const [sessionPractice, setSessionPractice] = useState(() => restored?.practice ?? false);
   const [maxRemaining, setMaxRemaining] = useState<number | undefined>();
   const [canChooseModel, setCanChooseModel] = useState(false);
   const [usageResolved, setUsageResolved] = useState(false);
-  const [revealCount, setRevealCount] = useState(0);
-  const [problemForSession, setProblemForSession] = useState<string | undefined>();
+  const [revealCount, setRevealCount] = useState(() => restored?.revealCount ?? 0);
+  const [problemForSession, setProblemForSession] = useState<string | undefined>(
+    () => restored?.problem ?? undefined,
+  );
   const [streaming, setStreaming] = useState<StreamTarget>(null);
 
-  const [whyHow, setWhyHow] = useState<Record<number, string>>({});
+  const [whyHow, setWhyHow] = useState<Record<number, string>>(() => restored?.whyHow ?? {});
   const [whyHowStream, setWhyHowStream] = useState<{ index: number; text: string } | null>(null);
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [expanded, setExpanded] = useState<Record<number, boolean>>(
+    () => restored?.expanded ?? {},
+  );
 
   const [limitStatus, setLimitStatus] = useState<LimitStatus>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [rateInfo, setRateInfo] = useState<RateLimitInfo | null>(null);
   const [limitDetail, setLimitDetail] = useState<RateLimitDisplay | null>(null);
-  const [customProblem, setCustomProblem] = useState(initialProblem ?? '');
+  const [customProblem, setCustomProblem] = useState(
+    initialProblem ?? restored?.problem ?? '',
+  );
   const [classifying, setClassifying] = useState(false);
   const [submitHint, setSubmitHint] = useState<string | null>(null);
   const walkthroughAbortRef = useRef<AbortController | null>(null);
@@ -145,7 +182,15 @@ export function TopicScreen({
   const [verifyState, setVerifyState] = useState<'idle' | 'verifying' | Verdict>('idle');
   const [verifyReason, setVerifyReason] = useState<string | null>(null);
 
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'failed'>(
+    () => (restored?.savedToHistory ? 'saved' : 'idle'),
+  );
+  // Mirrors saveState's "this walkthrough is in the user's history" bit, but
+  // readable from callbacks without adding it to their dependency arrays.
+  // Restored sessions carry it forward so a resume can't double-save.
+  const savedToHistoryRef = useRef(restored?.savedToHistory ?? false);
+
+  const [practiceDifficulty, setPracticeDifficulty] = usePracticeDifficulty();
 
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
 
@@ -201,7 +246,9 @@ export function TopicScreen({
   const modelReady = isLoaded && usageResolved;
 
   useEffect(() => {
-    if (initialProblem && course && topic) {
+    // A restored session already holds the walkthrough for this problem.
+    // Re-running would spend a quota slot to overwrite text we just recovered.
+    if (!restoredRef.current && initialProblem && course && topic) {
       void runWalkthrough(initialProblem);
     }
     return () => {
@@ -214,6 +261,90 @@ export function TopicScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProblem, courseId, topicId]);
+
+  // Keep the latest snapshot readable from listeners that outlive a render.
+  // Assigned in an effect (rather than during render) so a discarded render
+  // pass can't leave a stale value behind.
+  const snapshotRef = useRef<Omit<WalkthroughSession, 'v' | 'updatedAt'> | null>(null);
+  useEffect(() => {
+    snapshotRef.current = {
+      courseId,
+      topicId,
+      problem: problemForSession ?? null,
+      practice: sessionPractice,
+      mode: sessionMode,
+      buffer,
+      streamDone,
+      revealCount,
+      whyHow,
+      expanded,
+      savedToHistory: savedToHistoryRef.current,
+    };
+  });
+
+  // Persist at checkpoints, not per chunk. `buffer` is deliberately absent
+  // from the dependency array: it changes once per animation frame while
+  // streaming, and serialising a growing string that often is pure waste. The
+  // effect still reads the *current* buffer whenever one of the listed deps
+  // moves, which covers every moment the student's place actually changes —
+  // the stream finishing, a step being revealed, a Why & How landing or being
+  // toggled.
+  useEffect(() => {
+    const snapshot = snapshotRef.current;
+    if (!snapshot?.buffer.trim()) return;
+    writeSession(snapshot);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamDone, revealCount, whyHow, expanded]);
+
+  // A tab closed or backgrounded mid-stream never hits a checkpoint, so catch
+  // it here — this is the case where the student has the most to lose.
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState !== 'hidden') return;
+      const snapshot = snapshotRef.current;
+      if (!snapshot?.buffer.trim()) return;
+      writeSession(snapshot);
+    };
+    document.addEventListener('visibilitychange', onHide);
+    return () => document.removeEventListener('visibilitychange', onHide);
+  }, []);
+
+  // Signing in mid-walkthrough is the whole point of this: the completion-time
+  // auto-save only fires for users who were already signed in, so a
+  // walkthrough generated anonymously would otherwise never reach an account.
+  // Keyed on `isSignedIn` alone — `getToken` is not referentially stable
+  // across Clerk hydration, so including it would re-fire this spuriously.
+  useEffect(() => {
+    if (!isSignedIn) return;
+    if (savedToHistoryRef.current) return;
+    if (!buffer.trim()) return;
+    // Mid-stream, the completion path is about to save the full text. Saving
+    // the partial buffer here would leave two records for one walkthrough.
+    if (streaming === 'walkthrough') return;
+    if (!course || !topic) return;
+
+    savedToHistoryRef.current = true;
+    setSaveState('saving');
+    void (async () => {
+      const result = await saveHistoryRecord({
+        getToken,
+        courseId: course.id,
+        topicId: topic.id,
+        problem: sessionPractice ? null : problemForSession ?? null,
+        walkthrough: buffer,
+        modelUsed: rateInfo?.modelUsed ?? null,
+      });
+      if (result) {
+        markSessionSaved();
+        setSaveState('saved');
+      } else {
+        // Let a later mount retry rather than silently dropping the record.
+        savedToHistoryRef.current = false;
+        setSaveState('failed');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSignedIn]);
 
   if (!course || !topic) {
     return (
@@ -242,6 +373,12 @@ export function TopicScreen({
     setLimitStatus(null);
     setErrorMsg(null);
     setLimitDetail(null);
+    // A new run supersedes whatever was stored — never leave a snapshot of the
+    // previous walkthrough behind for the next mount to restore.
+    savedToHistoryRef.current = false;
+    restoredRef.current = null;
+    snapshotRef.current = null;
+    clearSession();
   }
 
   // Every response carries the current budget, so the picker stays accurate
@@ -257,7 +394,7 @@ export function TopicScreen({
 
   async function runWalkthrough(
     problem?: string,
-    opts?: { practice?: boolean; model?: ModelChoice },
+    opts?: { practice?: boolean; model?: ModelChoice; difficulty?: PracticeDifficulty },
   ) {
     resetSession();
     const mode = getPromptFlow();
@@ -289,6 +426,9 @@ export function TopicScreen({
         onRateLimitInfo: handleRateInfo,
         action,
         model,
+        // Only practice runs invent a problem, so difficulty is the only
+        // action where it means anything.
+        difficulty: opts?.practice ? opts.difficulty : undefined,
       })) {
         accumulated += chunk;
         bufferBatcher.push(accumulated);
@@ -312,6 +452,7 @@ export function TopicScreen({
       // the user can see it land (and notice if it ever fails silently).
       if (isSignedIn && accumulated.trim()) {
         setSaveState('saving');
+        savedToHistoryRef.current = true;
         void (async () => {
           const result = await saveHistoryRecord({
             getToken,
@@ -321,6 +462,13 @@ export function TopicScreen({
             walkthrough: accumulated,
             modelUsed: rateInfo?.modelUsed ?? null,
           });
+          if (result) {
+            // Records the save on the snapshot too, so restoring this session
+            // later doesn't file a duplicate.
+            markSessionSaved();
+          } else {
+            savedToHistoryRef.current = false;
+          }
           setSaveState(result ? 'saved' : 'failed');
         })();
       }
@@ -667,7 +815,12 @@ export function TopicScreen({
             Walk me through it →
           </button>
           <button
-            onClick={() => runWalkthrough(undefined, { practice: true })}
+            onClick={() =>
+              runWalkthrough(undefined, {
+                practice: true,
+                difficulty: practiceDifficulty,
+              })
+            }
             className="btn-press chamfer"
             aria-label="Generate a fresh practice problem on this topic"
             style={{
@@ -684,6 +837,10 @@ export function TopicScreen({
             Try one like this →
           </button>
           </div>
+          <DifficultyPicker
+            value={practiceDifficulty}
+            onChange={setPracticeDifficulty}
+          />
         </div>
       )}
 

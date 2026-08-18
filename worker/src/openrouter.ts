@@ -3,7 +3,12 @@
  * Same plain-text output shape as the Anthropic helper.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPromptFlat, type IrisPrompts } from './prompt';
+import {
+  buildSystemPromptFlat,
+  practicePrompt,
+  type IrisPrompts,
+  type PracticeDifficulty,
+} from './prompt';
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
@@ -23,6 +28,9 @@ export interface OpenRouterCallParams {
   appName?: string;
   action?: WalkthroughAction;
   walkthroughSoFar?: string;
+  /** For action='practice': how hard the invented problem should be.
+   *  Ignored for every other action. */
+  difficulty?: PracticeDifficulty;
   /** When the client disconnects mid-stream, this signal aborts both the
    *  initial POST and the in-flight body read so the upstream stops
    *  generating (and billing) tokens nobody will see. */
@@ -50,6 +58,7 @@ export async function callOpenRouterStream(
     appName = 'MathIQ',
     action = 'walkthrough',
     walkthroughSoFar,
+    difficulty = 'standard',
     signal,
   } = params;
   // why-how is bounded by the prompt at "2-4 short paragraphs" (~1-1.5K
@@ -65,7 +74,13 @@ export async function callOpenRouterStream(
     ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
     : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
 
-  const conversation = buildConversation(prompts, initialUserText, action, walkthroughSoFar);
+  const conversation = buildConversation(
+    prompts,
+    initialUserText,
+    action,
+    walkthroughSoFar,
+    difficulty,
+  );
 
   const headers: Record<string, string> = {
     Authorization: `Bearer ${apiKey}`,
@@ -111,6 +126,7 @@ function buildConversation(
   initialUserText: string,
   action: WalkthroughAction,
   walkthroughSoFar: string | undefined,
+  difficulty: PracticeDifficulty,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   if (action === 'why-how' && walkthroughSoFar?.trim()) {
     return [
@@ -120,7 +136,7 @@ function buildConversation(
     ];
   }
   if (action === 'practice') {
-    return [{ role: 'user', content: prompts.practice }];
+    return [{ role: 'user', content: practicePrompt(prompts, difficulty) }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

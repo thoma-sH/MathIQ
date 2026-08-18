@@ -3,7 +3,12 @@
  * returns a plain-text ReadableStream of the model's output.
  */
 import type { Course, Topic } from './courses';
-import { buildSystemPrompt, type IrisPrompts } from './prompt';
+import {
+  buildSystemPrompt,
+  practicePrompt,
+  type IrisPrompts,
+  type PracticeDifficulty,
+} from './prompt';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
@@ -54,6 +59,9 @@ export interface AnthropicCallParams {
   /** For action='why-how': the walkthrough text shown to the student so far,
    *  ending with the step we want explained. */
   walkthroughSoFar?: string;
+  /** For action='practice': how hard the invented problem should be.
+   *  Ignored for every other action. */
+  difficulty?: PracticeDifficulty;
   /** When the client disconnects mid-stream, this signal aborts both the
    *  initial POST and the in-flight body read so Anthropic stops generating
    *  (and billing) tokens nobody will see. */
@@ -85,6 +93,7 @@ export async function callAnthropicStream(
     problem,
     action = 'walkthrough',
     walkthroughSoFar,
+    difficulty = 'standard',
     signal,
     onUsage,
   } = params;
@@ -106,7 +115,13 @@ export async function callAnthropicStream(
     ? `Walk me through this ${course.title.toLowerCase()} problem step by step:\n\n${problemText}`
     : `Walk me through the canonical example for ${topic.title} step by step:\n\n${problemText}`;
 
-  const messages = buildConversation(prompts, initialUserText, action, walkthroughSoFar);
+  const messages = buildConversation(
+    prompts,
+    initialUserText,
+    action,
+    walkthroughSoFar,
+    difficulty,
+  );
 
   const resp = await fetch(ANTHROPIC_URL, {
     method: 'POST',
@@ -154,6 +169,7 @@ function buildConversation(
   initialUserText: string,
   action: WalkthroughAction,
   walkthroughSoFar: string | undefined,
+  difficulty: PracticeDifficulty,
 ): Array<{ role: 'user' | 'assistant'; content: string }> {
   if (action === 'why-how' && walkthroughSoFar?.trim()) {
     return [
@@ -163,7 +179,7 @@ function buildConversation(
     ];
   }
   if (action === 'practice') {
-    return [{ role: 'user', content: prompts.practice }];
+    return [{ role: 'user', content: practicePrompt(prompts, difficulty) }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

@@ -119,6 +119,45 @@ export function getIrisPrompts(env: PromptEnv): IrisPrompts {
   };
 }
 
+/**
+ * Practice-problem difficulty, driven by the slider under the generator
+ * button. 'standard' is the historical behavior and deliberately appends
+ * nothing — a request without the field produces a byte-identical prompt, so
+ * older clients are unaffected and the cached prefix stays warm.
+ *
+ * The wording mirrors the Daily Challenge directives in `challenge.ts`, which
+ * are already tuned to keep "harder" from drifting into contest-style
+ * puzzles — the failure mode students actually complain about.
+ */
+export type PracticeDifficulty = 'easier' | 'standard' | 'harder';
+
+const PRACTICE_DIFFICULTY_DIRECTIVE: Record<PracticeDifficulty, string> = {
+  easier:
+    "DIFFICULTY OVERRIDE — EASIER: make this problem noticeably simpler than the topic's canonical example. A routine one-step application of the technique, solvable in under 2 minutes. Use small integers and the cleanest possible setup. The point is to build confidence in the trigger, not to test stamina.",
+  standard: '',
+  harder:
+    "DIFFICULTY OVERRIDE — HARDER: make this problem a step beyond the topic's canonical example. Chain two ideas from the topic, or add one tidy extra moving part. About 5-7 minutes of work for a prepared student. NO tricks, NO non-obvious substitutions, NO contest-style insight — harder means more to carry, not a puzzle to crack.",
+};
+
+/** Resolves the practice prompt for a difficulty. Returns `prompts.practice`
+ *  untouched for 'standard'. */
+export function practicePrompt(
+  prompts: IrisPrompts,
+  difficulty: PracticeDifficulty,
+): string {
+  const directive = PRACTICE_DIFFICULTY_DIRECTIVE[difficulty];
+  if (!directive) return prompts.practice;
+  return [prompts.practice, directive].join('\n\n');
+}
+
+/** Never throws. An absent, unknown, or garbage value resolves to 'standard'
+ *  and is served normally — this field grants no access and a deploy that
+ *  400s every open tab is a far worse failure than an ignored preference. */
+export function parsePracticeDifficulty(raw: unknown): PracticeDifficulty {
+  if (raw === 'easier' || raw === 'harder') return raw;
+  return 'standard';
+}
+
 function buildCourseTopicContext(course: Course, topic: Topic): string {
   return `CURRENT SESSION
 
