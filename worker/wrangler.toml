@@ -36,7 +36,7 @@ new_sqlite_classes = ["UsageCounter"]
 
 [vars]
 # Allowed origins for CORS. Comma-separated.
-ALLOWED_ORIGINS = "https://mathiq.io,https://www.mathiq.io,https://math-iq.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:5175"
+ALLOWED_ORIGINS = "https://mathiq.io,https://www.mathiq.io,https://math-iq.vercel.app,https://math-iq-git-focus-the-active-problem-thoma-shs-projects.vercel.app,http://localhost:5173,http://localhost:5174,http://localhost:5175"
 
 # Clerk publishable key — safe to commit (client-visible by design).
 # After Clerk setup, paste your `pk_test_...` or `pk_live_...` here.
