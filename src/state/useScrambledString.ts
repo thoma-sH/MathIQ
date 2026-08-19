@@ -20,8 +20,17 @@ import { useLayoutEffect, useState } from 'react';
  * without ever starting a timer.
  */
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz░▒▓';
-const FRAMES = 18;
+
+/** The flip cadence, held at the reference's value. This is the number that
+ *  makes it read as decoding rather than as noise, so the duration below is
+ *  bought with more frames rather than slower ones. */
 const FRAME_MS = 35;
+
+/** How long the decode takes, start to finish. Flat, not scaled by length:
+ *  the reference sweeps a nine-character name in 630ms, which is over before
+ *  it registers on a problem statement ten times longer. */
+const DURATION_MS = 3000;
+const FRAMES = Math.round(DURATION_MS / FRAME_MS);
 
 function scramble(target: string, progress: number): string {
   const len = target.length;

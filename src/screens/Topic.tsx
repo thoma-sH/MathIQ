@@ -268,9 +268,6 @@ export function TopicScreen({
     scrambleTarget !== null && scrambleTarget !== mountedWithRef.current;
   const scrambled = useScrambledString(scrambleTarget ?? '', scrambleEnabled);
 
-  // The card the page scrolls to when a run starts.
-  const focusRef = useRef<HTMLElement | null>(null);
-
   // Coalesce per-chunk setState into one commit per animation frame. setState
   // setters are stable across renders, so creating the batchers once is safe.
   const bufferBatcher = useMemo(() => createRafBatcher(setBuffer), []);
@@ -435,12 +432,15 @@ export function TopicScreen({
   // The textarea that starts most runs sits at the bottom of the page while
   // the walkthrough renders at the top, so without this a submit looks like it
   // did nothing.
-  function scrollFocusIntoView() {
+  //
+  // The whole page, not the card. Scrolling the card to the top of the
+  // viewport hides the breadcrumb, title and strategic anchor above it, which
+  // overshoots what the student wants to see; from the top all four are in
+  // frame and there is nothing to overshoot. App.tsx does the same on route
+  // changes.
+  function scrollToTop() {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    focusRef.current?.scrollIntoView({
-      behavior: reduce ? 'auto' : 'smooth',
-      block: 'start',
-    });
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
   }
 
   function resetSession() {
@@ -755,7 +755,7 @@ export function TopicScreen({
     // No usable match (or matched this same topic).
     // If the input looks like a real problem and matched this topic, run it.
     if (isProblem && match) {
-      scrollFocusIntoView();
+      scrollToTop();
       void runWalkthrough(trimmed);
       return;
     }
@@ -774,6 +774,21 @@ export function TopicScreen({
     parsed.complete.length > 0 ||
     parsed.streamingTail !== null;
   const showScramble = scrambleTarget !== null && !scrambled.settled;
+
+  // A practice run that never produced a statement. "Writing…" is only true
+  // while it is actually being written — once the run has ended the card has
+  // to say why, or it sits there claiming to work while the limit notice
+  // renders underneath it.
+  const practiceNotice =
+    limitStatus === 'rate-limited'
+      ? 'Out of usage'
+      : limitStatus === 'sign-in-required'
+        ? 'Sign in to keep going'
+        : limitStatus === 'error'
+          ? "Couldn't write a problem"
+          : streaming === 'walkthrough'
+            ? 'Writing a fresh problem…'
+            : 'Stopped before a problem arrived';
   const isStreamingWalkthrough = streaming === 'walkthrough';
   const isStreamingAnything = streaming !== null;
 
@@ -869,14 +884,7 @@ export function TopicScreen({
         </MathMarkdown>
       </section>
 
-      <section
-        ref={focusRef}
-        className="reveal reveal-3"
-        // Header (shell/Header.tsx) is `position: sticky; height: 64`, so a
-        // bare scrollIntoView parks this card underneath it. scroll-margin is
-        // the native way to tell the scroll where the card really starts.
-        style={{ marginBottom: 20, scrollMarginTop: 80 }}
-      >
+      <section className="reveal reveal-3" style={{ marginBottom: 20 }}>
         <div style={kicker(8)}>{FOCUS_KICKER[focus.kind]}</div>
         <div
           style={{
@@ -894,7 +902,7 @@ export function TopicScreen({
               aria-live="polite"
               style={{ fontFamily: T.mono, fontSize: 14, color: T.muted }}
             >
-              Writing a fresh problem…
+              {practiceNotice}
             </div>
           ) : (
             <>
@@ -958,7 +966,7 @@ export function TopicScreen({
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => {
-              scrollFocusIntoView();
+              scrollToTop();
               void runWalkthrough();
             }}
             className="btn-press chamfer"
@@ -968,7 +976,7 @@ export function TopicScreen({
           </button>
           <button
             onClick={() => {
-              scrollFocusIntoView();
+              scrollToTop();
               void runWalkthrough(undefined, {
                 practice: true,
                 difficulty: practiceDifficulty,
