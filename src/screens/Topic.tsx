@@ -250,26 +250,23 @@ export function TopicScreen({
     return { kind: 'example', text: topic?.exampleProblem ?? '' };
   }, [sessionPractice, parsed, streamDone, problemForSession, topic]);
 
-  // The decode animation fires only when the focused problem genuinely becomes
-  // a different one: never for the canonical example, never on the first
-  // render (which covers both a cold open and a resumed session), and never
-  // for a re-run of identical text — Redo on Max and Try again would otherwise
-  // scramble their way back to the problem already on screen.
-  const didMountRef = useRef(false);
-  const lastSettledRef = useRef<string | null>(null);
+  // The decode fires only when the focused problem genuinely becomes a
+  // different one. Whatever was on screen at mount — a cold open on the
+  // canonical example, or a session restored from a snapshot — is not
+  // something the student just asked for, so it is captured once here and
+  // never decodes.
+  //
+  // This flag must stay *stable* for the whole animation. An earlier version
+  // tracked "has it settled yet" in a passive effect, which reads the values
+  // of its own render: on the render where a new target arrives the hook's
+  // state is still the previous settled one, so the effect recorded the new
+  // target as already-settled before a single frame had drawn, flipped this
+  // flag false, and cancelled the decode about 30ms in.
   const scrambleTarget = focus.kind === 'example' ? null : focus.text;
-  const scrambled = useScrambledString(
-    scrambleTarget ?? '',
-    didMountRef.current &&
-      scrambleTarget !== null &&
-      scrambleTarget !== lastSettledRef.current,
-  );
-  useEffect(() => {
-    didMountRef.current = true;
-    if (scrambled.settled && scrambleTarget !== null) {
-      lastSettledRef.current = scrambleTarget;
-    }
-  });
+  const mountedWithRef = useRef(scrambleTarget);
+  const scrambleEnabled =
+    scrambleTarget !== null && scrambleTarget !== mountedWithRef.current;
+  const scrambled = useScrambledString(scrambleTarget ?? '', scrambleEnabled);
 
   // The card the page scrolls to when a run starts.
   const focusRef = useRef<HTMLElement | null>(null);
@@ -875,7 +872,10 @@ export function TopicScreen({
       <section
         ref={focusRef}
         className="reveal reveal-3"
-        style={{ marginBottom: 20 }}
+        // Header (shell/Header.tsx) is `position: sticky; height: 64`, so a
+        // bare scrollIntoView parks this card underneath it. scroll-margin is
+        // the native way to tell the scroll where the card really starts.
+        style={{ marginBottom: 20, scrollMarginTop: 80 }}
       >
         <div style={kicker(8)}>{FOCUS_KICKER[focus.kind]}</div>
         <div
