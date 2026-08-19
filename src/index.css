@@ -449,6 +449,16 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   .disclosure .chev,
   .disclosure .reveal { transition: none; animation: none; }
 }
+@media (prefers-reduced-motion: reduce) {
+  /* No sweep, no breathe — and the hint needs its color back, since the
+     animated version paints through a gradient with transparent text. */
+  .scribe-trigger { animation: none; opacity: 1; }
+  .scribe-hint {
+    animation: none;
+    background-image: none;
+    color: var(--muted);
+  }
+}
 
 /* ─── Upgrade prompt modal ──────────────────────────────────────────── */
 .upgrade-backdrop {
@@ -643,13 +653,47 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   font-size: 12px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: transparent;
   transition: color 200ms;
+
+  /* A band of ink travelling left to right through muted text. The gradient
+     is three times the width of the text with the bright band at its centre,
+     so sliding it one full text-width carries the band from just off the left
+     edge to just off the right. Clipped to the glyphs, so it reads as the
+     letters lighting up in sequence rather than a highlight passing over. */
+  background-image: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--muted) 40%,
+    var(--ink) 50%,
+    var(--muted) 60%,
+    var(--muted) 100%
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  /* Shares the breathe's 3.6s so the two read as one gesture. */
+  animation: scribe-sweep 3.6s linear infinite;
 }
-.scribe-trigger:hover .scribe-hint { color: var(--ink); }
+/* Hovering already pauses the breathe; settle the text too rather than
+   leaving a band frozen mid-word. */
+.scribe-trigger:hover .scribe-hint {
+  background-image: none;
+  color: var(--ink);
+  animation: none;
+}
 @keyframes scribe-breathe {
-  0%, 100% { opacity: 0.85; }
+  /* Shipped at 0.85, which was shallow enough to read as a rendering
+     artefact. Opacity only — the palette does the color, this does the
+     rhythm. */
+  0%, 100% { opacity: 0.55; }
   50%      { opacity: 1; }
+}
+@keyframes scribe-sweep {
+  /* Higher percentages push the image left, so counting down walks the
+     bright band rightward across the text. */
+  from { background-position: 100% 0; }
+  to   { background-position: 0% 0; }
 }
 
 .search-form {
