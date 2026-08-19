@@ -1,28 +1,41 @@
 import { useState } from 'react';
 import { KEY_PRACTICE_DIFFICULTY, readString, writeString } from '../lib/storage';
 
-/** How hard a generated practice problem should be, relative to the topic's
- *  canonical example. 'standard' is the historical behavior. */
-export type PracticeDifficulty = 'easier' | 'standard' | 'harder';
+/** What kind of practice problem to invent. 'standard' is the historical
+ *  behavior and the only level that leaves the prompt untouched. */
+export type PracticeDifficulty = 'standard' | 'hard' | 'creative';
 
-/** Slider positions, in order. Index doubles as the range input's value. */
-export const DIFFICULTY_ORDER: PracticeDifficulty[] = ['easier', 'standard', 'harder'];
+/** Display order, left to right. */
+export const DIFFICULTY_ORDER: PracticeDifficulty[] = ['standard', 'hard', 'creative'];
 
 export const DIFFICULTY_LABEL: Record<PracticeDifficulty, string> = {
-  easier: 'Easier',
   standard: 'Standard',
-  harder: 'Harder',
+  hard: 'Hard',
+  creative: 'Creative',
+};
+
+/** Sits on the button itself, so the three are distinguishable without
+ *  selecting them one at a time. */
+export const DIFFICULTY_CAPTION: Record<PracticeDifficulty, string> = {
+  standard: 'Like the example',
+  hard: 'Two ideas chained',
+  creative: 'Needs an insight',
 };
 
 export const DIFFICULTY_HINT: Record<PracticeDifficulty, string> = {
-  easier: 'One clean step. Small numbers.',
-  standard: 'Matches the example problem.',
-  harder: 'Two ideas chained. Still no tricks.',
+  standard: 'Same shape and difficulty as the topic’s canonical example.',
+  hard: 'Composes at least two ideas from the topic — knowing only one leaves you stuck, not just slower.',
+  creative: 'The routine attack stalls on purpose. Getting through needs one real idea, discoverable from the topic itself.',
 };
 
 function read(): PracticeDifficulty {
   const raw = readString(KEY_PRACTICE_DIFFICULTY);
-  return raw === 'easier' || raw === 'harder' ? raw : 'standard';
+  if (raw === 'hard' || raw === 'creative') return raw;
+  // The slider shipped as easier / standard / harder. Anyone who moved it
+  // still has that value stored, and 'harder' has a direct successor worth
+  // carrying over. 'easier' has none, so it falls through to standard.
+  if (raw === 'harder') return 'hard';
+  return 'standard';
 }
 
 export function getPracticeDifficulty(): PracticeDifficulty {
