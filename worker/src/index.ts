@@ -199,7 +199,7 @@ interface WalkthroughBody {
    *  'standard' burns only a daily total slot. Absent or unrecognized means
    *  'auto' — the pre-picker behavior every older client sends. */
   model?: 'max' | 'standard';
-  /** For action='practice': 'easier' | 'standard' | 'harder'. Absent or
+  /** For action='practice': 'standard' | 'hard' | 'creative'. Absent or
    *  unrecognized means 'standard' — the pre-slider behavior every older
    *  client sends. */
   difficulty?: string;

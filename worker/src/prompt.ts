@@ -120,23 +120,30 @@ export function getIrisPrompts(env: PromptEnv): IrisPrompts {
 }
 
 /**
- * Practice-problem difficulty, driven by the slider under the generator
- * button. 'standard' is the historical behavior and deliberately appends
- * nothing — a request without the field produces a byte-identical prompt, so
- * older clients are unaffected and the cached prefix stays warm.
+ * Practice-problem level, driven by the three buttons under the generator.
+ * 'standard' is the historical behavior and deliberately appends nothing — a
+ * request without the field produces a byte-identical prompt, so older clients
+ * are unaffected and the cached prefix stays warm.
  *
- * The wording mirrors the Daily Challenge directives in `challenge.ts`, which
- * are already tuned to keep "harder" from drifting into contest-style
- * puzzles — the failure mode students actually complain about.
+ * HARD stays deliberately unsurprising. Its wording mirrors the Daily
+ * Challenge directives in `challenge.ts`, tuned to keep difficulty from
+ * drifting into contest-style puzzles — the failure mode students actually
+ * complain about.
+ *
+ * CREATIVE crosses that line on purpose, and is the only level that does. The
+ * guard rails move rather than disappear: the insight has to be reachable from
+ * the topic, the problem has to stay fully solvable with the topic's own
+ * tools, and the answer has to be recognisable when reached. Without those it
+ * degenerates into exactly the unsolvable puzzle HARD exists to avoid.
  */
-export type PracticeDifficulty = 'easier' | 'standard' | 'harder';
+export type PracticeDifficulty = 'standard' | 'hard' | 'creative';
 
 const PRACTICE_DIFFICULTY_DIRECTIVE: Record<PracticeDifficulty, string> = {
-  easier:
-    "DIFFICULTY OVERRIDE — EASIER: make this problem noticeably simpler than the topic's canonical example. A routine one-step application of the technique, solvable in under 2 minutes. Use small integers and the cleanest possible setup. The point is to build confidence in the trigger, not to test stamina.",
   standard: '',
-  harder:
-    "DIFFICULTY OVERRIDE — HARDER: make this problem a step beyond the topic's canonical example. Chain two ideas from the topic, or add one tidy extra moving part. About 5-7 minutes of work for a prepared student. NO tricks, NO non-obvious substitutions, NO contest-style insight — harder means more to carry, not a puzzle to crack.",
+  hard:
+    "DIFFICULTY OVERRIDE — HARD: this problem must require at least TWO distinct ideas from the topic, composed, not one idea applied once. Chain them so the output of the first is the input of the second, and make the composition unavoidable: a student who knows only one of the two must get genuinely stuck, not merely take longer. About 5-8 minutes for a prepared student. Still NO tricks, NO non-obvious substitutions, NO contest-style insight — hard means more to carry and more to sequence, not a puzzle to crack. That is what the CREATIVE level is for.",
+  creative:
+    "DIFFICULTY OVERRIDE — CREATIVE: the topic's mechanical technique must not be sufficient on its own. Build a problem where the routine attack visibly stalls — it starts, and then runs into something it cannot finish — and where getting unstuck takes one genuine idea: a reframing, an exploited symmetry, a well-chosen substitution or decomposition, a quantity worth naming, a step taken in the reverse of the obvious order. Hold it to all of these: the idea must be DISCOVERABLE from the topic itself, never outside knowledge or a memorised competition trick; once seen it must feel inevitable rather than lucky; the problem must be fully solvable with only this topic's tools; and the answer must be clean enough that a student knows when they have it. State the problem plainly and do NOT hint at the idea. Depth, not length — one real insight, not a chain of routine steps. Aim for the kind of problem a good teacher would remember.",
 };
 
 /** Resolves the practice prompt for a difficulty. Returns `prompts.practice`
@@ -154,7 +161,11 @@ export function practicePrompt(
  *  and is served normally — this field grants no access and a deploy that
  *  400s every open tab is a far worse failure than an ignored preference. */
 export function parsePracticeDifficulty(raw: unknown): PracticeDifficulty {
-  if (raw === 'easier' || raw === 'harder') return raw;
+  if (raw === 'hard' || raw === 'creative') return raw;
+  // Clients cached before the levels were renamed still send the old slider
+  // values. 'harder' has a direct successor; 'easier' has none and falls
+  // through with everything else.
+  if (raw === 'harder') return 'hard';
   return 'standard';
 }
 
