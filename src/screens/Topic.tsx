@@ -978,16 +978,23 @@ export function TopicScreen({
         </div>
       </section>
 
+      {/* The one model control on the page. It governs every run started from
+          here — the walkthrough, a practice problem, or a typed problem in the
+          section below — so it stays mounted even once output exists. */}
+      <div className="reveal reveal-4">
+        <ModelPicker
+          value={modelChoice}
+          onChange={setModelChoice}
+          canChoose={canChooseModel}
+          ready={modelReady}
+          maxRemaining={maxRemaining}
+          onLocked={() => requireUpgrade('max-model')}
+          disabled={classifying || isStreamingAnything}
+        />
+      </div>
+
       {!hasOutput && !limitStatus && !isStreamingAnything && (
         <div className="reveal reveal-4">
-          <ModelPicker
-            value={modelChoice}
-            onChange={setModelChoice}
-            canChoose={canChooseModel}
-            ready={modelReady}
-            maxRemaining={maxRemaining}
-            onLocked={() => requireUpgrade('max-model')}
-          />
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => {
@@ -1451,21 +1458,12 @@ export function TopicScreen({
             color: T.ink,
           }}
         />
-        <ModelPicker
-          value={modelChoice}
-          onChange={setModelChoice}
-          canChoose={canChooseModel}
-          ready={modelReady}
-          maxRemaining={maxRemaining}
-          onLocked={() => requireUpgrade('max-model')}
-          disabled={classifying || isStreamingAnything}
-        />
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 12,
-            marginTop: 10,
+            marginTop: 12,
             flexWrap: 'wrap',
           }}
         >
