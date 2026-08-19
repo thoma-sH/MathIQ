@@ -16,8 +16,12 @@ import { useLayoutEffect, useState } from 'react';
  * same reason. Here it also keeps word shape and line count steady, so a
  * monospace render can't reflow mid-decode.
  *
- * Honors `prefers-reduced-motion`, and `enabled: false`, by settling instantly
- * without ever starting a timer.
+ * Deliberately does NOT check `prefers-reduced-motion`. The reference does not
+ * either, and gating on it made the decode settle instantly for anyone with
+ * the OS setting on — indistinguishable from the animation being broken, since
+ * no duration change has any visible effect. A short text decode is mild
+ * compared to the parallax and scroll-jacking that setting exists to suppress.
+ * `enabled: false` is the only way to skip it.
  */
 const GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz░▒▓';
 
@@ -59,10 +63,7 @@ export function useScrambledString(target: string, enabled: boolean): Scrambled 
   // between a new target arriving and the decode starting would flash the
   // finished problem — exactly what the animation exists to build up to.
   useLayoutEffect(() => {
-    const reduceMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (!enabled || !target || reduceMotion) {
+    if (!enabled || !target) {
       setState((prev) =>
         prev.settled && prev.text === target ? prev : { text: target, settled: true },
       );

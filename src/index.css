@@ -653,6 +653,13 @@ img, svg { max-width: 100%; }
   }
 }
 
+/* Exempt from the blanket clamp above. The problem decode is motion the user
+   asked for by name, and the JS half of it no longer honors the setting, so
+   clamping only the crossfade would leave the handoff popping mid-effect. */
+@media (prefers-reduced-motion: reduce) {
+  .problem-settle { animation-duration: 180ms !important; }
+}
+
 /* ─── Difficulty slider — practice problem generator ───────────── */
 /* A native range input, restyled to the square-cornered house look. The
  * track and thumb can only be reached through vendor pseudo-elements, so
