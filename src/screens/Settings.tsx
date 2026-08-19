@@ -416,6 +416,12 @@ function AppearanceCard() {
   );
 }
 
+/**
+ * Ten miniature cards is a lot of screen to hand someone who came to Settings
+ * for something else, so each group collapses. Closed by default, and the
+ * summary carries the chosen palette's name and a chip wearing it — so the
+ * collapsed state still answers "what am I on?" without being opened.
+ */
 function ThemeGroup({
   title,
   themes,
@@ -428,20 +434,72 @@ function ThemeGroup({
   onChange: (id: (typeof LIGHT_THEMES)[number]) => void;
 }) {
   return (
-    <div style={{ marginTop: 18 }}>
-      <div
+    <details
+      className="disclosure"
+      style={{ marginTop: 14, border: `1px solid ${T.hair}`, background: T.paper }}
+    >
+      <summary
         style={{
-          fontFamily: T.mono,
-          fontSize: 11,
-          letterSpacing: '0.14em',
-          textTransform: 'uppercase',
-          color: T.muted,
+          minHeight: 44,
+          padding: '11px 13px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
         }}
       >
-        {title}
+        <SelectedChip id={value} />
+        <span
+          style={{
+            fontFamily: T.mono,
+            fontSize: 11,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            color: T.muted,
+          }}
+        >
+          {title}
+        </span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.ink }}>
+          {THEME_LABEL[value]}
+        </span>
+        <svg className="chev" width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path
+            d="M3.5 5.5 L7 9 L10.5 5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </summary>
+      <div className="reveal" style={{ padding: '0 13px 13px' }}>
+        <ThemePicker themes={themes} value={value} onChange={onChange} />
       </div>
-      <ThemePicker themes={themes} value={value} onChange={onChange} />
-    </div>
+    </details>
+  );
+}
+
+/** Three bands of the named palette. Wears `data-theme`, like the swatches. */
+function SelectedChip({ id }: { id: (typeof LIGHT_THEMES)[number] }) {
+  return (
+    <span
+      aria-hidden
+      data-theme={id}
+      style={{
+        display: 'flex',
+        width: 28,
+        height: 20,
+        flexShrink: 0,
+        border: `1px solid ${T.ink}`,
+        background: T.paper,
+        overflow: 'hidden',
+      }}
+    >
+      <span style={{ flex: 1 }} />
+      <span style={{ width: 6, background: T.ink }} />
+      <span style={{ width: 6, background: T.accent }} />
+    </span>
   );
 }
 
