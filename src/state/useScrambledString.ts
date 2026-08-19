@@ -16,19 +16,25 @@ import { useLayoutEffect, useState } from 'react';
 const GLYPHS =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-*/=^_(){}[]\$<>|~#@%&';
 
-/** Long problems shouldn't drag; short ones still need enough frames to read
- *  as a decode rather than a flicker. */
+/** Long problems shouldn't drag; short ones still need enough time to read as
+ *  a decode rather than a flicker. */
 function durationFor(length: number): number {
-  return Math.min(900, 300 + length * 6);
+  return Math.min(2400, 700 + length * 14);
 }
 
-function scramble(target: string, locked: number): string {
-  let out = target.slice(0, locked);
-  for (let i = locked; i < target.length; i++) {
-    const ch = target[i];
-    out += ch === ' ' || ch === '\n' ? ch : GLYPHS[(Math.random() * GLYPHS.length) | 0];
-  }
-  return out;
+/** How often the unlocked glyphs re-roll. Deliberately far slower than the
+ *  frame rate: re-rolling every frame at 60fps reads as static noise rather
+ *  than as characters flipping. The lock front still advances every frame, so
+ *  the decode stays smooth while the churn behind it stays legible. */
+const FLIP_MS = 55;
+
+/** One glyph per character of `target`, whitespace preserved in place. Held
+ *  across frames so the field only changes on a re-roll — regenerating it per
+ *  frame is what makes the effect look fast. */
+function rollNoise(target: string): string[] {
+  return Array.from(target, (ch) =>
+    ch === ' ' || ch === '\n' ? ch : GLYPHS[(Math.random() * GLYPHS.length) | 0],
+  );
 }
 
 export interface Scrambled {
@@ -58,6 +64,9 @@ export function useScrambledString(target: string, enabled: boolean): Scrambled 
     const total = durationFor(target.length);
     const started = performance.now();
     let frame = 0;
+    let noise = rollNoise(target);
+    let lastFlip = started;
+    let lastLocked = -1;
 
     const tick = (now: number) => {
       const progress = Math.min(1, (now - started) / total);
@@ -65,11 +74,25 @@ export function useScrambledString(target: string, enabled: boolean): Scrambled 
         setState({ text: target, settled: true });
         return;
       }
-      setState({ text: scramble(target, Math.floor(progress * target.length)), settled: false });
+      const locked = Math.floor(progress * target.length);
+      const flip = now - lastFlip >= FLIP_MS;
+      if (flip) {
+        noise = rollNoise(target);
+        lastFlip = now;
+      }
+      // Repaint only when the decode front moved or the field re-rolled —
+      // otherwise this frame produces an identical string and a wasted render.
+      if (flip || locked !== lastLocked) {
+        lastLocked = locked;
+        setState({
+          text: target.slice(0, locked) + noise.slice(locked).join(''),
+          settled: false,
+        });
+      }
       frame = requestAnimationFrame(tick);
     };
 
-    setState({ text: scramble(target, 0), settled: false });
+    setState({ text: noise.join(''), settled: false });
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [target, enabled]);
