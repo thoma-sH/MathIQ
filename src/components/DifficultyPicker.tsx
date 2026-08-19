@@ -18,7 +18,6 @@ import { T } from '../design/tokens';
 import { kicker } from '../design/primitives';
 import {
   DIFFICULTY_CAPTION,
-  DIFFICULTY_HINT,
   DIFFICULTY_LABEL,
   DIFFICULTY_ORDER,
   type PracticeDifficulty,
@@ -80,19 +79,6 @@ export function DifficultyPicker({
             </button>
           );
         })}
-      </div>
-      <div
-        role="status"
-        aria-live="polite"
-        style={{
-          fontSize: 12,
-          color: T.muted,
-          lineHeight: 1.45,
-          marginTop: 8,
-          fontFamily: T.sans,
-        }}
-      >
-        {DIFFICULTY_HINT[value]}
       </div>
     </div>
   );
