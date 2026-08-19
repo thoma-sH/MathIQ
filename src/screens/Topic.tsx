@@ -26,7 +26,7 @@ import {
   type PracticeDifficulty,
 } from '../state/practiceDifficulty';
 import { DifficultyPicker } from '../components/DifficultyPicker';
-import { useScrambledString } from '../state/useScrambledString';
+import { useScrambledElement } from '../state/useScrambledElement';
 import {
   clearSession,
   markSessionSaved,
@@ -266,7 +266,10 @@ export function TopicScreen({
   const mountedWithRef = useRef(scrambleTarget);
   const scrambleEnabled =
     scrambleTarget !== null && scrambleTarget !== mountedWithRef.current;
-  const scrambled = useScrambledString(scrambleTarget ?? '', scrambleEnabled);
+  // Decodes the rendered output in place, so there is no plain-text phase and
+  // nothing to hand off to — the typeset math is what scrambles.
+  const problemRef = useRef<HTMLDivElement | null>(null);
+  useScrambledElement(problemRef, scrambleTarget, scrambleEnabled);
 
   // Coalesce per-chunk setState into one commit per animation frame. setState
   // setters are stable across renders, so creating the batchers once is safe.
@@ -467,6 +470,32 @@ export function TopicScreen({
     restoredRef.current = null;
     snapshotRef.current = null;
     clearSession();
+  }
+
+  /** Puts the page back the way it opens: canonical example in the card, both
+   *  generate buttons and the difficulty slider back, nothing in the textarea.
+   *
+   *  resetSession clears the walkthrough itself but deliberately leaves the
+   *  request that produced it — a re-run needs to know what it is re-running —
+   *  so the fields that decide *which* problem is in focus are cleared here.
+   *  Streaming is one of them: aborting the controller makes runWalkthrough
+   *  return before its own cleanup, which is why the stop button also sets
+   *  this by hand. */
+  function clearWalkthrough() {
+    resetSession();
+    classifyAbortRef.current?.abort();
+    setClassifying(false);
+    setStreaming(null);
+    setProblemForSession(undefined);
+    setSessionPractice(false);
+    setSessionModel('standard');
+    setModelChoice('standard');
+    setRateInfo(null);
+    setCustomProblem('');
+    setSubmitHint(null);
+    setOcrState('idle');
+    setOcrMessage(null);
+    scrollToTop();
   }
 
   // Every response carries the current budget, so the picker stays accurate
@@ -773,8 +802,6 @@ export function TopicScreen({
     parsed.preamble !== null ||
     parsed.complete.length > 0 ||
     parsed.streamingTail !== null;
-  const showScramble = scrambleTarget !== null && !scrambled.settled;
-
   // A practice run that never produced a statement. "Writing…" is only true
   // while it is actually being written — once the run has ended the card has
   // to say why, or it sits there claiming to work while the limit notice
@@ -791,6 +818,11 @@ export function TopicScreen({
             : 'Stopped before a problem arrived';
   const isStreamingWalkthrough = streaming === 'walkthrough';
   const isStreamingAnything = streaming !== null;
+
+  // Everything the clear button undoes. When all of it is already true the
+  // page *is* the default, so the control would be a no-op.
+  const isDefaultState =
+    focus.kind === 'example' && !hasOutput && !limitStatus && !isStreamingAnything;
 
   // In step mode, only show segments up to revealCount.
   const visibleSteps =
@@ -885,10 +917,41 @@ export function TopicScreen({
       </section>
 
       <section className="reveal reveal-3" style={{ marginBottom: 20 }}>
-        <div style={kicker(8)}>{FOCUS_KICKER[focus.kind]}</div>
         <div
           style={{
-            position: 'relative',
+            display: 'flex',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={kicker(8)}>{FOCUS_KICKER[focus.kind]}</div>
+          {!isDefaultState && (
+            <button
+              type="button"
+              onClick={clearWalkthrough}
+              className="btn-press"
+              aria-label="Clear this walkthrough and go back to the example problem"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '8px 6px',
+                margin: '-8px -6px',
+                minHeight: 32,
+                fontFamily: T.mono,
+                fontSize: 12,
+                color: T.muted,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              clear walkthrough
+            </button>
+          )}
+        </div>
+        <div
+          style={{
             border: `1px solid ${T.ink}`,
             background: T.paper,
             padding: '20px 22px',
@@ -905,50 +968,12 @@ export function TopicScreen({
               {practiceNotice}
             </div>
           ) : (
-            <>
-              {/* Mounted throughout, including while the decode plays over the
-                  top of it — hidden, but still occupying its full layout box.
-                  That box *is* the card's height for the whole animation, so
-                  the plain-text → typeset handoff cannot move anything. */}
-              <div
-                className={showScramble ? undefined : 'problem-settle'}
-                style={{ visibility: showScramble ? 'hidden' : 'visible' }}
-                role="status"
-                aria-live="polite"
-                aria-hidden={showScramble}
-              >
-                <MathMarkdown className="markdown-body">{focus.text}</MathMarkdown>
-              </div>
-              {showScramble && (
-                // Plain text on purpose. Scrambled LaTeX is invalid on all but
-                // the last frame, so routing the decode through MathMarkdown
-                // would strobe MarkdownBoundary's error fallback and re-parse
-                // the markdown AST every frame. The decode runs over the raw
-                // source and hands off to the typeset render once it settles.
-                //
-                // Absolutely positioned, inset by the card's own padding, so it
-                // contributes nothing to layout. A source longer than the
-                // typeset box clips rather than growing the card: a decorative
-                // 700ms animation is not worth a visible resize.
-                <pre
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    inset: '20px 22px',
-                    overflow: 'hidden',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontFamily: T.mono,
-                    fontSize: 13,
-                    lineHeight: 1.45,
-                    margin: 0,
-                    color: T.ink,
-                  }}
-                >
-                  {scrambled.text}
-                </pre>
-              )}
-            </>
+            // One layer, always typeset. The decode permutes the glyphs of
+            // this very DOM, so there is no second representation and no
+            // moment where the font or size changes.
+            <div ref={problemRef} role="status" aria-live="polite">
+              <MathMarkdown className="markdown-body">{focus.text}</MathMarkdown>
+            </div>
           )}
         </div>
       </section>
