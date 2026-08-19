@@ -22,12 +22,6 @@ export const DIFFICULTY_CAPTION: Record<PracticeDifficulty, string> = {
   creative: 'Needs an insight',
 };
 
-export const DIFFICULTY_HINT: Record<PracticeDifficulty, string> = {
-  standard: 'Same shape and difficulty as the topic’s canonical example.',
-  hard: 'Composes at least two ideas from the topic — knowing only one leaves you stuck, not just slower.',
-  creative: 'The routine attack stalls on purpose. Getting through needs one real idea, discoverable from the topic itself.',
-};
-
 function read(): PracticeDifficulty {
   const raw = readString(KEY_PRACTICE_DIFFICULTY);
   if (raw === 'hard' || raw === 'creative') return raw;
