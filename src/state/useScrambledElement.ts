@@ -1,43 +1,93 @@
 import { useLayoutEffect, type RefObject } from 'react';
 
 /**
- * Decodes already-rendered content in place, by permuting the glyphs that are
- * on screen rather than swapping a plain-text stand-in for a typeset one.
- *
- * The earlier approach scrambled the raw LaTeX in a monospace overlay and
- * handed off to KaTeX at the end, which meant the font and size changed the
- * instant the decode finished. Here there is no handoff: the typeset output is
- * what scrambles, so nothing about it ever changes but the characters.
+ * Decodes already-rendered content in place, by substituting the glyphs on
+ * screen rather than swapping a plain-text stand-in for a typeset one. There
+ * is no handoff, so the font and size never change — only the characters.
  *
  * The constraint that shapes everything below is that KaTeX emits one text
- * node per character (`4`, `x`, `3`, `y`, …), so characters must move *between*
- * nodes to be visible — and in proportional math fonts a moved character
- * changes its node's width and reflows the equation on every frame.
+ * node per character (`4`, `x`, `3`, `y`, …), so characters must change
+ * *within* those nodes to be visible, and in proportional math fonts a
+ * different character means a different width, which reflows the equation on
+ * every frame.
  *
- * So a character is only ever exchanged with one that measures the same width.
- * Widths are measured once, per character, with a Range; slots are bucketed by
- * that measurement; and permutation happens strictly within a bucket. Every
- * node's width is then the sum of the same widths it started with, and the
- * layout cannot move. Digits in KaTeX's math fonts share a width, so they
- * shuffle freely among themselves; a glyph that is unique in width simply
- * stays put.
+ * So a slot is only ever filled with a glyph that measures the same width in
+ * that slot's own font. Every candidate is measured once per font context, and
+ * pools are keyed by (font, width). Each node's width therefore stays the sum
+ * of the same widths it started with, and the layout cannot move.
  *
- * Whitespace is excluded outright — moving a space would change where lines
- * wrap even though total width is unchanged.
+ * An earlier version permuted the problem's own characters instead. That was
+ * width-safe for free, but a bucket usually held only two or three of them, so
+ * the same glyphs visibly cycled back and forth rather than looking random.
+ * Drawing from a measured candidate set fixes that: every unlocked slot picks
+ * independently, every frame.
+ *
+ * Candidates that a font lacks are self-excluding — they fall back to another
+ * face, measure a different width, and land in a bucket no slot in this font
+ * asks for.
+ *
+ * Whitespace is never touched: moving a space preserves total width but
+ * changes where lines wrap.
  */
 const FRAME_MS = 35;
-const DURATION_MS = 2000;
+const DURATION_MS = 2500;
 const FRAMES = Math.round(DURATION_MS / FRAME_MS);
 
-/** Width match tolerance, in px. Tight enough that nothing visibly shifts,
+/** Width match tolerance in px — tight enough that nothing visibly shifts,
  *  loose enough to absorb sub-pixel measurement noise. */
 const WIDTH_EPSILON = 0.25;
+
+const CANDIDATES =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789' +
+  '#@$%&*+=~^<>?/\|!:;.,-_()[]{}░▒▓';
 
 interface Slot {
   node: Text;
   index: number;
   char: string;
-  bucket: number;
+  /** Candidate glyphs of this slot's exact width, in this slot's exact font. */
+  pool: string[];
+}
+
+const FONT_PROPS = [
+  'fontFamily',
+  'fontSize',
+  'fontStyle',
+  'fontWeight',
+  'fontVariant',
+  'letterSpacing',
+] as const;
+
+function fontKey(style: CSSStyleDeclaration): string {
+  return FONT_PROPS.map((p) => style[p]).join('|');
+}
+
+/** Measures every candidate in one layout pass for a given font, returning
+ *  width bucket -> glyphs. */
+function measurePools(style: CSSStyleDeclaration): Map<number, string[]> {
+  const host = document.createElement('div');
+  host.style.cssText = 'position:absolute;top:-9999px;left:-9999px;visibility:hidden;white-space:pre;';
+  for (const p of FONT_PROPS) host.style[p] = style[p];
+
+  const spans = [...CANDIDATES].map((ch) => {
+    const span = document.createElement('span');
+    span.textContent = ch;
+    host.appendChild(span);
+    return span;
+  });
+  document.body.appendChild(host);
+
+  // All writes are done; every read below hits the same single layout.
+  const pools = new Map<number, string[]>();
+  spans.forEach((span, i) => {
+    const bucket = Math.round(span.getBoundingClientRect().width / WIDTH_EPSILON);
+    const group = pools.get(bucket);
+    if (group) group.push(CANDIDATES[i]);
+    else pools.set(bucket, [CANDIDATES[i]]);
+  });
+
+  host.remove();
+  return pools;
 }
 
 function collectSlots(root: HTMLElement): { slots: Slot[]; nodes: Map<Text, string> } {
@@ -53,25 +103,38 @@ function collectSlots(root: HTMLElement): { slots: Slot[]; nodes: Map<Text, stri
 
   const slots: Slot[] = [];
   const nodes = new Map<Text, string>();
+  const poolsByFont = new Map<string, Map<number, string[]>>();
   const range = document.createRange();
+
   let n: Node | null;
   while ((n = walker.nextNode())) {
     const node = n as Text;
+    const parent = node.parentElement;
+    if (!parent) continue;
     const text = node.nodeValue ?? '';
     nodes.set(node, text);
+
+    const style = window.getComputedStyle(parent);
+    const key = fontKey(style);
+    let pools = poolsByFont.get(key);
+    if (!pools) {
+      pools = measurePools(style);
+      poolsByFont.set(key, pools);
+    }
+
     for (let i = 0; i < text.length; i++) {
-      if (/\s/.test(text[i])) continue;
+      const char = text[i];
+      if (/\s/.test(char)) continue;
       range.setStart(node, i);
       range.setEnd(node, i + 1);
-      const width = range.getBoundingClientRect().width;
-      slots.push({
-        node,
-        index: i,
-        char: text[i],
-        bucket: Math.round(width / WIDTH_EPSILON),
-      });
+      const bucket = Math.round(range.getBoundingClientRect().width / WIDTH_EPSILON);
+      // The character's own glyph is always a legal fill for its own slot,
+      // even when no candidate happened to measure the same.
+      const pool = pools.get(bucket) ?? [];
+      slots.push({ node, index: i, char, pool: pool.length ? pool : [char] });
     }
   }
+
   range.detach?.();
   return { slots, nodes };
 }
@@ -103,7 +166,7 @@ export function useScrambledElement(
 
     // Widths are the whole basis of the no-reflow guarantee, and measuring
     // them before KaTeX's webfonts land would measure the fallback face — the
-    // real font would then arrive mid-decode and every "same width" swap would
+    // real font would then arrive mid-decode and every "same width" fill would
     // stop being one. Cheap when the fonts are already cached.
     const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
     if (fonts && fonts.status !== 'loaded') void fonts.ready.then(begin);
@@ -114,54 +177,37 @@ export function useScrambledElement(
       teardown?.();
     };
 
-  function begin() {
-    const root = ref.current;
-    if (cancelled || !root) return;
+    function begin() {
+      const root = ref.current;
+      if (cancelled || !root) return;
 
-    const { slots, nodes } = collectSlots(root);
-    if (slots.length === 0) return;
+      const { slots, nodes } = collectSlots(root);
+      if (slots.length === 0) return;
 
-    // Slot indices grouped by measured width — the only sets within which a
-    // character may move.
-    const byBucket = new Map<number, number[]>();
-    slots.forEach((slot, i) => {
-      const group = byBucket.get(slot.bucket);
-      if (group) group.push(i);
-      else byBucket.set(slot.bucket, [i]);
-    });
+      const restore = () => commit(nodes, slots, slots.map((s) => s.char));
 
-    const restore = () => commit(nodes, slots, slots.map((s) => s.char));
+      let frame = 0;
+      const id = window.setInterval(() => {
+        frame += 1;
+        if (frame > FRAMES) {
+          window.clearInterval(id);
+          restore();
+          return;
+        }
+        const front = (frame / FRAMES) * slots.length;
+        commit(
+          nodes,
+          slots,
+          slots.map((slot, i) =>
+            i < front ? slot.char : slot.pool[(Math.random() * slot.pool.length) | 0],
+          ),
+        );
+      }, FRAME_MS);
 
-    let frame = 0;
-    const id = window.setInterval(() => {
-      frame += 1;
-      if (frame > FRAMES) {
+      teardown = () => {
         window.clearInterval(id);
         restore();
-        return;
-      }
-      const front = (frame / FRAMES) * slots.length;
-      const chars = slots.map((s) => s.char);
-      for (const group of byBucket.values()) {
-        // Only the slots this bucket still has behind the decode front are in
-        // play; everything the front has passed is already final.
-        const open = group.filter((i) => i >= front);
-        const pool = open.map((i) => slots[i].char);
-        for (let i = pool.length - 1; i > 0; i--) {
-          const j = (Math.random() * (i + 1)) | 0;
-          [pool[i], pool[j]] = [pool[j], pool[i]];
-        }
-        open.forEach((slotIndex, k) => {
-          chars[slotIndex] = pool[k];
-        });
-      }
-      commit(nodes, slots, chars);
-    }, FRAME_MS);
-
-    teardown = () => {
-      window.clearInterval(id);
-      restore();
-    };
-  }
+      };
+    }
   }, [ref, token, enabled]);
 }
