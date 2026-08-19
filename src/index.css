@@ -103,18 +103,6 @@
   --accent: #9cb86a; --accent-3: #2c3d24;
   color-scheme: dark;
 }
-[data-theme='khaki-field'] {
-  --paper: #1f2019; --paper-2: #2a2b22; --hair: #3a3b30;
-  --ink: #e0dfd0; --muted: #98977f;
-  --accent: #c2be7e; --accent-3: #3d3c26;
-  color-scheme: dark;
-}
-[data-theme='tightened-drab'] {
-  --paper: #1e2415; --paper-2: #2b3320; --hair: #3d4830;
-  --ink: #dfe6ce; --muted: #9aa681;
-  --accent: #bcd68a; --accent-3: #3a4a28;
-  color-scheme: dark;
-}
 [data-theme='moss-and-gold'] {
   --paper: #191c13; --paper-2: #23271b; --hair: #34392a;
   --ink: #e4e4d6; --muted: #93967f;

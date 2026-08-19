@@ -18,8 +18,6 @@ export type ThemeId =
   | 'warm-brown'
   | 'soft-sage'
   | 'deep-swamp'
-  | 'khaki-field'
-  | 'tightened-drab'
   | 'moss-and-gold';
 
 /** Display order within each group, left to right. */
@@ -29,8 +27,6 @@ export const DARK_THEMES: ThemeId[] = [
   'warm-brown',
   'soft-sage',
   'deep-swamp',
-  'khaki-field',
-  'tightened-drab',
   'moss-and-gold',
 ];
 
@@ -40,17 +36,16 @@ export const THEME_IDS: ThemeId[] = [...LIGHT_THEMES, ...DARK_THEMES];
 export const DEFAULT_LIGHT: ThemeId = 'pistachio';
 export const DEFAULT_DARK: ThemeId = 'warm-brown';
 
+/** Title Case, with minor words left lowercase. */
 export const THEME_LABEL: Record<ThemeId, string> = {
   pistachio: 'Pistachio',
   parchment: 'Parchment',
   chalk: 'Chalk',
   clay: 'Clay',
-  'warm-brown': 'Warm brown',
-  'soft-sage': 'Soft sage',
-  'deep-swamp': 'Deep swamp',
-  'khaki-field': 'Khaki field',
-  'tightened-drab': 'Tightened drab',
-  'moss-and-gold': 'Moss and gold',
+  'warm-brown': 'Warm Brown',
+  'soft-sage': 'Soft Sage',
+  'deep-swamp': 'Deep Swamp',
+  'moss-and-gold': 'Moss and Gold',
 };
 
 /**
@@ -67,8 +62,6 @@ export const THEME_CHROME: Record<ThemeId, string> = {
   'warm-brown': '#1d2021',
   'soft-sage': '#272e33',
   'deep-swamp': '#10160f',
-  'khaki-field': '#1f2019',
-  'tightened-drab': '#1e2415',
   'moss-and-gold': '#191c13',
 };
 

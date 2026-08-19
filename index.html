@@ -42,6 +42,10 @@
           var mode = ls.getItem('mathiq:themeMode') || 'auto';
           var light = ls.getItem('mathiq:themeLight') || 'pistachio';
           var dark = ls.getItem('mathiq:themeDark') || 'warm-brown';
+          var known = ['pistachio','parchment','chalk','clay',
+                       'warm-brown','soft-sage','deep-swamp','moss-and-gold'];
+          if (known.indexOf(light) < 0) light = 'pistachio';
+          if (known.indexOf(dark) < 0) dark = 'warm-brown';
           var id =
             mode === 'light'
               ? light
