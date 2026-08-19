@@ -241,7 +241,9 @@ function SharedView({ data }: { data: SharedChallenge }) {
               background: T.doc,
               fontSize: 16,
               lineHeight: 1.6,
-              color: T.ink,
+              // The document surface is always white, so its text can't ride
+              // the theme — a dark palette's pale ink would vanish on it.
+              color: T.docInk,
               overflowX: 'auto',
             }}
           >

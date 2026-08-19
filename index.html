@@ -28,8 +28,40 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="MathIQ" />
+
+    <!-- Resolves the stored palette before first paint. Deferring this to
+         React flashes the default pistachio on every load, which is worst on
+         exactly the dark themes someone picked to avoid glare. Mirrors
+         resolveTheme() in src/state/theme.ts; kept dependency-free. -->
+    <script>
+      (function () {
+        try {
+          var ls = localStorage;
+          var mode = ls.getItem('mathiq:themeMode') || 'auto';
+          var light = ls.getItem('mathiq:themeLight') || 'pistachio';
+          var dark = ls.getItem('mathiq:themeDark') || 'warm-brown';
+          var id =
+            mode === 'light'
+              ? light
+              : mode === 'dark'
+                ? dark
+                : matchMedia('(prefers-color-scheme: dark)').matches
+                  ? dark
+                  : light;
+          document.documentElement.setAttribute('data-theme', id);
+          var chrome = getComputedStyle(document.documentElement)
+            .getPropertyValue('--paper')
+            .trim();
+          if (chrome) {
+            document
+              .querySelector('meta[name="theme-color"]')
+              .setAttribute('content', chrome);
+          }
+        } catch (e) {}
+      })();
+    </script>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

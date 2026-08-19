@@ -371,6 +371,10 @@ export function Landing({ onNavigate }: LandingProps) {
           aria-label="Open the problem input"
           data-active={!expanded}
         >
+          <span
+            className="scribe-art"
+            style={{ '--scribe': `url(${scribeSrc})` } as React.CSSProperties}
+          >
           <img
             src={scribeSrc}
             alt=""
@@ -389,6 +393,7 @@ export function Landing({ onNavigate }: LandingProps) {
               display: 'block',
             }}
           />
+          </span>
           <span className="scribe-hint">
             Type a problem →
           </span>

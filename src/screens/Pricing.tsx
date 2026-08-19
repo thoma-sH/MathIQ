@@ -557,7 +557,7 @@ function LatexShowcase() {
             fontFamily: T.mono,
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
-            boxShadow: '0 2px 8px rgba(26, 43, 26, 0.25)',
+            boxShadow: `0 2px 8px ${T.shadow}`,
             transition: 'transform 300ms ease',
             transform: flipped ? 'translateX(-2px)' : 'translateX(0)',
           }}

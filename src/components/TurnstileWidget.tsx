@@ -61,7 +61,7 @@ export function TurnstileWidget({ onSuccess, onError }: TurnstileWidgetProps) {
         callback: (token) => onSuccess(token),
         'error-callback': () => onError?.(),
         'expired-callback': () => onError?.(),
-        theme: 'light',
+        theme: 'auto',
         size: 'flexible',
       });
     };

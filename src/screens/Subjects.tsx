@@ -17,18 +17,23 @@ interface CourseCardProps {
 
 function ScribeMark({ src }: { src: string }) {
   return (
-    <img
-      src={src}
-      alt=""
-      aria-hidden
-      style={{
-        height: 'clamp(120px, 18vw, 180px)',
-        width: 'auto',
-        maxWidth: '100%',
-        display: 'block',
-        flexShrink: 0,
-      }}
-    />
+    <span
+      className="scribe-art"
+      style={{ '--scribe': `url(${src})`, flexShrink: 0 } as React.CSSProperties}
+    >
+      <img
+        src={src}
+        alt=""
+        aria-hidden
+        style={{
+          height: 'clamp(120px, 18vw, 180px)',
+          width: 'auto',
+          maxWidth: '100%',
+          display: 'block',
+          flexShrink: 0,
+        }}
+      />
+    </span>
   );
 }
 

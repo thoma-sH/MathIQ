@@ -112,7 +112,7 @@ export function InstallPrompt() {
         flexDirection: isIos ? 'column' : 'row',
         alignItems: isIos ? 'stretch' : 'center',
         gap: isIos ? 8 : 14,
-        boxShadow: '0 6px 20px rgba(26, 43, 26, 0.18)',
+        boxShadow: `0 6px 20px ${T.shadow}`,
       }}
     >
       {isIos ? (

@@ -20,6 +20,9 @@ import {
 // default so the migration is pixel-identical.
 const kicker = () => kickerStyle(10);
 import { usePromptFlow, type PromptFlow } from '../state/promptFlow';
+import { useTheme } from '../state/theme';
+import { ThemePicker } from '../components/ThemePicker';
+import { DARK_THEMES, LIGHT_THEMES, THEME_LABEL } from '../design/palettes';
 import {
   fetchSubscriptionState,
   openCustomerPortal,
@@ -84,6 +87,8 @@ export function Settings({ onNavigate }: SettingsProps) {
         <NavCard onNavigate={onNavigate} />
         <TopicsCard onNavigate={onNavigate} />
       </SignedIn>
+
+      <AppearanceCard />
 
       <PromptFlowCard />
 
@@ -335,6 +340,108 @@ function NavCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
         <span className="arrow-nudge" style={{ color: T.ink, fontSize: 18 }}>→</span>
       </button>
     </section>
+  );
+}
+
+function AppearanceCard() {
+  const { state, active, setMode, setPalette } = useTheme();
+  const following = state.mode === 'auto';
+  return (
+    <section
+      className="reveal reveal-4"
+      style={{
+        padding: '24px 22px',
+        border: `1px solid ${T.ink}`,
+        background: T.paper2,
+        marginTop: 14,
+      }}
+    >
+      <div style={kicker()}>APPEARANCE</div>
+
+      <button
+        type="button"
+        onClick={() => setMode(following ? (active === state.dark ? 'dark' : 'light') : 'auto')}
+        aria-pressed={following}
+        className="btn-press"
+        style={{
+          width: '100%',
+          minHeight: 44,
+          background: following ? T.paper : 'transparent',
+          border: `1px solid ${following ? T.ink : T.hair}`,
+          padding: '12px 14px',
+          textAlign: 'left',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          color: T.ink,
+          display: 'flex',
+          gap: 12,
+          alignItems: 'flex-start',
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            display: 'inline-block',
+            width: 16,
+            height: 16,
+            flexShrink: 0,
+            marginTop: 2,
+            border: `1px solid ${T.ink}`,
+            background: following ? T.ink : 'transparent',
+          }}
+        />
+        <span>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Follow my device</div>
+          <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
+            {following
+              ? `${THEME_LABEL[state.light]} by day, ${THEME_LABEL[state.dark]} at night.`
+              : `Pinned to ${THEME_LABEL[active]}.`}
+          </div>
+        </span>
+      </button>
+
+      <ThemeGroup
+        title="Light"
+        themes={LIGHT_THEMES}
+        value={state.light}
+        onChange={(id) => setPalette(id, 'light')}
+      />
+      <ThemeGroup
+        title="Dark"
+        themes={DARK_THEMES}
+        value={state.dark}
+        onChange={(id) => setPalette(id, 'dark')}
+      />
+    </section>
+  );
+}
+
+function ThemeGroup({
+  title,
+  themes,
+  value,
+  onChange,
+}: {
+  title: string;
+  themes: typeof LIGHT_THEMES;
+  value: (typeof LIGHT_THEMES)[number];
+  onChange: (id: (typeof LIGHT_THEMES)[number]) => void;
+}) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div
+        style={{
+          fontFamily: T.mono,
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: T.muted,
+        }}
+      >
+        {title}
+      </div>
+      <ThemePicker themes={themes} value={value} onChange={onChange} />
+    </div>
   );
 }
 

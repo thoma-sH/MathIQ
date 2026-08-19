@@ -327,7 +327,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
         inset: 0,
         zIndex: 9999,
         background: '#0a0f0a',
-        color: T.paper,
+        color: T.stageInk,
         display: 'flex',
         flexDirection: 'column',
         fontFamily: T.sans,
@@ -350,8 +350,8 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
           className="btn-press"
           style={{
             background: 'transparent',
-            border: `1px solid ${T.paper}`,
-            color: T.paper,
+            border: `1px solid ${T.stageInk}`,
+            color: T.stageInk,
             padding: '8px 14px',
             fontSize: 13,
             fontFamily: T.mono,
@@ -383,7 +383,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
             style={{
               background: T.accent,
               border: 'none',
-              color: T.paper,
+              color: T.stageInk,
               padding: '8px 16px',
               fontSize: 13,
               fontWeight: 600,
@@ -411,7 +411,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
         }}
       >
         {camera === 'pending' && (
-          <div style={{ textAlign: 'center', padding: 24, color: T.paper }}>
+          <div style={{ textAlign: 'center', padding: 24, color: T.stageInk }}>
             <div
               style={{
                 fontSize: 18,
@@ -455,7 +455,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
               style={{
                 background: T.accent,
                 border: 'none',
-                color: T.paper,
+                color: T.stageInk,
                 padding: '12px 22px',
                 fontSize: 15,
                 fontWeight: 600,
@@ -473,7 +473,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: T.paper,
+                  color: T.stageInk,
                   padding: '14px 8px 0',
                   fontSize: 12,
                   fontFamily: T.mono,
@@ -560,7 +560,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
                   width: 72,
                   height: 90,
                   objectFit: 'cover',
-                  border: `1px solid ${T.paper}`,
+                  border: `1px solid ${T.stageInk}`,
                 }}
               />
               <button
@@ -574,9 +574,9 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
                   width: 22,
                   height: 22,
                   borderRadius: '50%',
-                  border: `1px solid ${T.paper}`,
+                  border: `1px solid ${T.stageInk}`,
                   background: '#0a0f0a',
-                  color: T.paper,
+                  color: T.stageInk,
                   fontSize: 12,
                   lineHeight: '20px',
                   cursor: 'pointer',
@@ -604,10 +604,10 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
             style={{
               marginBottom: 12,
               padding: '8px 12px',
-              border: `1px solid ${T.paper}`,
+              border: `1px solid ${T.stageInk}`,
               fontSize: 13,
               fontFamily: T.mono,
-              color: T.paper,
+              color: T.stageInk,
               background: 'rgba(0,0,0,0.4)',
             }}
           >
@@ -623,8 +623,8 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
               className="btn-press chamfer"
               style={{
                 background: 'transparent',
-                border: `1px solid ${T.paper}`,
-                color: T.paper,
+                border: `1px solid ${T.stageInk}`,
+                color: T.stageInk,
                 padding: '12px 18px',
                 fontSize: 14,
                 fontWeight: 500,
@@ -643,7 +643,7 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
               style={{
                 background: T.accent,
                 border: 'none',
-                color: T.paper,
+                color: T.stageInk,
                 padding: '12px 18px',
                 fontSize: 14,
                 fontWeight: 600,
@@ -675,8 +675,8 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
               className="btn-press"
               style={{
                 background: 'transparent',
-                border: `1px solid ${T.paper}`,
-                color: T.paper,
+                border: `1px solid ${T.stageInk}`,
+                color: T.stageInk,
                 padding: '10px 14px',
                 fontSize: 12,
                 fontFamily: T.mono,
@@ -698,9 +698,9 @@ export function Scanner({ mode, output, filename, onComplete, onCancel }: Scanne
                 width: 72,
                 height: 72,
                 borderRadius: '50%',
-                background: T.paper,
+                background: T.stageInk,
                 border: `4px solid #0a0f0a`,
-                boxShadow: `0 0 0 3px ${T.paper}`,
+                boxShadow: `0 0 0 3px ${T.stageInk}`,
                 cursor: camera === 'live' && processing === null ? 'pointer' : 'not-allowed',
                 opacity: camera === 'live' && processing === null ? 1 : 0.5,
                 padding: 0,

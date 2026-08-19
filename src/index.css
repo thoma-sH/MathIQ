@@ -5,20 +5,28 @@
  * src/design/tokens.ts.
  */
 :root {
-  --ink: #1a2b1a;
+  /* Pistachio, the default theme. Every palette authors the same seven slots;
+     see the theme blocks below. Hairlines are a solid color rather than an
+     alpha of the ink because a 12%-alpha light-on-dark hairline reads far
+     weaker than the same alpha dark-on-light, which turns every card boundary
+     to mush on the dark palettes. */
   --paper: #d4e26a;
   --paper-2: #c8d65a;
+  --hair: #becc60;
+  --ink: #1a2b1a;
+  --muted: #4e5e30;
   --accent: #1a4d6e;
-  --accent-2: #2f7a9b;
   --accent-3: #3d6e5f;
-  --accent-tint: rgba(26, 77, 110, 0.18);
 
-  --hair: rgba(26, 43, 26, 0.12);
-  --hair-strong: rgba(26, 43, 26, 0.22);
-  /* 0.72 keeps ≥4.5:1 (WCAG AA) on both --paper and --paper-2; 0.6 sat at ~3.6:1. */
-  --muted: rgba(26, 43, 26, 0.72);
-  /* Plain white for rendered "document" surfaces (shared student work). */
+  color-scheme: light;
+
+  /* Always-light document surfaces (shared and printed student work). These
+     are the one pair no theme may touch — paper is paper. */
   --doc-paper: #ffffff;
+  --doc-ink: #111111;
+  /* The camera stage is its own always-dark room, so its foreground is a
+     fixed light rather than the theme's paper. */
+  --stage-ink: #e8ece0;
 
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-serif: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
@@ -30,6 +38,88 @@
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Derived from the seven authored slots, so a palette stays seven values.
+   The `[data-theme]` half matters: custom properties inherit their computed
+   value, so without it a themed swatch would inherit the root theme's
+   derivations instead of recomputing from its own. */
+:root,
+[data-theme] {
+  --hair-strong: color-mix(in srgb, var(--hair) 65%, var(--ink));
+  --accent-2: color-mix(in srgb, var(--accent) 70%, var(--paper));
+  /* Always darker than the base it covers, so it dims in both directions. */
+  --scrim: color-mix(in srgb, #000 62%, var(--paper));
+  /* Neutral, so it reads as depth on a cream body and doesn't try to be
+     separation on a dark one — the hairline carries that. */
+  --shadow: color-mix(in srgb, #000 30%, transparent);
+}
+
+/* ─── Themes ─────────────────────────────────────────────────────────────
+ * Deliberately unscoped selectors, NOT `:root[data-theme=…]`. Because they
+ * match any element, `<html data-theme>` themes the app and a swatch card
+ * `<div data-theme>` in Settings renders a live preview from the real tokens
+ * — no palette hex is duplicated into TypeScript.
+ */
+[data-theme='pistachio'] {
+  --paper: #d4e26a; --paper-2: #c8d65a; --hair: #becc60;
+  --ink: #1a2b1a; --muted: #4e5e30;
+  --accent: #1a4d6e; --accent-3: #3d6e5f;
+  color-scheme: light;
+}
+[data-theme='parchment'] {
+  --paper: #efe7d3; --paper-2: #e6dcc3; --hair: #d3c6a6;
+  --ink: #3a3222; --muted: #5f553f;
+  --accent: #7b5632; --accent-3: #e3d3b4;
+  color-scheme: light;
+}
+[data-theme='chalk'] {
+  --paper: #f5f6f4; --paper-2: #eaece8; --hair: #d2d6ce;
+  --ink: #16191a; --muted: #5c6360;
+  --accent: #1f5f8b; --accent-3: #dde6ed;
+  color-scheme: light;
+}
+[data-theme='clay'] {
+  --paper: #f2e4dc; --paper-2: #e9d6cb; --hair: #d6b9a9;
+  --ink: #3a2823; --muted: #7d6055;
+  --accent: #a4472f; --accent-3: #ebd0c2;
+  color-scheme: light;
+}
+[data-theme='warm-brown'] {
+  --paper: #1d2021; --paper-2: #282828; --hair: #3c3836;
+  --ink: #ebdbb2; --muted: #a89984;
+  --accent: #d5d639; --accent-3: #3e3d18;
+  color-scheme: dark;
+}
+[data-theme='soft-sage'] {
+  --paper: #272e33; --paper-2: #2e383c; --hair: #3d484d;
+  --ink: #d3c6aa; --muted: #9aa79d;
+  --accent: #c4d9a8; --accent-3: #3c4a34;
+  color-scheme: dark;
+}
+[data-theme='deep-swamp'] {
+  --paper: #10160f; --paper-2: #1a231a; --hair: #2a3529;
+  --ink: #dce3d3; --muted: #8a9683;
+  --accent: #9cb86a; --accent-3: #2c3d24;
+  color-scheme: dark;
+}
+[data-theme='khaki-field'] {
+  --paper: #1f2019; --paper-2: #2a2b22; --hair: #3a3b30;
+  --ink: #e0dfd0; --muted: #98977f;
+  --accent: #c2be7e; --accent-3: #3d3c26;
+  color-scheme: dark;
+}
+[data-theme='tightened-drab'] {
+  --paper: #1e2415; --paper-2: #2b3320; --hair: #3d4830;
+  --ink: #dfe6ce; --muted: #9aa681;
+  --accent: #bcd68a; --accent-3: #3a4a28;
+  color-scheme: dark;
+}
+[data-theme='moss-and-gold'] {
+  --paper: #191c13; --paper-2: #23271b; --hair: #34392a;
+  --ink: #e4e4d6; --muted: #93967f;
+  --accent: #ddbe6f; --accent-3: #453a1f;
+  color-scheme: dark;
 }
 
 [data-density='compact'] { --pad-screen: 16px; --gap-card: 8px; }
@@ -51,7 +141,10 @@ body {
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  transition: background-color 2s ease;
+  /* Was 2s, and on background-color alone. A theme swap flips `color`
+     instantly, so the new ink sat on the old paper for two full seconds.
+     Both properties, fast enough to read as immediate. */
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 button { font-family: inherit; }
@@ -373,7 +466,7 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 .upgrade-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(26, 43, 26, 0.62);
+  background: var(--scrim);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: flex;
@@ -389,7 +482,7 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   width: 100%;
   padding: 28px 26px 24px;
   animation: upgrade-rise 320ms var(--ease-out-expo) both;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 20px 60px var(--shadow);
   max-height: calc(100vh - 40px);
   overflow-y: auto;
 }
@@ -634,6 +727,24 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 }
 .markdown-body .katex-display { margin: 10px 0; overflow-x: auto; }
 
+/* ─── Scribe line art ────────────────────────────────────────────────────
+ * The scribe PNGs are flat dark-green line art on transparency, so on the
+ * dark palettes the landing hero simply disappears. Rather than ship ten
+ * recolored copies, the <img> is kept purely for its intrinsic size (the
+ * layout depends on the image sizing itself — see Landing.tsx) and hidden,
+ * while a masked overlay paints the same alpha in the live --ink.
+ */
+.scribe-art { position: relative; display: inline-block; }
+.scribe-art img { opacity: 0; }
+.scribe-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  -webkit-mask: var(--scribe) center / contain no-repeat;
+  mask: var(--scribe) center / contain no-repeat;
+}
+
 /* ─── Constraints / utilities ─────────────────────────────────────── */
 img, svg { max-width: 100%; }
 
@@ -662,6 +773,20 @@ img, svg { max-width: 100%; }
 }
 @media print {
   #root { display: none !important; }
+
+  /* Theme tokens must never reach paper. The .markdown-body rules paint code
+     in --paper-2 and rules in --ink; on a dark palette that prints near-black
+     on near-black and silently ruins a paid export. Every print host is a
+     .print-host, so neutralizing here covers print-doc, exam-doc and
+     homework-doc at once. */
+  html, body { background: #fff !important; }
+  .print-host code,
+  .print-host pre {
+    background: var(--doc-paper) !important;
+    border-color: #999 !important;
+    color: var(--doc-ink) !important;
+  }
+  .print-host blockquote { border-left-color: var(--doc-ink) !important; }
   .print-host {
     position: static !important;
     left: auto !important;

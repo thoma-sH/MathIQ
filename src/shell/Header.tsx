@@ -138,7 +138,7 @@ export function Header({ route, onNavigate }: HeaderProps) {
                   background: T.paper,
                   border: `1px solid ${T.ink}`,
                   borderRadius: 0,
-                  boxShadow: '0 4px 16px rgba(26, 43, 26, 0.12)',
+                  boxShadow: `0 4px 16px ${T.shadow}`,
                 },
                 userButtonPopoverActionButton: { color: T.ink },
                 userButtonPopoverActionButtonText: { color: T.ink },
