@@ -70,11 +70,17 @@ type StreamTarget =
 // body prose never splits the stream.
 const STEP_MARKER = /^\s*(?:\*\*\s*Step\s+\d+|#{1,6}\s+Step\s+\d+|Step\s+\d+\s*[:.])/gim;
 
-// Practice runs open their preamble with `*Practice problem.* <statement>`.
-// One definition, used both to recognise the statement and to strip the marker
-// off it — the card's own kicker already says what it is. Not global: only the
-// leading marker goes, the rest of a multi-line statement is left alone.
-const PRACTICE_MARKER = /^\*Practice problem\.?\*\s*/i;
+// Practice runs are asked to open with `*Practice problem.* <statement>`, but
+// the label drifts by model the same way step markers do:
+//   `*Practice problem.*`   `**Practice problem:**`   `### Practice problem`
+//   `Practice problem:`     — bare form
+// Used both to recognise the label and to strip it, since the card's own
+// kicker already says what it is. Not global: only the leading label goes.
+//
+// A miss here must never be load-bearing. Once the stream has moved past the
+// preamble, whatever is in it *is* the statement, matched label or not.
+const PRACTICE_MARKER =
+  /^\s*(?:\*{1,2}|#{1,6}\s+)?Practice problem\s*[.:]?\s*(?:\*{1,2})?\s*/i;
 
 /** Which problem the card under the strategic anchor is showing. `practice`
  *  carries null until the invented statement has finished arriving. */
@@ -226,10 +232,14 @@ export function TopicScreen({
       // it's final: a target that moves under the scramble only thrashes.
       const statementIn =
         parsed.complete.length > 0 || parsed.streamingTail !== null || streamDone;
-      const statement =
-        statementIn && parsed.preamble && PRACTICE_MARKER.test(parsed.preamble)
-          ? parsed.preamble.replace(PRACTICE_MARKER, '').trim()
-          : '';
+      if (!statementIn) return { kind: 'practice', text: null };
+      // Past that point the preamble is whatever the model wrote, so use it
+      // whether or not the label matched. Gating the card on the label would
+      // strand it on its placeholder for the rest of the session every time a
+      // model reworded one line.
+      const statement = parsed.preamble
+        ? parsed.preamble.replace(PRACTICE_MARKER, '').trim()
+        : '';
       return { kind: 'practice', text: statement || null };
     }
     const own = problemForSession?.trim();
