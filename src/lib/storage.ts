@@ -69,3 +69,5 @@ export const KEY_PROMPT_FLOW = 'promptFlow';
 export const KEY_WALKTHROUGH_SESSION = 'walkthroughSession';
 // Preferred difficulty for generated practice problems.
 export const KEY_PRACTICE_DIFFICULTY = 'practiceDifficulty';
+// Light / dark appearance: 'light' | 'dark', absent means follow the OS.
+export const KEY_THEME = 'theme';

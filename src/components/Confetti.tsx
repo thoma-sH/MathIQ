@@ -6,16 +6,20 @@
  * who've opted out of animations. No npm dep; ~50 lines.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { T } from '../design/tokens';
 
 const PIECE_COUNT = 32;
 const DURATION_MS = 1800;
 
+// Tokens rather than literals so the burst re-colors with the theme: the
+// light palette's deep teals are invisible against the dark body, and paper
+// never contrasts with the paper it lands on.
 const COLORS = [
-  '#d4e26a', // paper (pistachio)
-  '#1a4d6e', // accent (deep teal)
-  '#2f7a9b', // accent-2 (lighter teal)
-  '#3d6e5f', // accent-3 (sage)
-  '#f6d769', // sunlit yellow for variety
+  T.ink,
+  T.accent,
+  T.accent2,
+  T.accent3,
+  '#f6d769', // sunlit yellow — reads on both bodies, so it stays a literal
 ];
 
 interface Piece {

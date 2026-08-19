@@ -31,6 +31,27 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="MathIQ" />
 
+    <!-- Applies the stored theme before first paint. Deferring this to React
+         would flash the light pistachio body on every load in dark mode. Kept
+         deliberately tiny and dependency-free; src/state/theme.ts owns the
+         same logic for the running app. -->
+    <script>
+      try {
+        var t = localStorage.getItem('mathiq:theme');
+        if (t === 'dark' || t === 'light') {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+        var dark =
+          t === 'dark' ||
+          (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {
+          document
+            .querySelector('meta[name="theme-color"]')
+            .setAttribute('content', '#161f0e');
+        }
+      } catch (e) {}
+    </script>
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
