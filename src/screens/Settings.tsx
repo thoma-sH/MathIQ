@@ -20,7 +20,6 @@ import {
 // default so the migration is pixel-identical.
 const kicker = () => kickerStyle(10);
 import { usePromptFlow, type PromptFlow } from '../state/promptFlow';
-import { useTheme, type Theme } from '../state/theme';
 import {
   fetchSubscriptionState,
   openCustomerPortal,
@@ -85,8 +84,6 @@ export function Settings({ onNavigate }: SettingsProps) {
         <NavCard onNavigate={onNavigate} />
         <TopicsCard onNavigate={onNavigate} />
       </SignedIn>
-
-      <AppearanceCard />
 
       <PromptFlowCard />
 
@@ -338,107 +335,6 @@ function NavCard({ onNavigate }: { onNavigate: (route: Route) => void }) {
         <span className="arrow-nudge" style={{ color: T.ink, fontSize: 18 }}>→</span>
       </button>
     </section>
-  );
-}
-
-function AppearanceCard() {
-  const [theme, setTheme] = useTheme();
-  return (
-    <section
-      className="reveal reveal-4"
-      style={{
-        padding: '24px 22px',
-        border: `1px solid ${T.ink}`,
-        background: T.paper2,
-        marginTop: 14,
-      }}
-    >
-      <div style={kicker()}>APPEARANCE</div>
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          marginTop: 6,
-        }}
-      >
-        <ThemeOption
-          value="system"
-          label="Match my device"
-          description="Follows your system setting, switching with it."
-          current={theme}
-          onSelect={setTheme}
-        />
-        <ThemeOption
-          value="light"
-          label="Light"
-          description="The pistachio body, always."
-          current={theme}
-          onSelect={setTheme}
-        />
-        <ThemeOption
-          value="dark"
-          label="Dark"
-          description="Inverted: pistachio type on a deep green-black body."
-          current={theme}
-          onSelect={setTheme}
-        />
-      </div>
-    </section>
-  );
-}
-
-function ThemeOption({
-  value,
-  label,
-  description,
-  current,
-  onSelect,
-}: {
-  value: Theme;
-  label: string;
-  description: string;
-  current: Theme;
-  onSelect: (v: Theme) => void;
-}) {
-  const selected = current === value;
-  return (
-    <button
-      onClick={() => onSelect(value)}
-      aria-pressed={selected}
-      className="btn-press"
-      style={{
-        background: selected ? T.paper : 'transparent',
-        border: `1px solid ${selected ? T.ink : T.hair}`,
-        padding: '12px 14px',
-        textAlign: 'left',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-        color: T.ink,
-        display: 'flex',
-        gap: 12,
-        alignItems: 'flex-start',
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          display: 'inline-block',
-          width: 16,
-          height: 16,
-          flexShrink: 0,
-          marginTop: 2,
-          border: `1px solid ${T.ink}`,
-          borderRadius: '50%',
-          background: selected ? T.ink : 'transparent',
-          boxShadow: selected ? `inset 0 0 0 3px ${T.paper}` : 'none',
-        }}
-      />
-      <span>
-        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{label}</div>
-        <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>{description}</div>
-      </span>
-    </button>
   );
 }
 

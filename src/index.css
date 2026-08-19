@@ -19,9 +19,6 @@
   --muted: rgba(26, 43, 26, 0.72);
   /* Plain white for rendered "document" surfaces (shared student work). */
   --doc-paper: #ffffff;
-  /* Modal backdrop. Tied to the body color so it darkens with the theme
-     rather than inheriting --ink, which is pale pistachio on dark. */
-  --scrim: rgba(26, 43, 26, 0.62);
 
   --font-sans: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
   --font-serif: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
@@ -33,52 +30,6 @@
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-/* ─── Dark theme ────────────────────────────────────────────────────────
- * The pistachio identity inverted rather than replaced: ink and paper swap
- * roles, so the pistachio that was the body becomes the text and hairlines,
- * and every component that already draws ink-on-paper follows without
- * touching a single component file.
- *
- * Only the color tokens are redefined. Spacing, fonts and easing are
- * theme-independent, and --doc-paper deliberately stays white: shared and
- * printed student work is a document, not a screen.
- *
- * Defined once here, applied by two selectors below — an explicit
- * data-theme='dark' choice, and the OS preference when no choice is pinned.
- */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --ink: #d4e26a;
-    --paper: #161f0e;
-    --paper-2: #1f2b14;
-    --accent: #5fa8cc;
-    --accent-2: #7fc0dd;
-    --accent-3: #8fc4ae;
-    --accent-tint: rgba(95, 168, 204, 0.22);
-
-    --hair: rgba(212, 226, 106, 0.14);
-    --hair-strong: rgba(212, 226, 106, 0.26);
-    /* 0.70 holds ≥6:1 on both --paper and --paper-2. */
-    --muted: rgba(212, 226, 106, 0.70);
-    --scrim: rgba(6, 10, 3, 0.72);
-  }
-}
-
-:root[data-theme='dark'] {
-  --ink: #d4e26a;
-  --paper: #161f0e;
-  --paper-2: #1f2b14;
-  --accent: #5fa8cc;
-  --accent-2: #7fc0dd;
-  --accent-3: #8fc4ae;
-  --accent-tint: rgba(95, 168, 204, 0.22);
-
-  --hair: rgba(212, 226, 106, 0.14);
-  --hair-strong: rgba(212, 226, 106, 0.26);
-  --muted: rgba(212, 226, 106, 0.70);
-  --scrim: rgba(6, 10, 3, 0.72);
 }
 
 [data-density='compact'] { --pad-screen: 16px; --gap-card: 8px; }
@@ -422,7 +373,7 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 .upgrade-backdrop {
   position: fixed;
   inset: 0;
-  background: var(--scrim);
+  background: rgba(26, 43, 26, 0.62);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   display: flex;
