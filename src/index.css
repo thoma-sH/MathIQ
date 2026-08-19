@@ -419,6 +419,12 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
 }
+/* Hands the focused problem off from its scrambled plain-text phase to the
+   typeset render. Short on purpose — it's a settle, not an entrance. */
+@keyframes problem-settle {
+  from { opacity: 0; filter: blur(2px); }
+  to   { opacity: 1; filter: none; }
+}
 
 .reveal     { animation: reveal-up 700ms var(--ease-out-expo) both; }
 .reveal-1   { animation-delay: 60ms; }
@@ -428,6 +434,7 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 .reveal-5   { animation-delay: 380ms; }
 
 .page-enter { animation: page-enter 360ms var(--ease-out-expo) both; }
+.problem-settle { animation: problem-settle 180ms var(--ease-out-expo) both; }
 
 .stagger-children > * {
   animation: reveal-up 600ms var(--ease-out-expo) both;

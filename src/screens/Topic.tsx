@@ -26,6 +26,7 @@ import {
   type PracticeDifficulty,
 } from '../state/practiceDifficulty';
 import { DifficultyPicker } from '../components/DifficultyPicker';
+import { useScrambledString } from '../state/useScrambledString';
 import {
   clearSession,
   markSessionSaved,
@@ -68,6 +69,25 @@ type StreamTarget =
 // Anchored to start-of-line (multi-line flag) so a "Step 3" mentioned in
 // body prose never splits the stream.
 const STEP_MARKER = /^\s*(?:\*\*\s*Step\s+\d+|#{1,6}\s+Step\s+\d+|Step\s+\d+\s*[:.])/gim;
+
+// Practice runs open their preamble with `*Practice problem.* <statement>`.
+// One definition, used both to recognise the statement and to strip the marker
+// off it — the card's own kicker already says what it is. Not global: only the
+// leading marker goes, the rest of a multi-line statement is left alone.
+const PRACTICE_MARKER = /^\*Practice problem\.?\*\s*/i;
+
+/** Which problem the card under the strategic anchor is showing. `practice`
+ *  carries null until the invented statement has finished arriving. */
+type FocusProblem =
+  | { kind: 'example'; text: string }
+  | { kind: 'custom'; text: string }
+  | { kind: 'practice'; text: string | null };
+
+const FOCUS_KICKER: Record<FocusProblem['kind'], string> = {
+  example: 'EXAMPLE PROBLEM',
+  custom: 'YOUR PROBLEM',
+  practice: 'PRACTICE PROBLEM',
+};
 
 interface ParsedStream {
   /** Text before the first `**Step N**` marker. Practice mode opens with
@@ -193,6 +213,56 @@ export function TopicScreen({
   const [practiceDifficulty, setPracticeDifficulty] = usePracticeDifficulty();
 
   const parsed = useMemo(() => parseStream(buffer, streamDone), [buffer, streamDone]);
+
+  // ── The problem in focus ────────────────────────────────────────────────
+  // Exactly one problem occupies the card under the strategic anchor: the
+  // topic's canonical example until a run replaces it, then whatever is
+  // actually being walked through. Derived rather than stored, so a restored
+  // session reproduces the right card straight from the snapshot.
+  const focus = useMemo<FocusProblem>(() => {
+    if (sessionPractice) {
+      // Before the first step marker lands, `parseStream` hands back the whole
+      // buffer as preamble — the statement is still growing. Withhold it until
+      // it's final: a target that moves under the scramble only thrashes.
+      const statementIn =
+        parsed.complete.length > 0 || parsed.streamingTail !== null || streamDone;
+      const statement =
+        statementIn && parsed.preamble && PRACTICE_MARKER.test(parsed.preamble)
+          ? parsed.preamble.replace(PRACTICE_MARKER, '').trim()
+          : '';
+      return { kind: 'practice', text: statement || null };
+    }
+    const own = problemForSession?.trim();
+    if (own) return { kind: 'custom', text: own };
+    // Sending no problem is what makes the worker substitute its own copy of
+    // the canonical example, so on this path the example really is the problem
+    // being walked through.
+    return { kind: 'example', text: topic?.exampleProblem ?? '' };
+  }, [sessionPractice, parsed, streamDone, problemForSession, topic]);
+
+  // The decode animation fires only when the focused problem genuinely becomes
+  // a different one: never for the canonical example, never on the first
+  // render (which covers both a cold open and a resumed session), and never
+  // for a re-run of identical text — Redo on Max and Try again would otherwise
+  // scramble their way back to the problem already on screen.
+  const didMountRef = useRef(false);
+  const lastSettledRef = useRef<string | null>(null);
+  const scrambleTarget = focus.kind === 'example' ? null : focus.text;
+  const scrambled = useScrambledString(
+    scrambleTarget ?? '',
+    didMountRef.current &&
+      scrambleTarget !== null &&
+      scrambleTarget !== lastSettledRef.current,
+  );
+  useEffect(() => {
+    didMountRef.current = true;
+    if (scrambled.settled && scrambleTarget !== null) {
+      lastSettledRef.current = scrambleTarget;
+    }
+  });
+
+  // The card the page scrolls to when a run starts.
+  const focusRef = useRef<HTMLElement | null>(null);
 
   // Coalesce per-chunk setState into one commit per animation frame. setState
   // setters are stable across renders, so creating the batchers once is safe.
@@ -353,6 +423,17 @@ export function TopicScreen({
         onNavigate={onNavigate}
       />
     );
+  }
+
+  // The textarea that starts most runs sits at the bottom of the page while
+  // the walkthrough renders at the top, so without this a submit looks like it
+  // did nothing.
+  function scrollFocusIntoView() {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    focusRef.current?.scrollIntoView({
+      behavior: reduce ? 'auto' : 'smooth',
+      block: 'start',
+    });
   }
 
   function resetSession() {
@@ -667,6 +748,7 @@ export function TopicScreen({
     // No usable match (or matched this same topic).
     // If the input looks like a real problem and matched this topic, run it.
     if (isProblem && match) {
+      scrollFocusIntoView();
       void runWalkthrough(trimmed);
       return;
     }
@@ -684,6 +766,7 @@ export function TopicScreen({
     parsed.preamble !== null ||
     parsed.complete.length > 0 ||
     parsed.streamingTail !== null;
+  const showScramble = scrambleTarget !== null && !scrambled.settled;
   const isStreamingWalkthrough = streaming === 'walkthrough';
   const isStreamingAnything = streaming !== null;
 
@@ -779,10 +862,15 @@ export function TopicScreen({
         </MathMarkdown>
       </section>
 
-      <section className="reveal reveal-3" style={{ marginBottom: 20 }}>
-        <div style={kicker(8)}>EXAMPLE PROBLEM</div>
+      <section
+        ref={focusRef}
+        className="reveal reveal-3"
+        style={{ marginBottom: 20 }}
+      >
+        <div style={kicker(8)}>{FOCUS_KICKER[focus.kind]}</div>
         <div
           style={{
+            position: 'relative',
             border: `1px solid ${T.ink}`,
             background: T.paper,
             padding: '20px 22px',
@@ -790,9 +878,60 @@ export function TopicScreen({
             overflowX: 'auto',
           }}
         >
-          <MathMarkdown className="markdown-body">
-            {topic.exampleProblem}
-          </MathMarkdown>
+          {focus.text === null ? (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{ fontFamily: T.mono, fontSize: 14, color: T.muted }}
+            >
+              Writing a fresh problem…
+            </div>
+          ) : (
+            <>
+              {/* Mounted throughout, including while the decode plays over the
+                  top of it — hidden, but still occupying its full layout box.
+                  That box *is* the card's height for the whole animation, so
+                  the plain-text → typeset handoff cannot move anything. */}
+              <div
+                className={showScramble ? undefined : 'problem-settle'}
+                style={{ visibility: showScramble ? 'hidden' : 'visible' }}
+                role="status"
+                aria-live="polite"
+                aria-hidden={showScramble}
+              >
+                <MathMarkdown className="markdown-body">{focus.text}</MathMarkdown>
+              </div>
+              {showScramble && (
+                // Plain text on purpose. Scrambled LaTeX is invalid on all but
+                // the last frame, so routing the decode through MathMarkdown
+                // would strobe MarkdownBoundary's error fallback and re-parse
+                // the markdown AST every frame. The decode runs over the raw
+                // source and hands off to the typeset render once it settles.
+                //
+                // Absolutely positioned, inset by the card's own padding, so it
+                // contributes nothing to layout. A source longer than the
+                // typeset box clips rather than growing the card: a decorative
+                // 700ms animation is not worth a visible resize.
+                <pre
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    inset: '20px 22px',
+                    overflow: 'hidden',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    fontFamily: T.mono,
+                    fontSize: 13,
+                    lineHeight: 1.45,
+                    margin: 0,
+                    color: T.ink,
+                  }}
+                >
+                  {scrambled.text}
+                </pre>
+              )}
+            </>
+          )}
         </div>
       </section>
 
@@ -808,19 +947,23 @@ export function TopicScreen({
           />
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            onClick={() => runWalkthrough()}
+            onClick={() => {
+              scrollFocusIntoView();
+              void runWalkthrough();
+            }}
             className="btn-press chamfer"
             style={primaryCta()}
           >
             Walk me through it →
           </button>
           <button
-            onClick={() =>
-              runWalkthrough(undefined, {
+            onClick={() => {
+              scrollFocusIntoView();
+              void runWalkthrough(undefined, {
                 practice: true,
                 difficulty: practiceDifficulty,
-              })
-            }
+              });
+            }}
             className="btn-press chamfer"
             aria-label="Generate a fresh practice problem on this topic"
             style={{
@@ -999,22 +1142,6 @@ export function TopicScreen({
             Try again
           </button>
         </div>
-      )}
-
-      {parsed.preamble && /^\*Practice problem\.?\*/i.test(parsed.preamble) && (
-        <section
-          style={{
-            border: `1px solid ${T.ink}`,
-            background: T.paper,
-            padding: '18px 22px',
-            marginBottom: 16,
-            fontSize: 16,
-            lineHeight: 1.55,
-            overflowX: 'auto',
-          }}
-        >
-          <MathMarkdown className="markdown-body">{parsed.preamble}</MathMarkdown>
-        </section>
       )}
 
       {visibleSteps.map((stepText, i) => (
