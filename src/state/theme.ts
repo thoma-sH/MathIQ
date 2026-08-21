@@ -42,9 +42,11 @@ export interface ThemeState {
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
+// Unset defaults to 'light', not 'auto': a new student should land on
+// pistachio whatever their phone is set to, since pistachio is the identity.
 function readMode(): ThemeMode {
   const raw = readString(KEY_THEME_MODE);
-  return raw === 'light' || raw === 'dark' ? raw : 'auto';
+  return raw === 'auto' || raw === 'dark' ? raw : 'light';
 }
 
 function readSide(key: string, fallback: ThemeId): ThemeId {

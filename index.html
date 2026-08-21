@@ -39,7 +39,8 @@
       (function () {
         try {
           var ls = localStorage;
-          var mode = ls.getItem('mathiq:themeMode') || 'auto';
+          var mode = ls.getItem('mathiq:themeMode');
+          if (mode !== 'auto' && mode !== 'dark') mode = 'light';
           var light = ls.getItem('mathiq:themeLight') || 'pistachio';
           var dark = ls.getItem('mathiq:themeDark') || 'warm-brown';
           var known = ['pistachio','parchment','chalk','clay',
