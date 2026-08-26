@@ -2,14 +2,15 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
-import { applyTheme, resolveTheme } from './state/theme';
+import { startAutoThemeWatch } from './state/theme';
 import { T } from './design/tokens';
 import './index.css';
 
 // Not in the shell: App.tsx routes /pricing, /privacy, /terms, /daily and
 // /share/:id down a branch that never renders MathIQApp, so anything mounted
-// there would leave those pages unthemed.
-applyTheme(resolveTheme());
+// there would leave those pages unthemed. The watch applies the palette on
+// the way in, then keeps it current as the day turns.
+startAutoThemeWatch();
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!PUBLISHABLE_KEY) {

@@ -1,22 +1,23 @@
 /* ─── Design tokens ──────────────────────────────────────────────────────
- * Pistachio identity: a punchy yellow-green body, near-black ink, deep
- * teal as the contrast pop. Theme is set as data-* attributes on <html>
- * by TweaksContext; components reach colors via the T constants in
+ * Theme is set as a data-theme attribute on <html> by the pre-paint script
+ * in index.html; components reach colors via the T constants in
  * src/design/tokens.ts.
  */
 :root {
-  /* Pistachio, the default theme. Every palette authors the same seven slots;
-     see the theme blocks below. Hairlines are a solid color rather than an
-     alpha of the ink because a 12%-alpha light-on-dark hairline reads far
-     weaker than the same alpha dark-on-light, which turns every card boundary
-     to mush on the dark palettes. */
-  --paper: #d4e26a;
-  --paper-2: #c8d65a;
-  --hair: #becc60;
-  --ink: #1a2b1a;
-  --muted: #4e5e30;
-  --accent: #1a4d6e;
-  --accent-3: #3d6e5f;
+  /* Clay, the default light palette — kept in sync with its theme block below.
+     This copy is only ever seen if the pre-paint script fails to run, since it
+     otherwise always stamps a data-theme. Every palette authors the same seven
+     slots. Hairlines are a solid color rather than an alpha of the ink because
+     a 12%-alpha light-on-dark hairline reads far weaker than the same alpha
+     dark-on-light, which turns every card boundary to mush on the dark
+     palettes. */
+  --paper: #f2e4dc;
+  --paper-2: #e9d6cb;
+  --hair: #d6b9a9;
+  --ink: #3a2823;
+  --muted: #7d6055;
+  --accent: #a4472f;
+  --accent-3: #ebd0c2;
 
   color-scheme: light;
 

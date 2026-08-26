@@ -32,8 +32,9 @@ export const DARK_THEMES: ThemeId[] = [
 
 export const THEME_IDS: ThemeId[] = [...LIGHT_THEMES, ...DARK_THEMES];
 
-/** The pistachio is the identity, so it stays what a new student lands on. */
-export const DEFAULT_LIGHT: ThemeId = 'pistachio';
+/** The two sides "follow my device" switches between. Pistachio remains the
+ *  brand identity, but Clay is the palette a new student actually opens on. */
+export const DEFAULT_LIGHT: ThemeId = 'clay';
 export const DEFAULT_DARK: ThemeId = 'warm-brown';
 
 /** Title Case, with minor words left lowercase. */

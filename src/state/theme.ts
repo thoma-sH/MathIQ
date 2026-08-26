@@ -5,9 +5,13 @@
  * palettes on offer "follow my device" has to know *which* light and *which*
  * dark to switch between:
  *
- *   themeMode   'auto' | 'light' | 'dark'   — auto defers to the OS
+ *   themeMode   'auto' | 'light' | 'dark'   — auto reads the clock and the OS
  *   themeLight  the palette used in daylight
  *   themeDark   the palette used at night
+
+ * 'auto' goes dark when it is night *or* the OS is in dark mode, so a phone
+ * pinned to dark stays dark at noon while everyone else gets a palette that
+ * tracks their own day.
  *
  * Tapping a swatch sets that group's palette; if the mode is pinned it also
  * pins to that group, so a tap always visibly does something.
@@ -42,11 +46,11 @@ export interface ThemeState {
 
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 
-// Unset defaults to 'light', not 'auto': a new student should land on
-// pistachio whatever their phone is set to, since pistachio is the identity.
+// Unset defaults to 'auto': a new student's palette should follow their own
+// day without them having to find Settings first.
 function readMode(): ThemeMode {
   const raw = readString(KEY_THEME_MODE);
-  return raw === 'auto' || raw === 'dark' ? raw : 'light';
+  return raw === 'light' || raw === 'dark' ? raw : 'auto';
 }
 
 function readSide(key: string, fallback: ThemeId): ThemeId {
@@ -67,11 +71,21 @@ function prefersDark(): boolean {
   return window.matchMedia(DARK_QUERY).matches;
 }
 
+/** Daylight runs [DAY_START, DAY_END) on the student's own clock. `getHours()`
+ *  is local time, so this is their timezone with nothing to configure. */
+const DAY_START = 7;
+const DAY_END = 19;
+
+function isNight(d = new Date()): boolean {
+  const h = d.getHours();
+  return h < DAY_START || h >= DAY_END;
+}
+
 /** The palette actually in force right now. */
 export function resolveTheme(state: ThemeState = getThemeState()): ThemeId {
   if (state.mode === 'light') return state.light;
   if (state.mode === 'dark') return state.dark;
-  return prefersDark() ? state.dark : state.light;
+  return isNight() || prefersDark() ? state.dark : state.light;
 }
 
 /** Reflect a palette onto the document. Also called from the boot path. */
@@ -80,6 +94,51 @@ export function applyTheme(id: ThemeId): void {
   document
     .querySelector('meta[name="theme-color"]')
     ?.setAttribute('content', THEME_CHROME[id]);
+}
+
+/** Milliseconds until the next local 07:00 / 19:00, capped at an hour so a DST
+ *  jump or a corrected clock can never park the watcher for half a day. */
+function msUntilNextBoundary(now = new Date()): number {
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+  const h = now.getHours();
+  next.setHours(h < DAY_START ? DAY_START : h < DAY_END ? DAY_END : DAY_START);
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+  return Math.min(next.getTime() - now.getTime(), 60 * 60 * 1000);
+}
+
+/**
+ * Keeps an open page on the right palette as the day turns.
+ *
+ * `useTheme` mounts only inside Settings, so on its own nothing would notice
+ * 7pm arriving mid-walkthrough. This is module-level and React-free for the
+ * same reason main.tsx applies the theme there: the marketing routes never
+ * mount the app shell.
+ *
+ * A timer alone isn't enough — a backgrounded tab throttles it and a sleeping
+ * phone fires nothing at all — so every way back to the page re-resolves too.
+ * Rearming is unconditional: a pinned mode makes the re-apply a no-op, and
+ * stopping would leave nothing to restart the watch when 'auto' comes back.
+ */
+export function startAutoThemeWatch(): void {
+  if (typeof window === 'undefined') return;
+
+  let timer: number | undefined;
+
+  const tick = () => {
+    applyTheme(resolveTheme());
+    window.clearTimeout(timer);
+    timer = window.setTimeout(tick, msUntilNextBoundary());
+  };
+
+  document.addEventListener('visibilitychange', tick);
+  window.addEventListener('focus', tick);
+  window.addEventListener('pageshow', tick);
+  // The OS half of 'auto' — still live, still able to change the answer while
+  // the page sits open.
+  window.matchMedia?.(DARK_QUERY).addEventListener('change', tick);
+
+  tick();
 }
 
 export function useTheme() {

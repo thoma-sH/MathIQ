@@ -394,7 +394,7 @@ function AppearanceCard() {
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>Follow my device</div>
           <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
             {following
-              ? `${THEME_LABEL[state.light]} by day, ${THEME_LABEL[state.dark]} at night.`
+              ? `${THEME_LABEL[state.light]} by day, ${THEME_LABEL[state.dark]} after 7pm — and whenever your device is dark.`
               : `Pinned to ${THEME_LABEL[active]}.`}
           </div>
         </span>

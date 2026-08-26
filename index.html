@@ -24,7 +24,7 @@
 
     <!-- PWA -->
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#d4e26a" />
+    <meta name="theme-color" content="#f2e4dc" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -32,27 +32,31 @@
     <meta name="apple-mobile-web-app-title" content="MathIQ" />
 
     <!-- Resolves the stored palette before first paint. Deferring this to
-         React flashes the default pistachio on every load, which is worst on
+         React flashes the default palette on every load, which is worst on
          exactly the dark themes someone picked to avoid glare. Mirrors
-         resolveTheme() in src/state/theme.ts; kept dependency-free. -->
+         resolveTheme() in src/state/theme.ts — including the 7am-7pm daylight
+         window — and must keep mirroring it. Kept dependency-free. -->
     <script>
       (function () {
         try {
           var ls = localStorage;
           var mode = ls.getItem('mathiq:themeMode');
-          if (mode !== 'auto' && mode !== 'dark') mode = 'light';
-          var light = ls.getItem('mathiq:themeLight') || 'pistachio';
+          if (mode !== 'light' && mode !== 'dark') mode = 'auto';
+          var light = ls.getItem('mathiq:themeLight') || 'clay';
           var dark = ls.getItem('mathiq:themeDark') || 'warm-brown';
           var known = ['pistachio','parchment','chalk','clay',
                        'warm-brown','soft-sage','deep-swamp','moss-and-gold'];
-          if (known.indexOf(light) < 0) light = 'pistachio';
+          if (known.indexOf(light) < 0) light = 'clay';
           if (known.indexOf(dark) < 0) dark = 'warm-brown';
+          var h = new Date().getHours();
+          var night =
+            h < 7 || h >= 19 || matchMedia('(prefers-color-scheme: dark)').matches;
           var id =
             mode === 'light'
               ? light
               : mode === 'dark'
                 ? dark
-                : matchMedia('(prefers-color-scheme: dark)').matches
+                : night
                   ? dark
                   : light;
           document.documentElement.setAttribute('data-theme', id);
