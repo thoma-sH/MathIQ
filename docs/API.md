@@ -229,8 +229,9 @@ The core endpoint. Streams a step-by-step solution as plain text.
 | `courseId` | string | Required. Must exist in the catalog. |
 | `topicId` | string | Required. Must exist within the course. |
 | `problem` | string | Optional — omitted, the topic's canonical example is used. ≤ 8 000 chars. |
-| `action` | `"walkthrough"` \| `"why-how"` \| `"practice"` | Defaults to `"walkthrough"`. Anything unrecognized falls back to `"walkthrough"`. |
+| `action` | `"walkthrough"` \| `"why-how"` \| `"practice"` \| `"invent"` | Defaults to `"walkthrough"`. Anything unrecognized falls back to `"walkthrough"`. `"invent"` takes a different path entirely — see below. |
 | `walkthroughSoFar` | string | Context for `why-how`. ≤ 60 000 chars. |
+| `difficulty` | `"standard"` \| `"hard"` \| `"creative"` | For `practice` and `invent`. Anything unrecognized degrades to `"standard"`. |
 
 **Response** `200 text/plain; charset=utf-8`
 
@@ -263,6 +264,43 @@ a stream nobody is reading.
 served. If the monthly Opus ceiling is already full, that claim is refunded
 and the request is silently downgraded to Sonnet with `X-Degraded: true` — the
 user still gets their walkthrough. All claims are refunded on `502`.
+
+---
+
+### `POST /api/walkthrough` with `action: "invent"`
+
+The same URL, but nothing else is shared: `handleInvent` branches out before
+the walkthrough quota is even read. This is what "Try one like this" calls.
+
+Streams **a problem statement and nothing else** — no steps, no `**Answer:**`.
+The student decides afterwards whether to spend a walkthrough on it.
+
+**Auth** optional. **Tier** all.
+
+**Model** pinned to Haiku 4.5 at every tier, ignoring the request's `model`
+field. A statement is a few hundred output tokens against a system prefix that
+is already cached, which is the entire reason this is free — a paid user must
+not be able to spend an Opus slot on a problem they haven't chosen to solve.
+The `FORMAT_REINFORCEMENT` system block is omitted here, because it mandates a
+closing `**Answer:**` line.
+
+**Request** `courseId`, `topicId`, and optional `difficulty`. `problem`,
+`walkthroughSoFar`, and `model` are ignored.
+
+**Response** `200 text/plain; charset=utf-8`, same streaming and
+`normalizeLatexDelimiters` treatment as above, with `X-Model-Used`.
+
+**No `X-RateLimit-*` headers.** Deliberate: the client reads those into its
+"N of M today" pill, and an invent spends nothing, so there is nothing to
+report. Clients bail out of rate-limit parsing when the headers are absent.
+
+**Errors** `400 courseId and topicId required` · `401 invalid_token` ·
+`404 unknown course or topic` · `429 rate_limit` · `502 upstream_error`
+
+**Counters** claims nothing on the walkthrough or Opus counters. Its own daily
+counter (`user:<id>:invent:<date>` / `anon:<ip>:invent:<date>`) is an abuse
+guard only — 5/day anonymous, 25/day free, 100/day paid, from
+`inventDailyLimit` in `worker/src/tier.ts`. Refunded on `429` race and `502`.
 
 ---
 

@@ -29,16 +29,23 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const MAX_BUFFER_CHARS = 200_000;
 
 /** Bump when the shape changes — older snapshots are then simply discarded
- *  rather than half-restored into a component that no longer matches. */
-const VERSION = 1;
+ *  rather than half-restored into a component that no longer matches.
+ *
+ *  2: practice runs now carry their invented statement in `problem` like any
+ *  other. A v1 snapshot has `problem: null` with the statement buried in the
+ *  buffer preamble, which the current screen has no way to read back. */
+const VERSION = 2;
 
 export interface WalkthroughSession {
   v: typeof VERSION;
   courseId: string;
   topicId: string;
-  /** The problem being walked through. Null for practice runs, which invent
-   *  their own and carry it in `buffer`'s preamble instead. */
+  /** The problem being walked through — including one Iris invented, which is
+   *  settled before the walkthrough starts. Null only when the run is against
+   *  the topic's canonical example. */
   problem: string | null;
+  /** True when `problem` was invented by "Try one like this" rather than typed
+   *  or taken from the topic. Drives the PRACTICE PROBLEM kicker. */
   practice: boolean;
   mode: PromptFlow;
   buffer: string;

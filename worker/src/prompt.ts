@@ -21,6 +21,7 @@
  *   wrangler secret put IRIS_FOUNDATION_PROMPT_4
  *   wrangler secret put IRIS_WHY_HOW_PROMPT
  *   wrangler secret put IRIS_PRACTICE_PROMPT
+ *   wrangler secret put IRIS_INVENT_PROMPT
  *   wrangler secret put IRIS_GRADE_PROMPT
  *   wrangler secret put IRIS_GRADE_PROMPT_2
  *
@@ -49,6 +50,15 @@ const PRACTICE_FALLBACK = `Generate ONE new practice problem similar in shape an
 
 Then immediately begin \`**Step 1.**\` and walk through it following the foundation rules. End with \`**Answer:**\` and the trigger-to-remember retrospective.`;
 
+// The same invention, minus the solution. The student is being handed a problem
+// to look at, not an answer to read, so everything the foundation prompt would
+// normally append is explicitly forbidden here.
+const INVENT_FALLBACK = `Invent ONE new problem similar in shape and difficulty to the topic's canonical example, but with different numbers, setup, or framing.
+
+Output the problem STATEMENT ONLY — one or two lines, LaTeX with \`$...$\` inline and \`$$...$$\` display delimiters only.
+
+Do NOT solve it. Do NOT write \`**Step 1.**\` or any other step. Do NOT write \`**Answer:**\`. Do NOT add a label, heading, preamble, hint, or any commentary before or after the statement. The entire response is the problem itself.`;
+
 const GRADE_FALLBACK = `You are a math exam grader. The user will give you the original problems plus a photo of the student's attempt.
 
 Grade each problem 0-10. Use partial credit for correct technique with arithmetic errors. Read what the student actually wrote; never invent grades.
@@ -75,6 +85,7 @@ export interface PromptEnv {
   IRIS_FOUNDATION_PROMPT_4?: string;
   IRIS_WHY_HOW_PROMPT?: string;
   IRIS_PRACTICE_PROMPT?: string;
+  IRIS_INVENT_PROMPT?: string;
   IRIS_GRADE_PROMPT?: string;
   IRIS_GRADE_PROMPT_2?: string;
 }
@@ -83,6 +94,7 @@ export interface IrisPrompts {
   foundation: string;
   whyHow: string;
   practice: string;
+  invent: string;
   grade: string;
 }
 
@@ -115,6 +127,7 @@ export function getIrisPrompts(env: PromptEnv): IrisPrompts {
     foundation: parts.length > 0 ? parts.join('\n\n') : FOUNDATION_FALLBACK,
     whyHow: env.IRIS_WHY_HOW_PROMPT ? unescapeDevVars(env.IRIS_WHY_HOW_PROMPT).trim() : WHY_HOW_FALLBACK,
     practice: env.IRIS_PRACTICE_PROMPT ? unescapeDevVars(env.IRIS_PRACTICE_PROMPT).trim() : PRACTICE_FALLBACK,
+    invent: env.IRIS_INVENT_PROMPT ? unescapeDevVars(env.IRIS_INVENT_PROMPT).trim() : INVENT_FALLBACK,
     grade,
   };
 }
@@ -155,6 +168,17 @@ export function practicePrompt(
   const directive = PRACTICE_DIFFICULTY_DIRECTIVE[difficulty];
   if (!directive) return prompts.practice;
   return [prompts.practice, directive].join('\n\n');
+}
+
+/** The statement-only twin of practicePrompt. Shares the difficulty directives
+ *  so Hard and Creative mean the same thing on both paths. */
+export function inventPrompt(
+  prompts: IrisPrompts,
+  difficulty: PracticeDifficulty,
+): string {
+  const directive = PRACTICE_DIFFICULTY_DIRECTIVE[difficulty];
+  if (!directive) return prompts.invent;
+  return [prompts.invent, directive].join('\n\n');
 }
 
 /** Never throws. An absent, unknown, or garbage value resolves to 'standard'

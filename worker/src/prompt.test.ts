@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { parsePracticeDifficulty, practicePrompt, type IrisPrompts } from './prompt';
+import {
+  inventPrompt,
+  parsePracticeDifficulty,
+  practicePrompt,
+  type IrisPrompts,
+} from './prompt';
 
 const PROMPTS: IrisPrompts = {
   foundation: 'FOUNDATION',
   whyHow: 'WHYHOW',
   practice: 'PRACTICE',
+  invent: 'INVENT',
   grade: 'GRADE',
 };
 
@@ -71,5 +77,20 @@ describe('practicePrompt', () => {
     expect(creative).toContain('DISCOVERABLE');
     expect(creative).toContain("this topic's tools");
     expect(creative).toContain('memorised competition trick');
+  });
+});
+
+describe('inventPrompt', () => {
+  it('leaves the prompt byte-identical at standard', () => {
+    expect(inventPrompt(PROMPTS, 'standard')).toBe(PROMPTS.invent);
+  });
+
+  it('shares the difficulty directives with practicePrompt', () => {
+    // Hard and Creative have to mean the same thing whether the student is
+    // being handed a problem or a full walkthrough of one.
+    for (const level of ['hard', 'creative'] as const) {
+      const suffix = practicePrompt(PROMPTS, level).slice('PRACTICE'.length);
+      expect(inventPrompt(PROMPTS, level)).toBe('INVENT' + suffix);
+    }
   });
 });

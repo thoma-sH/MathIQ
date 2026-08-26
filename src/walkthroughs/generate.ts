@@ -52,7 +52,11 @@ export interface RateLimitInfo {
   opusMonthlyRemaining?: number;
 }
 
-export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
+export type WalkthroughAction =
+  | 'walkthrough'
+  | 'why-how'
+  | 'practice'
+  | 'invent';
 
 export interface GenerateRequest {
   course: Course;
@@ -64,7 +68,9 @@ export interface GenerateRequest {
   getToken?: () => Promise<string | null>;
   /** Called once when the worker responds, with current usage info. */
   onRateLimitInfo?: (info: RateLimitInfo) => void;
-  /** 'walkthrough' = full one-shot walkthrough; 'why-how' = explain a specific step from the prior walkthrough. */
+  /** 'walkthrough' = full one-shot walkthrough; 'why-how' = explain a specific
+   *  step from the prior walkthrough; 'invent' = a fresh problem statement and
+   *  nothing else, which costs no walkthrough slot. */
   action?: WalkthroughAction;
   /** For action='why-how': the walkthrough text up to and including the step being explained. */
   walkthroughSoFar?: string;
@@ -72,7 +78,7 @@ export interface GenerateRequest {
    *  has. Free/anonymous callers are ignored server-side. */
   model?: ModelChoice;
   /** How hard the invented problem should be. Only meaningful for
-   *  action='practice'; ignored server-side for every other action. */
+   *  action='practice' and action='invent'; ignored server-side otherwise. */
   difficulty?: PracticeDifficulty;
 }
 

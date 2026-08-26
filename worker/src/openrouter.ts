@@ -5,6 +5,7 @@
 import type { Course, Topic } from './courses';
 import {
   buildSystemPromptFlat,
+  inventPrompt,
   practicePrompt,
   type IrisPrompts,
   type PracticeDifficulty,
@@ -12,7 +13,11 @@ import {
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
-export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
+export type WalkthroughAction =
+  | 'walkthrough'
+  | 'why-how'
+  | 'practice'
+  | 'invent';
 
 export interface OpenRouterCallParams {
   apiKey: string;
@@ -28,8 +33,8 @@ export interface OpenRouterCallParams {
   appName?: string;
   action?: WalkthroughAction;
   walkthroughSoFar?: string;
-  /** For action='practice': how hard the invented problem should be.
-   *  Ignored for every other action. */
+  /** For action='practice' and action='invent': how hard the invented problem
+   *  should be. Ignored for every other action. */
   difficulty?: PracticeDifficulty;
   /** When the client disconnects mid-stream, this signal aborts both the
    *  initial POST and the in-flight body read so the upstream stops
@@ -65,7 +70,8 @@ export async function callOpenRouterStream(
   // tokens). Capping at 2048 leaves headroom without paying for 8K of slack
   // the model can't fill anyway.
   const maxTokens =
-    params.maxTokens ?? (action === 'why-how' ? 2048 : 8192);
+    params.maxTokens ??
+    (action === 'invent' ? 512 : action === 'why-how' ? 2048 : 8192);
 
   const systemPrompt = buildSystemPromptFlat(prompts, course, topic);
 
@@ -137,6 +143,9 @@ function buildConversation(
   }
   if (action === 'practice') {
     return [{ role: 'user', content: practicePrompt(prompts, difficulty) }];
+  }
+  if (action === 'invent') {
+    return [{ role: 'user', content: inventPrompt(prompts, difficulty) }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

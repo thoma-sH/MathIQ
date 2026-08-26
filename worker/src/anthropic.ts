@@ -5,6 +5,7 @@
 import type { Course, Topic } from './courses';
 import {
   buildSystemPrompt,
+  inventPrompt,
   practicePrompt,
   type IrisPrompts,
   type PracticeDifficulty,
@@ -36,7 +37,11 @@ const FORMAT_REINFORCEMENT = `Format reinforcement (priority — these override 
      \`- Region 1: $[0,1] \\times [0,1]$\`
      \`- Region 2: $[0,1] \\times [1,2]$\``;
 
-export type WalkthroughAction = 'walkthrough' | 'why-how' | 'practice';
+export type WalkthroughAction =
+  | 'walkthrough'
+  | 'why-how'
+  | 'practice'
+  | 'invent';
 
 /** Token accounting from a single Anthropic call. Cache fields are 0 when
  *  the call didn't touch the ephemeral cache. */
@@ -59,8 +64,8 @@ export interface AnthropicCallParams {
   /** For action='why-how': the walkthrough text shown to the student so far,
    *  ending with the step we want explained. */
   walkthroughSoFar?: string;
-  /** For action='practice': how hard the invented problem should be.
-   *  Ignored for every other action. */
+  /** For action='practice' and action='invent': how hard the invented problem
+   *  should be. Ignored for every other action. */
   difficulty?: PracticeDifficulty;
   /** When the client disconnects mid-stream, this signal aborts both the
    *  initial POST and the in-flight body read so Anthropic stops generating
@@ -104,11 +109,13 @@ export async function callAnthropicStream(
   // Sonnet (paid) keep the full 8192 budget for dense walkthroughs.
   const maxTokens =
     params.maxTokens ??
-    (action === 'why-how'
-      ? 2048
-      : model === 'claude-haiku-4-5'
-        ? 4096
-        : 8192);
+    (action === 'invent'
+      ? 512
+      : action === 'why-how'
+        ? 2048
+        : model === 'claude-haiku-4-5'
+          ? 4096
+          : 8192);
 
   const problemText = problem?.trim() || topic.exampleProblem;
   const initialUserText = problem
@@ -133,14 +140,22 @@ export async function callAnthropicStream(
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      system: [
-        ...buildSystemPrompt(prompts, course, topic),
-        {
-          type: 'text' as const,
-          text: FORMAT_REINFORCEMENT,
-          cache_control: { type: 'ephemeral' as const },
-        },
-      ],
+      // 'invent' skips the reinforcement on purpose: it mandates a closing
+      // `**Answer:**` line and declares itself priority-overriding, which is
+      // exactly the drift we don't want when the whole response is supposed to
+      // be an unsolved problem statement. The foundation block keeps its own
+      // cache_control either way, so the expensive prefix still hits.
+      system:
+        action === 'invent'
+          ? buildSystemPrompt(prompts, course, topic)
+          : [
+              ...buildSystemPrompt(prompts, course, topic),
+              {
+                type: 'text' as const,
+                text: FORMAT_REINFORCEMENT,
+                cache_control: { type: 'ephemeral' as const },
+              },
+            ],
       messages,
       stream: true,
     }),
@@ -180,6 +195,9 @@ function buildConversation(
   }
   if (action === 'practice') {
     return [{ role: 'user', content: practicePrompt(prompts, difficulty) }];
+  }
+  if (action === 'invent') {
+    return [{ role: 'user', content: inventPrompt(prompts, difficulty) }];
   }
   return [{ role: 'user', content: initialUserText }];
 }

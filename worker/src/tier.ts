@@ -116,9 +116,34 @@ export const PRO_OPUS_DAILY = 8;
 export const PRO_TOTAL_DAILY = 38;
 export const PRO_OPUS_MONTHLY = 150;
 
-export const HAIKU: ModelKey = { provider: 'anthropic', id: 'claude-haiku-4-5' };
+/**
+ * Practice-problem invention ceilings. Not a product limit — a statement is a
+ * few hundred Haiku tokens on top of a cached prefix, so "Try one like this"
+ * is free at every tier and never touches the walkthrough quota. These numbers
+ * only exist so nobody can sit on the button.
+ */
+export const INVENT_DAILY_ANON = 5;
+export const INVENT_DAILY_FREE = 25;
+export const INVENT_DAILY_PAID = 100;
+
+export function inventDailyLimit(tier: Tier): number {
+  if (tier === 'plus' || tier === 'pro') return INVENT_DAILY_PAID;
+  if (tier === 'free') return INVENT_DAILY_FREE;
+  return INVENT_DAILY_ANON;
+}
+
+// `satisfies` rather than a `: ModelKey` annotation so `HAIKU.id` stays the
+// single Haiku literal. Callers that pin the model (see handleInvent) need the
+// narrow type; widening it to the whole union would make them reach for a cast.
+export const HAIKU = {
+  provider: 'anthropic',
+  id: 'claude-haiku-4-5',
+} as const satisfies ModelKey;
 export const OPUS: ModelKey = { provider: 'anthropic', id: 'claude-opus-4-6' };
-export const SONNET: ModelKey = { provider: 'anthropic', id: 'claude-sonnet-4-6' };
+export const SONNET = {
+  provider: 'anthropic',
+  id: 'claude-sonnet-4-6',
+} as const satisfies ModelKey;
 
 /** Monthly Opus ceiling for a given tier. Free/anonymous don't get Opus at all. */
 export function monthlyOpusLimit(tier: Tier): number {

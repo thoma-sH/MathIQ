@@ -21,10 +21,7 @@ import { saveHistoryRecord } from '../walkthroughs/history';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { verifyWalkthrough, type Verdict } from '../walkthroughs/verify';
 import { getPromptFlow, type PromptFlow } from '../state/promptFlow';
-import {
-  usePracticeDifficulty,
-  type PracticeDifficulty,
-} from '../state/practiceDifficulty';
+import { usePracticeDifficulty } from '../state/practiceDifficulty';
 import { DifficultyPicker } from '../components/DifficultyPicker';
 import { useScrambledElement } from '../state/useScrambledElement';
 import {
@@ -70,16 +67,11 @@ type StreamTarget =
 // body prose never splits the stream.
 const STEP_MARKER = /^\s*(?:\*\*\s*Step\s+\d+|#{1,6}\s+Step\s+\d+|Step\s+\d+\s*[:.])/gim;
 
-// Practice runs are asked to open with `*Practice problem.* <statement>`, but
-// the label drifts by model the same way step markers do:
-//   `*Practice problem.*`   `**Practice problem:**`   `### Practice problem`
-//   `Practice problem:`     — bare form
-// Used both to recognise the label and to strip it, since the card's own
-// kicker already says what it is. Not global: only the leading label goes.
-//
-// A miss here must never be load-bearing. Once the stream has moved past the
-// preamble, whatever is in it *is* the statement, matched label or not.
-const PRACTICE_MARKER =
+// Iris is told to write a statement and stop. These catch it when it doesn't:
+// a leading `*Practice problem.*` label, or a solution it started anyway.
+const SOLUTION_MARKER =
+  /^\s*(?:\*{1,2}\s*|#{1,6}\s+)?(?:Step\s+\d+|Answer\s*[:.])/im;
+const LABEL_MARKER =
   /^\s*(?:\*{1,2}|#{1,6}\s+)?Practice problem\s*[.:]?\s*(?:\*{1,2})?\s*/i;
 
 /** Which problem the card under the strategic anchor is showing. `practice`
@@ -96,8 +88,7 @@ const FOCUS_KICKER: Record<FocusProblem['kind'], string> = {
 };
 
 interface ParsedStream {
-  /** Text before the first `**Step N**` marker. Practice mode opens with
-   *  `*Practice problem.* <statement>` here. Null if empty. */
+  /** Text before the first `**Step N**` marker. Null if empty. */
   preamble: string | null;
   /** Segments where the *next* marker has arrived, or stream is done. */
   complete: string[];
@@ -114,9 +105,9 @@ function parseStream(buffer: string, done: boolean): ParsedStream {
   let m: RegExpExecArray | null;
   while ((m = STEP_MARKER.exec(buffer)) !== null) positions.push(m.index);
   if (positions.length === 0) {
-    // No step markers yet. While streaming, show buffer as preamble so the
-    // practice problem statement renders as it arrives; on done with no
-    // markers at all, treat the whole thing as a single complete segment.
+    // No step markers yet. While streaming, show buffer as preamble so an
+    // opening line renders as it arrives; on done with no markers at all,
+    // treat the whole thing as a single complete segment.
     return done
       ? { preamble: null, complete: [buffer.trim()], streamingTail: null }
       : { preamble: buffer.trim() || null, complete: [], streamingTail: null };
@@ -132,6 +123,23 @@ function parseStream(buffer: string, done: boolean): ParsedStream {
     return { preamble, complete, streamingTail: null };
   }
   return { preamble, complete, streamingTail: tail };
+}
+
+/**
+ * Trims an invented problem back to the statement.
+ *
+ * The invent prompt asks for the statement alone, but this runs on Haiku at
+ * every tier and Haiku is the model this codebase already documents as
+ * drifting from format instructions (see FORMAT_REINFORCEMENT in
+ * worker/src/anthropic.ts). The two drifts that would actually break the card
+ * are a restated label, which duplicates the kicker above it, and a solution,
+ * which hands the student the answer to a problem they were asked to try. So
+ * cut at the first step or answer marker and drop a leading label.
+ */
+function cleanInventedProblem(raw: string): string {
+  const cut = raw.search(SOLUTION_MARKER);
+  const statement = cut === -1 ? raw : raw.slice(0, cut);
+  return statement.replace(LABEL_MARKER, '').trim();
 }
 
 export function TopicScreen({
@@ -171,9 +179,18 @@ export function TopicScreen({
   // to 'standard' so the budget can only ever be spent deliberately.
   const [modelChoice, setModelChoice] = useState<ModelChoice>('standard');
   const [sessionModel, setSessionModel] = useState<ModelChoice>('standard');
-  // Practice runs invent a fresh problem each time, so they can't be re-run
-  // on Max — it wouldn't be the same problem.
+  // True when the problem in focus was invented by "Try one like this" rather
+  // than typed or taken from the topic. Only decides the kicker now: the
+  // statement itself is settled before any walkthrough runs, so a practice
+  // problem re-runs on Max like any other.
   const [sessionPractice, setSessionPractice] = useState(() => restored?.practice ?? false);
+  // The invented statement. Held apart from `problemForSession` because it
+  // exists on its own for as long as the student is just looking at it.
+  const [practiceProblem, setPracticeProblem] = useState<string | null>(
+    () => (restored?.practice ? restored.problem : null) ?? null,
+  );
+  const [inventing, setInventing] = useState(false);
+  const inventAbortRef = useRef<AbortController | null>(null);
   const [maxRemaining, setMaxRemaining] = useState<number | undefined>();
   const [canChooseModel, setCanChooseModel] = useState(false);
   const [usageResolved, setUsageResolved] = useState(false);
@@ -226,29 +243,17 @@ export function TopicScreen({
   // actually being walked through. Derived rather than stored, so a restored
   // session reproduces the right card straight from the snapshot.
   const focus = useMemo<FocusProblem>(() => {
-    if (sessionPractice) {
-      // Before the first step marker lands, `parseStream` hands back the whole
-      // buffer as preamble — the statement is still growing. Withhold it until
-      // it's final: a target that moves under the scramble only thrashes.
-      const statementIn =
-        parsed.complete.length > 0 || parsed.streamingTail !== null || streamDone;
-      if (!statementIn) return { kind: 'practice', text: null };
-      // Past that point the preamble is whatever the model wrote, so use it
-      // whether or not the label matched. Gating the card on the label would
-      // strand it on its placeholder for the rest of the session every time a
-      // model reworded one line.
-      const statement = parsed.preamble
-        ? parsed.preamble.replace(PRACTICE_MARKER, '').trim()
-        : '';
-      return { kind: 'practice', text: statement || null };
-    }
+    // `practiceProblem` is only ever set once the invent stream has finished —
+    // a target that moves under the scramble just thrashes — so until then
+    // this carries null and the card shows why.
+    if (sessionPractice) return { kind: 'practice', text: practiceProblem };
     const own = problemForSession?.trim();
     if (own) return { kind: 'custom', text: own };
     // Sending no problem is what makes the worker substitute its own copy of
     // the canonical example, so on this path the example really is the problem
     // being walked through.
     return { kind: 'example', text: topic?.exampleProblem ?? '' };
-  }, [sessionPractice, parsed, streamDone, problemForSession, topic]);
+  }, [sessionPractice, practiceProblem, problemForSession, topic]);
 
   // The decode fires only when the focused problem genuinely becomes a
   // different one. Whatever was on screen at mount — a cold open on the
@@ -331,6 +336,7 @@ export function TopicScreen({
     return () => {
       walkthroughAbortRef.current?.abort();
       whyHowAbortRef.current?.abort();
+      inventAbortRef.current?.abort();
       classifyAbortRef.current?.abort();
       verifyAbortRef.current?.abort();
       bufferBatcher.cancel();
@@ -347,7 +353,7 @@ export function TopicScreen({
     snapshotRef.current = {
       courseId,
       topicId,
-      problem: problemForSession ?? null,
+      problem: problemForSession ?? practiceProblem ?? null,
       practice: sessionPractice,
       mode: sessionMode,
       buffer,
@@ -407,7 +413,7 @@ export function TopicScreen({
         getToken,
         courseId: course.id,
         topicId: topic.id,
-        problem: sessionPractice ? null : problemForSession ?? null,
+        problem: problemForSession ?? practiceProblem ?? null,
         walkthrough: buffer,
         modelUsed: rateInfo?.modelUsed ?? null,
       });
@@ -488,6 +494,9 @@ export function TopicScreen({
     setStreaming(null);
     setProblemForSession(undefined);
     setSessionPractice(false);
+    setPracticeProblem(null);
+    inventAbortRef.current?.abort();
+    setInventing(false);
     setSessionModel('standard');
     setModelChoice('standard');
     setRateInfo(null);
@@ -511,7 +520,7 @@ export function TopicScreen({
 
   async function runWalkthrough(
     problem?: string,
-    opts?: { practice?: boolean; model?: ModelChoice; difficulty?: PracticeDifficulty },
+    opts?: { invented?: boolean; model?: ModelChoice },
   ) {
     resetSession();
     const mode = getPromptFlow();
@@ -524,14 +533,13 @@ export function TopicScreen({
     // deliberate spend.
     const model = opts?.model ?? modelChoice;
     setSessionModel(model);
-    setSessionPractice(!!opts?.practice);
+    setSessionPractice(!!opts?.invented);
 
     walkthroughAbortRef.current?.abort();
     const controller = new AbortController();
     walkthroughAbortRef.current = controller;
     setStreaming('walkthrough');
 
-    const action = opts?.practice ? 'practice' : 'walkthrough';
     let accumulated = '';
     try {
       for await (const chunk of streamWalkthrough({
@@ -541,11 +549,8 @@ export function TopicScreen({
         signal: controller.signal,
         getToken,
         onRateLimitInfo: handleRateInfo,
-        action,
+        action: 'walkthrough',
         model,
-        // Only practice runs invent a problem, so difficulty is the only
-        // action where it means anything.
-        difficulty: opts?.practice ? opts.difficulty : undefined,
       })) {
         accumulated += chunk;
         bufferBatcher.push(accumulated);
@@ -575,7 +580,7 @@ export function TopicScreen({
             getToken,
             courseId: course!.id,
             topicId: topic!.id,
-            problem: opts?.practice ? null : problem ?? null,
+            problem: problem ?? null,
             walkthrough: accumulated,
             modelUsed: rateInfo?.modelUsed ?? null,
           });
@@ -593,6 +598,55 @@ export function TopicScreen({
       if (controller.signal.aborted) return;
       bufferBatcher.cancel();
       setStreaming((s) => (s === 'walkthrough' ? null : s));
+      handleStreamError(err);
+    }
+  }
+
+  /**
+   * "Try one like this" — asks Iris for a problem statement and stops there.
+   *
+   * A separate action from the walkthrough on purpose: it runs on Haiku, costs
+   * no walkthrough slot, and leaves the usage pill alone (the worker sends no
+   * rate-limit headers back for it). The student looks at the problem, re-rolls
+   * it as often as they like, and only spends a slot when they press Walk me
+   * through it.
+   */
+  async function runInvent() {
+    resetSession();
+    setProblemForSession(undefined);
+    setSessionPractice(true);
+    setPracticeProblem(null);
+    setSessionModel('standard');
+
+    inventAbortRef.current?.abort();
+    const controller = new AbortController();
+    inventAbortRef.current = controller;
+    setInventing(true);
+
+    let accumulated = '';
+    try {
+      for await (const chunk of streamWalkthrough({
+        course: course!,
+        topic: topic!,
+        signal: controller.signal,
+        getToken,
+        onRateLimitInfo: handleRateInfo,
+        action: 'invent',
+        // Inventing is never worth a Max slot — the worker pins it to Haiku
+        // anyway, and sending 'max' would only misreport what produced it.
+        model: 'standard',
+        difficulty: practiceDifficulty,
+      })) {
+        accumulated += chunk;
+      }
+      // Published in one go rather than per chunk: the decode measures the
+      // rendered glyphs, so a statement still growing under it would restart
+      // the animation on every frame.
+      setPracticeProblem(cleanInventedProblem(accumulated) || null);
+      setInventing(false);
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setInventing(false);
       handleStreamError(err);
     }
   }
@@ -808,21 +862,24 @@ export function TopicScreen({
   // renders underneath it.
   const practiceNotice =
     limitStatus === 'rate-limited'
-      ? 'Out of usage'
+      ? 'Out of practice problems for today'
       : limitStatus === 'sign-in-required'
         ? 'Sign in to keep going'
         : limitStatus === 'error'
           ? "Couldn't write a problem"
-          : streaming === 'walkthrough'
+          : inventing
             ? 'Writing a fresh problem…'
             : 'Stopped before a problem arrived';
   const isStreamingWalkthrough = streaming === 'walkthrough';
-  const isStreamingAnything = streaming !== null;
+  const isStreamingAnything = streaming !== null || inventing;
 
   // Everything the clear button undoes. When all of it is already true the
   // page *is* the default, so the control would be a no-op.
   const isDefaultState =
     focus.kind === 'example' && !hasOutput && !limitStatus && !isStreamingAnything;
+  // The generate row stays up while a practice problem is only being looked at,
+  // so the student can walk it through, re-roll it, or change the difficulty.
+  const canStartRun = !hasOutput && !limitStatus && !isStreamingAnything;
 
   // In step mode, only show segments up to revealCount.
   const visibleSteps =
@@ -993,13 +1050,17 @@ export function TopicScreen({
         />
       </div>
 
-      {!hasOutput && !limitStatus && !isStreamingAnything && (
+      {canStartRun && (
         <div className="reveal reveal-4">
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={() => {
               scrollToTop();
-              void runWalkthrough();
+              // Whatever is in the card: an invented problem if one is sitting
+              // there, the topic's canonical example otherwise.
+              void runWalkthrough(practiceProblem ?? undefined, {
+                invented: practiceProblem !== null,
+              });
             }}
             className="btn-press chamfer"
             style={primaryCta()}
@@ -1009,10 +1070,7 @@ export function TopicScreen({
           <button
             onClick={() => {
               scrollToTop();
-              void runWalkthrough(undefined, {
-                practice: true,
-                difficulty: practiceDifficulty,
-              });
+              void runInvent();
             }}
             className="btn-press chamfer"
             aria-label="Generate a fresh practice problem on this topic"
@@ -1050,16 +1108,22 @@ export function TopicScreen({
           }}
         >
           <span style={kicker(0)}>
-            {isStreamingWalkthrough ? 'IRIS IS STREAMING…' : 'WHY & HOW STREAMING…'}
+            {inventing
+              ? 'WRITING A PROBLEM…'
+              : isStreamingWalkthrough
+                ? 'IRIS IS STREAMING…'
+                : 'WHY & HOW STREAMING…'}
           </span>
           <button
             onClick={() => {
               walkthroughAbortRef.current?.abort();
               whyHowAbortRef.current?.abort();
+              inventAbortRef.current?.abort();
               bufferBatcher.cancel();
               whyHowStreamBatcher.cancel();
               setStreaming(null);
               setWhyHowStream(null);
+              setInventing(false);
             }}
             className="btn-press"
             style={{
@@ -1185,7 +1249,11 @@ export function TopicScreen({
             {errorMsg}
           </p>
           <button
-            onClick={() => runWalkthrough(problemForSession)}
+            onClick={() =>
+              sessionPractice && practiceProblem === null
+                ? runInvent()
+                : runWalkthrough(problemForSession, { invented: sessionPractice })
+            }
             className="btn-press chamfer"
             style={cta()}
           >
@@ -1364,7 +1432,6 @@ export function TopicScreen({
           spend a Max slot on it. Also the only way to reach Max on a
           walkthrough auto-started from the landing page. */}
       {walkthroughFinished &&
-        !sessionPractice &&
         sessionModel === 'standard' &&
         canChooseModel &&
         maxRemaining !== undefined &&
@@ -1372,7 +1439,12 @@ export function TopicScreen({
           <div style={{ marginTop: 12 }}>
             <button
               type="button"
-              onClick={() => void runWalkthrough(problemForSession, { model: 'max' })}
+              onClick={() =>
+                void runWalkthrough(problemForSession, {
+                  model: 'max',
+                  invented: sessionPractice,
+                })
+              }
               className="btn-press chamfer"
               style={{
                 background: 'transparent',

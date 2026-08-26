@@ -10,6 +10,7 @@ import { authenticate, type AuthState } from './auth';
 import {
   anonChallengeGradeCounter,
   anonChallengeGradeGlobalCounter,
+  anonInventDailyCounter,
   anonymousCounter,
   decrement,
   increment,
@@ -20,6 +21,7 @@ import {
   userChallengeLatexCounter,
   userCounter,
   userExamDailyCounter,
+  userInventDailyCounter,
   userOpusDailyCounter,
   userOpusMonthlyCounter,
   type CounterRef,
@@ -29,6 +31,8 @@ import {
   dailyOpusLimit,
   decideTier,
   FREE_LIMIT,
+  HAIKU,
+  inventDailyLimit,
   monthlyOpusLimit,
   resolveTier,
   SONNET,
@@ -193,15 +197,15 @@ interface WalkthroughBody {
   courseId?: string;
   topicId?: string;
   problem?: string;
-  action?: 'walkthrough' | 'why-how' | 'practice';
+  action?: 'walkthrough' | 'why-how' | 'practice' | 'invent';
   walkthroughSoFar?: string;
   /** Paid-tier model choice. 'max' burns a daily + monthly Opus slot,
    *  'standard' burns only a daily total slot. Absent or unrecognized means
    *  'auto' — the pre-picker behavior every older client sends. */
   model?: 'max' | 'standard';
-  /** For action='practice': 'standard' | 'hard' | 'creative'. Absent or
-   *  unrecognized means 'standard' — the pre-slider behavior every older
-   *  client sends. */
+  /** For action='practice' and action='invent': 'standard' | 'hard' |
+   *  'creative'. Absent or unrecognized means 'standard' — the pre-slider
+   *  behavior every older client sends. */
   difficulty?: string;
 }
 
@@ -412,6 +416,103 @@ export default {
   },
 };
 
+/**
+ * "Try one like this" — invents a problem statement and nothing else.
+ *
+ * Free at every tier and on its own counter, because that is the whole point:
+ * a statement is a few hundred output tokens against a system prefix that is
+ * already cached, where solving one is 4-8K.
+ *
+ * Paid tiers invent on Sonnet, everyone else on Haiku, and the request's own
+ * `model` field is ignored throughout. Opus is deliberately unreachable here:
+ * pressing this must never spend a Max slot on a problem the student hasn't
+ * decided to solve yet. Sonnet for paid is not a quota — 512 tokens against a
+ * cached prefix is still a rounding error next to a walkthrough — it just
+ * keeps Hard and Creative as sharp as they were when this button ran the full
+ * practice action.
+ *
+ * Deliberately emits no X-RateLimit-* headers: the client reads those into the
+ * "N of M today" pill, and nothing was spent, so there is nothing to report.
+ */
+async function handleInvent(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+  authState: AuthState,
+  tier: Tier,
+  body: WalkthroughBody,
+): Promise<Response> {
+  const { courseId, topicId } = body;
+  if (!courseId || !topicId) {
+    return json({ error: 'courseId and topicId required' }, 400, cors);
+  }
+  const found = findTopic(courseId, topicId);
+  if (!found) {
+    return json({ error: 'unknown course or topic' }, 404, cors);
+  }
+  const { course, topic } = found;
+  const difficulty = parsePracticeDifficulty(body.difficulty);
+
+  const counter: CounterRef =
+    authState.kind === 'user'
+      ? userInventDailyCounter(env.USAGE_DO, authState.userId)
+      : anonInventDailyCounter(
+          env.USAGE_DO,
+          request.headers.get('CF-Connecting-IP') ?? 'unknown',
+        );
+
+  const limit = inventDailyLimit(tier);
+  const used = await increment(counter);
+  if (used > limit) {
+    await decrement(counter);
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've generated ${limit} practice problems today.`,
+        limit,
+        used: limit,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
+  const model = tier === 'plus' || tier === 'pro' ? SONNET.id : HAIKU.id;
+  const upstream = await callAnthropicStream({
+    apiKey: env.ANTHROPIC_API_KEY,
+    model,
+    prompts: getIrisPrompts(env),
+    course,
+    topic,
+    action: 'invent',
+    difficulty,
+    signal: request.signal,
+    onUsage: (usage) => recordCacheMetrics(env, model, usage),
+  });
+
+  if (!upstream.ok || !upstream.body) {
+    if (upstream.detail) console.error('upstream invent failed', upstream.status, upstream.detail);
+    await decrement(counter);
+    return json(
+      { error: 'upstream_error', message: "Couldn't write a problem just now — try again in a moment." },
+      502,
+      cors,
+    );
+  }
+
+  return new Response(upstream.body.pipeThrough(normalizeLatexDelimiters()), {
+    status: 200,
+    headers: {
+      ...cors,
+      'X-Model-Used': model,
+      'content-type': 'text/plain; charset=utf-8',
+      'cache-control': 'no-store, no-transform',
+      'content-encoding': 'identity',
+    },
+  });
+}
+
 async function handleWalkthrough(
   request: Request,
   env: Env,
@@ -436,6 +537,13 @@ async function handleWalkthrough(
   } catch {
     // We'll re-parse below and surface the error there.
   }
+  // Inventing a practice problem never touches the walkthrough quota, so it
+  // has to leave this path before the first counter round trip below — not
+  // even a peek.
+  if (parsedBody?.action === 'invent') {
+    return handleInvent(request, env, cors, authState, tier, parsedBody);
+  }
+
   let whyHowAccess: AccessResult | null = null;
   if (parsedBody?.action === 'why-how') {
     whyHowAccess = await ensureFeatureAccess(env, authState, tier, 'whyHow', 'plus', cors);

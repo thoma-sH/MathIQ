@@ -56,6 +56,24 @@ export function userOpusDailyCounter(
   return { ns, name: `user:${userId}:opus-daily:${dateKey()}` };
 }
 
+/** Daily practice-problem counter. Inventing a statement is a few hundred
+ *  Haiku tokens against an already-cached prefix, so it deliberately costs no
+ *  walkthrough slot — these two exist purely so a script can't sit on the
+ *  button all day. */
+export function userInventDailyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:invent:${dateKey()}` };
+}
+
+export function anonInventDailyCounter(
+  ns: DurableObjectNamespace,
+  ip: string,
+): CounterRef {
+  return { ns, name: `anon:${ip}:invent:${dateKey()}` };
+}
+
 /** Daily Exam Mode counter — caps Pro users at N exam generations per day
  *  so one user can't generate 20 exams (20 × Opus × 15 problems each) overnight. */
 export function userExamDailyCounter(
