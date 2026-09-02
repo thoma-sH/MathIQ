@@ -30,22 +30,28 @@ const kicker = () => kickerStyle(0);
  * "x = 4" or "x = \\frac{1}{2}" without delimiters, so we strip any
  * stray $ from the edges and ask KaTeX to render in inline mode.
  *
- * If KaTeX fails (malformed input), falls back to the raw string so
- * the page never goes blank.
+ * If KaTeX fails, falls back to the raw string so the page never goes
+ * blank — rendered as text, never as HTML. KaTeX rethrows anything that
+ * isn't a ParseError even with throwOnError off (a RangeError from deep
+ * nesting, say), and this value crossed a share link, so on that path it
+ * is untrusted input and must not reach innerHTML.
  */
 function InlineMath({ value }: { value: string }) {
-  const html = useMemo(() => {
+  const rendered = useMemo(() => {
     const cleaned = value.replace(/^\$+|\$+$/g, '').trim();
     try {
-      return katex.renderToString(cleaned, {
-        throwOnError: false,
-        displayMode: false,
-      });
+      return {
+        html: katex.renderToString(cleaned, {
+          throwOnError: false,
+          displayMode: false,
+        }),
+      };
     } catch {
-      return cleaned;
+      return { text: cleaned };
     }
   }, [value]);
-  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+  if ('text' in rendered) return <span>{rendered.text}</span>;
+  return <span dangerouslySetInnerHTML={{ __html: rendered.html }} />;
 }
 
 interface ShareProps {

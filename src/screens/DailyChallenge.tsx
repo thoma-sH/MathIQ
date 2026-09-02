@@ -1061,16 +1061,20 @@ function ErrorRow({ message }: { message: string }) {
   );
 }
 
+// On failure the raw string renders as text, never as HTML: KaTeX rethrows
+// anything that isn't a ParseError even with throwOnError off, and the
+// value is model output, not markup we authored.
 function InlineMath({ value }: { value: string }) {
-  const html = useMemo(() => {
+  const rendered = useMemo(() => {
     const cleaned = value.replace(/^\$+|\$+$/g, '').trim();
     try {
-      return katex.renderToString(cleaned, { throwOnError: false, displayMode: false });
+      return { html: katex.renderToString(cleaned, { throwOnError: false, displayMode: false }) };
     } catch {
-      return cleaned;
+      return { text: cleaned };
     }
   }, [value]);
-  return <span dangerouslySetInnerHTML={{ __html: html }} />;
+  if ('text' in rendered) return <span>{rendered.text}</span>;
+  return <span dangerouslySetInnerHTML={{ __html: rendered.html }} />;
 }
 
 function primaryButton(disabled: boolean): React.CSSProperties {
