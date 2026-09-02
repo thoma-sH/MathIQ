@@ -39,6 +39,10 @@ export interface PassState {
   priceId: string;
   stripeCustomerId: string;
   stripeCheckoutSessionId: string;
+  /** The payment behind this pass, so a refund or dispute can be matched
+   *  back to it and never to a pass it didn't pay for. Optional because
+   *  passes granted before this field existed have no record of it. */
+  stripePaymentIntentId?: string;
 }
 
 // Minimum TTL allowed by Cloudflare KV is 60s.
@@ -127,6 +131,11 @@ export async function setPass(
   const nowSec = Math.floor(Date.now() / 1000);
   const ttl = Math.max(MIN_TTL_SECONDS, state.expiresAt - nowSec + PASS_BUFFER_SECONDS);
   await kv.put(passKey(userId), JSON.stringify(state), { expirationTtl: ttl });
+}
+
+/** Revokes a pass whose payment was refunded or disputed. */
+export async function clearPass(kv: KVNamespace, userId: string): Promise<void> {
+  await kv.delete(passKey(userId));
 }
 
 /**

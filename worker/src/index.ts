@@ -54,6 +54,7 @@ import { callOpenRouterStream } from './openrouter';
 import { getIrisPrompts, parsePracticeDifficulty } from './prompt';
 import { normalizeLatexDelimiters } from './normalize';
 import {
+  clearPass,
   clearSubscription,
   findUserByCustomer,
   getActivePass,
@@ -1325,7 +1326,8 @@ async function processStripeEvent(
   event: Stripe.Event,
 ): Promise<void> {
   switch (event.type) {
-    case 'checkout.session.completed': {
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded': {
       const session = event.data.object as Stripe.Checkout.Session;
       if (!session.id) return;
       const userId = session.client_reference_id ?? session.metadata?.userId;
@@ -1337,6 +1339,13 @@ async function processStripeEvent(
       // Subscription path: `customer.subscription.created` will follow and
       // do the heavy lifting. Nothing more to do here.
       if (session.mode !== 'payment') return;
+
+      // Delayed-notification methods (bank debits, some wallets) deliver
+      // `completed` while the payment is still pending and settle later
+      // through `async_payment_succeeded` — or never, via
+      // `async_payment_failed`, which needs no handler because nothing was
+      // granted. The pass is granted only once the money has arrived.
+      if (session.payment_status !== 'paid') return;
 
       // One-time Semester pass — no follow-up subscription event will fire.
       // Resolve tier + create PassState now.
@@ -1363,8 +1372,43 @@ async function processStripeEvent(
         priceId,
         stripeCustomerId: customerId,
         stripeCheckoutSessionId: session.id,
+        stripePaymentIntentId:
+          typeof session.payment_intent === 'string'
+            ? session.payment_intent
+            : session.payment_intent?.id,
       };
       await setPass(env.USAGE, userId, pass);
+      return;
+    }
+    case 'charge.refunded':
+    case 'charge.dispute.created': {
+      // A refunded or disputed pass payment takes the pass with it. Matched
+      // on the payment intent, so a refund on a subscription invoice or on an
+      // older purchase never touches a pass it didn't pay for. A partial
+      // refund keeps the pass; a dispute that is later won is rare enough to
+      // re-grant by hand. Subscriptions need nothing here — Stripe cancels
+      // them itself and `customer.subscription.deleted` follows.
+      const dispute =
+        event.type === 'charge.dispute.created' ? (event.data.object as Stripe.Dispute) : null;
+      const charge = dispute
+        ? await stripe.charges.retrieve(
+            typeof dispute.charge === 'string' ? dispute.charge : dispute.charge.id,
+          )
+        : (event.data.object as Stripe.Charge);
+      if (!dispute && !charge.refunded) return;
+      const customerId =
+        typeof charge.customer === 'string' ? charge.customer : charge.customer?.id;
+      const paymentIntentId =
+        typeof charge.payment_intent === 'string'
+          ? charge.payment_intent
+          : charge.payment_intent?.id;
+      if (!customerId || !paymentIntentId) return;
+      const userId = await findUserByCustomer(env.USAGE, customerId);
+      if (!userId) return;
+      const pass = await getActivePass(env.USAGE, userId);
+      if (pass?.stripePaymentIntentId === paymentIntentId) {
+        await clearPass(env.USAGE, userId);
+      }
       return;
     }
     case 'customer.subscription.created':
