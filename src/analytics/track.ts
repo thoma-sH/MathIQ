@@ -1,4 +1,4 @@
-import { resetSessionId, send, sessionId } from './beacon';
+import { ANALYTICS_ENABLED, resetSessionId, send, sessionId } from './beacon';
 
 /**
  * Beta funnel instrumentation, first-party.
@@ -20,6 +20,10 @@ export type AnalyticsEvent =
 let userId: string | null = null;
 
 export function track(event: AnalyticsEvent, props?: Record<string, unknown>): void {
+  // Checked here rather than only inside send(): reading the session id mints
+  // and stores one, and a build with analytics off must not put anything in a
+  // student's browser.
+  if (!ANALYTICS_ENABLED) return;
   // No client timestamp: the worker stamps first and last seen from its own
   // clock, which is the one the rollup is read against.
   send({ event, sid: sessionId(), props, ...(userId ? { userId } : {}) });
@@ -36,5 +40,5 @@ export function identify(id: string): void {
  *  not the one who just left. */
 export function resetIdentity(): void {
   userId = null;
-  resetSessionId();
+  if (ANALYTICS_ENABLED) resetSessionId();
 }

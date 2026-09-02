@@ -43,6 +43,10 @@ export const FUNNEL_TTL_SECONDS = 30 * 24 * 60 * 60;
  *  rather than unbounded on a day that goes unexpectedly well. */
 const MAX_SESSIONS_PER_DAY = 1000;
 
+/** KV pages a thousand keys at a time, so this is far past the key cap above.
+ *  It exists so the walk terminates on its own terms whatever KV returns. */
+const MAX_LIST_PAGES = 20;
+
 export interface FunnelSession {
   day: string;
   firstSeen: number;
@@ -189,13 +193,20 @@ export async function readFunnel(kv: KVNamespace, days: number): Promise<FunnelR
 
     const keys: string[] = [];
     let cursor: string | undefined;
+    // Set whenever the walk stops with keys still unread, so a day that goes
+    // unexpectedly well reports a partial count as partial rather than as fact.
     let truncated = false;
-    while (keys.length < MAX_SESSIONS_PER_DAY) {
-      const page = await kv.list({ prefix, cursor });
-      for (const k of page.keys) keys.push(k.name);
-      if (page.list_complete) break;
-      cursor = page.cursor;
-      if (!cursor) break;
+    // Bounded by pages as well as by keys: a list that never reports itself
+    // complete must not be able to spin here.
+    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
+      const res = await kv.list({ prefix, cursor });
+      for (const k of res.keys) keys.push(k.name);
+      if (res.list_complete) break;
+      cursor = res.cursor;
+      if (!cursor || keys.length >= MAX_SESSIONS_PER_DAY || page === MAX_LIST_PAGES - 1) {
+        truncated = true;
+        break;
+      }
     }
     if (keys.length > MAX_SESSIONS_PER_DAY) {
       truncated = true;
