@@ -15,7 +15,7 @@ import { fetchSubscriptionState } from '../billing/client';
 // current walkthrough's tier.
 import { isPaid as isPaidTier } from '../walkthroughs/tier';
 import { ModelPicker } from '../components/ModelPicker';
-import { classifyTopic } from '../walkthroughs/classify';
+import { ClassifyError, classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { saveHistoryRecord } from '../walkthroughs/history';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
@@ -463,6 +463,14 @@ export function TopicScreen({
     walkthroughAbortRef.current?.abort();
     whyHowAbortRef.current?.abort();
     verifyAbortRef.current?.abort();
+    // These two too: a run that starts while an invent or a classify is still
+    // in flight would otherwise have that older request's error land on top
+    // of it. Their flags are cleared by hand because an aborted run returns
+    // before its own cleanup.
+    inventAbortRef.current?.abort();
+    classifyAbortRef.current?.abort();
+    setInventing(false);
+    setClassifying(false);
     bufferBatcher.cancel();
     whyHowStreamBatcher.cancel();
     setVerifyState('idle');
@@ -496,14 +504,10 @@ export function TopicScreen({
    *  this by hand. */
   function clearWalkthrough() {
     resetSession();
-    classifyAbortRef.current?.abort();
-    setClassifying(false);
     setStreaming(null);
     setProblemForSession(undefined);
     setSessionPractice(false);
     setPracticeProblem(null);
-    inventAbortRef.current?.abort();
-    setInventing(false);
     setSessionModel('standard');
     setModelChoice('standard');
     setRateInfo(null);
@@ -562,6 +566,10 @@ export function TopicScreen({
         accumulated += chunk;
         bufferBatcher.push(accumulated);
       }
+      // An abort that lands after the last chunk resolves the read as done
+      // rather than rejecting it, so the catch below never sees it. Without
+      // this the finished run would paint over whatever replaced it.
+      if (controller.signal.aborted) return;
       bufferBatcher.flush();
       setStreamDone(true);
       setStreaming((s) => (s === 'walkthrough' ? null : s));
@@ -646,6 +654,7 @@ export function TopicScreen({
       })) {
         accumulated += chunk;
       }
+      if (controller.signal.aborted) return;
       // Published in one go rather than per chunk: the decode measures the
       // rendered glyphs, so a statement still growing under it would restart
       // the animation on every frame.
@@ -693,6 +702,7 @@ export function TopicScreen({
         accumulated += chunk;
         whyHowStreamBatcher.push({ index, text: accumulated });
       }
+      if (controller.signal.aborted) return;
       whyHowStreamBatcher.flush();
       setWhyHow((p) => ({ ...p, [index]: accumulated }));
       setWhyHowStream(null);
@@ -724,7 +734,7 @@ export function TopicScreen({
       }
     }
     setLimitStatus('error');
-    setErrorMsg(err instanceof Error ? err.message : 'Unknown error');
+    setErrorMsg(humanError(err));
   }
 
   async function runVerify(walkthroughText: string) {
@@ -823,7 +833,13 @@ export function TopicScreen({
     } catch (err) {
       // Aborted: a newer submit superseded this one; drop the result silently.
       if (err instanceof Error && err.name === 'AbortError') return;
-      // Other failures non-fatal; treat as no-match.
+      // Never got an answer — say why, rather than telling the student to
+      // rephrase a problem that was never read.
+      if (err instanceof ClassifyError) {
+        setSubmitHint(err.message);
+        return;
+      }
+      // Anything else is non-fatal; treat as no-match.
     } finally {
       // Only the controller that actually finished should clear the ref.
       if (classifyAbortRef.current === controller) classifyAbortRef.current = null;
@@ -1001,9 +1017,13 @@ export function TopicScreen({
               style={{
                 background: 'transparent',
                 border: 'none',
-                padding: '8px 6px',
-                margin: '-8px -6px',
-                minHeight: 32,
+                // Same trick as the stop button: the hit area grows to 44px
+                // while the negative margin keeps the row where it was.
+                padding: '12px 6px',
+                margin: '-12px -6px',
+                minHeight: 44,
+                display: 'inline-flex',
+                alignItems: 'center',
                 fontFamily: T.mono,
                 fontSize: 12,
                 color: T.muted,
@@ -1423,7 +1443,11 @@ export function TopicScreen({
             style={{
               background: 'transparent',
               border: 'none',
-              padding: 0,
+              padding: '12px 4px',
+              margin: '-12px -4px',
+              minHeight: 44,
+              display: 'inline-flex',
+              alignItems: 'center',
               fontFamily: T.mono,
               fontSize: 11,
               letterSpacing: '0.1em',
@@ -1690,9 +1714,11 @@ const STEP_BODY_STYLE: React.CSSProperties = {
   lineHeight: 1.6,
 };
 
+// No vertical padding: the button inside carries the row's 44px height, so
+// the whole strip is the tap target rather than a 14px line in the middle.
 const STEP_TOGGLE_ROW_STYLE: React.CSSProperties = {
   borderTop: `1px solid ${T.hair}`,
-  padding: '10px 16px',
+  padding: '0 16px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
@@ -1734,6 +1760,9 @@ const StepCard = memo(function StepCard({
             background: 'transparent',
             border: 'none',
             padding: 0,
+            minHeight: 44,
+            display: 'inline-flex',
+            alignItems: 'center',
             fontSize: 12,
             fontFamily: T.mono,
             letterSpacing: '0.12em',
@@ -1794,6 +1823,17 @@ function UsagePill({
       {label}
     </div>
   );
+}
+
+/** Everything on the error card has to be a sentence the student can act
+ *  on. fetch() rejects with a bare "Failed to fetch" for anything from
+ *  airplane mode to a blocked request; WalkthroughError already carries copy. */
+function humanError(err: unknown): string {
+  if (err instanceof WalkthroughError) return err.message;
+  if (err instanceof TypeError) {
+    return "Couldn't reach MathIQ. Check your connection and try again.";
+  }
+  return 'Something went wrong. Try again in a moment.';
 }
 
 function modelLabel(id: string): string {

@@ -59,8 +59,19 @@ export interface WalkthroughSession {
   updatedAt: number;
 }
 
-function isRecordOfString(v: unknown): v is Record<number, string> {
+function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+// The values matter as much as the container: a `whyHow` entry that isn't a
+// string reaches MathMarkdown as its child, and an `expanded` entry that
+// isn't a boolean is read as one anyway.
+function isRecordOfStrings(v: unknown): v is Record<number, string> {
+  return isPlainObject(v) && Object.values(v).every((x) => typeof x === 'string');
+}
+
+function isRecordOfBooleans(v: unknown): v is Record<number, boolean> {
+  return isPlainObject(v) && Object.values(v).every((x) => typeof x === 'boolean');
 }
 
 /** Returns null for anything missing, malformed, stale, or from an older
@@ -83,8 +94,8 @@ export function readSession(): WalkthroughSession | null {
     typeof s.topicId !== 'string' ||
     typeof s.buffer !== 'string' ||
     typeof s.updatedAt !== 'number' ||
-    !isRecordOfString(s.whyHow) ||
-    !isRecordOfString(s.expanded)
+    !isRecordOfStrings(s.whyHow) ||
+    !isRecordOfBooleans(s.expanded)
   ) {
     removeKey(KEY_WALKTHROUGH_SESSION);
     return null;

@@ -6,6 +6,7 @@ import {
   ExamError,
   getExam,
   gradeExam,
+  isExamRecord,
   type ExamGradeResult,
   type ExamRecord,
 } from '../walkthroughs/exam';
@@ -46,8 +47,9 @@ export function ExamGrade({ courseId, recordId, onNavigate }: ExamGradeProps) {
       try {
         const raw = sessionStorage.getItem(`exam:${recordId}`);
         if (raw) {
-          const r = JSON.parse(raw) as ExamRecord;
-          if (!cancelled) setRecord(r);
+          // The worker fetch below is the real source; this only paints early.
+          const r: unknown = JSON.parse(raw);
+          if (isExamRecord(r) && !cancelled) setRecord(r);
         }
       } catch {
         // ignore

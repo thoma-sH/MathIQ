@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { startAutoThemeWatch } from './state/theme';
 import { T } from './design/tokens';
 import './index.css';
@@ -22,6 +23,9 @@ if (!rootEl) throw new Error('#root not found');
 
 createRoot(rootEl).render(
   <StrictMode>
+    {/* Outside the Clerk provider on purpose: the fallback needs nothing from
+        it, and a provider that throws is one more thing this has to catch. */}
+    <ErrorBoundary>
     {/* Without this every `mode="modal"` sign-in renders Clerk's stock white
         card onto whatever palette is active. Passing `var()` strings follows
         the precedent in Header.tsx and means Clerk re-colors on a theme
@@ -55,5 +59,6 @@ createRoot(rootEl).render(
     >
       <App />
     </ClerkProvider>
+    </ErrorBoundary>
   </StrictMode>,
 );

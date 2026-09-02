@@ -582,63 +582,17 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   50.01%, 100% { opacity: 0; }
 }
 
-/* ─── Landing hero stage: scribe ↔ search cross-fade ──────────────── */
+/* ─── Landing hero stage: daily figure over the math entry ────────── */
 .hero-stage {
-  position: relative;
   width: 100%;
-  max-width: 560px;
-  min-height: clamp(220px, 36vh, 320px);
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-  place-items: center;
-}
-.hero-stage > * {
-  grid-column: 1;
-  grid-row: 1;
-  width: 100%;
+  /* Was 560px, to frame a figure. The entry wants the full column. */
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 18px;
 }
 
-.scribe-trigger {
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--ink);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  opacity: 1;
-  transform: scale(1);
-  transition:
-    opacity 280ms ease-out,
-    transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
-  animation: scribe-breathe 3.6s ease-in-out infinite;
-}
-.scribe-trigger:hover {
-  animation-play-state: paused;
-  transform: scale(1.04);
-}
-.scribe-trigger:active { transform: scale(0.98); }
-.scribe-trigger[data-active="false"] {
-  opacity: 0;
-  transform: scale(0.78);
-  pointer-events: none;
-  animation: none;
-  /* visibility (not just opacity) so the hidden trigger drops out of the
-   * tab order; the 320ms delay lets the fade-out finish first. Showing is
-   * instant because the base rule's transition list omits visibility. */
-  visibility: hidden;
-  transition:
-    opacity 280ms ease-out,
-    transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
-    visibility 0s linear 320ms;
-}
 .scribe-hint {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -663,37 +617,21 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   background-size: 300% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  /* Shares the breathe's 3.6s so the two read as one gesture. */
   animation: scribe-sweep 3.6s linear infinite;
 }
-/* Hovering already pauses the breathe; settle the text too rather than
-   leaving a band frozen mid-word. */
-.scribe-trigger:hover .scribe-hint {
-  background-image: none;
-  color: var(--ink);
-  animation: none;
-}
-/* Keep this *below* the two rules it overrides. A media query adds no
-   specificity, so up with the other reduced-motion blocks it tied with the
-   base `.scribe-trigger` / `.scribe-hint` declarations and lost on source
-   order — leaving the hint transparent, and the fallback resting entirely on
-   the `animation-duration: 0.01ms !important` sweep at the end of this file.
-   No sweep, no breathe — and the hint needs its color back, since the
-   animated version paints through a gradient with transparent text. */
+/* Keep this *below* the `.scribe-hint` declarations it overrides. A media
+   query adds no specificity, so up with the other reduced-motion blocks it
+   tied with the base rule and lost on source order — leaving the hint
+   transparent, and the fallback resting entirely on the
+   `animation-duration: 0.01ms !important` sweep at the end of this file.
+   No sweep — and the hint needs its color back, since the animated version
+   paints through a gradient with transparent text. */
 @media (prefers-reduced-motion: reduce) {
-  .scribe-trigger { animation: none; opacity: 1; }
   .scribe-hint {
     animation: none;
     background-image: none;
     color: var(--muted);
   }
-}
-@keyframes scribe-breathe {
-  /* Shipped at 0.85, which was shallow enough to read as a rendering
-     artefact. Opacity only — the palette does the color, this does the
-     rhythm. */
-  0%, 100% { opacity: 0.55; }
-  50%      { opacity: 1; }
 }
 @keyframes scribe-sweep {
   /* Higher percentages push the image left, so counting down walks the
@@ -702,28 +640,101 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   to   { background-position: 0% 0; }
 }
 
-.search-form {
-  opacity: 0;
-  transform: scale(0.94);
-  pointer-events: none;
-  /* Hidden form must leave the tab order — keyboard users were landing on
-   * an invisible textarea. Delay matches the fade-out (320ms + 100ms). */
-  visibility: hidden;
-  transition:
-    opacity 320ms ease-out 100ms,
-    transform 360ms cubic-bezier(0.16, 1, 0.3, 1) 100ms,
-    visibility 0s linear 420ms;
+.search-form { width: 100%; }
+
+/* ─── Math entry — the MathLive field and our own keypad ──────────── */
+.math-entry {
+  width: 100%;
+  /* The hero column is centred; the formula and the keys read left-to-right. */
+  text-align: left;
 }
-.search-form[data-active="true"] {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-  visibility: visible;
-  transition:
-    opacity 320ms ease-out 100ms,
-    transform 360ms cubic-bezier(0.16, 1, 0.3, 1) 100ms,
-    visibility 0s;
+
+.math-entry math-field {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  padding: 16px 18px;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 22px;
+  /* MathLive paints its own chrome from these. Left unset they stay its
+     stock blues, which read as a foreign UI dropped onto the palette. */
+  --caret-color: var(--accent);
+  --primary: var(--accent);
+  --selection-background-color: color-mix(in srgb, var(--accent) 22%, var(--paper));
+  --contains-highlight-background-color: color-mix(in srgb, var(--accent) 12%, var(--paper));
+  --placeholder-color: var(--muted);
+  --smart-fence-color: var(--muted);
 }
+/* Outline rather than a shadow: separation on this app is carried by ink
+   contrast, and a focus ring still has to be unmissable. */
+.math-entry math-field:focus-within {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.math-keypad {
+  margin-top: 12px;
+  border: 1px solid var(--ink);
+  background: var(--paper-2);
+}
+.math-keypad-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--ink);
+}
+.math-keypad-tab {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px 6px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--hair-strong);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+.math-keypad-tab:last-child { border-right: none; }
+.math-keypad-tab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.math-keypad-grid {
+  display: grid;
+  /* 52px floor keeps five columns at 375px and grows the count from there. */
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+  padding: 10px;
+}
+.math-keypad-key {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hair-strong);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+/* :active matches :hover so a phone, which has neither hover nor a virtual
+   keyboard here, still gets feedback on the press. */
+.math-keypad-key:hover:not(:disabled),
+.math-keypad-key:active:not(:disabled) {
+  background: var(--accent);
+  color: var(--paper);
+  border-color: var(--accent);
+}
+.math-keypad-key:disabled { opacity: 0.45; cursor: not-allowed; }
+/* KaTeX draws the key faces — let them inherit so the invert takes the
+   glyph with it instead of leaving ink-on-accent. */
+.math-keypad-key .katex { color: inherit; font-size: 1em; }
 
 /* ─── Responsive padding utility ──────────────────────────────────── */
 .responsive-pad { padding: 24px 20px; }

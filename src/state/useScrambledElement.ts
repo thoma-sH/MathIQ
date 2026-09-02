@@ -160,6 +160,11 @@ export function useScrambledElement(
 ): void {
   useLayoutEffect(() => {
     if (!enabled || !token || !ref.current) return;
+    // The content is already typeset in its final state; the decode only
+    // rewrites glyphs on the way there. Seventy frames of flickering
+    // characters is exactly what this preference asks not to see, and a CSS
+    // override can't reach a JS loop — so the loop has to check for itself.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
 
     let cancelled = false;
     let teardown: (() => void) | null = null;

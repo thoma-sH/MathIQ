@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useAuth } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { COURSES_BY_ID } from '../walkthroughs/courses';
-import { getExam, type ExamRecord } from '../walkthroughs/exam';
+import { getExam, isExamRecord, type ExamRecord } from '../walkthroughs/exam';
 import { MathMarkdown } from '../components/MathMarkdown';
 import { NotFound } from './NotFound';
 import type { Route } from '../router';
@@ -28,12 +28,15 @@ export function ExamTake({ courseId, recordId, onNavigate }: ExamTakeProps) {
       try {
         const raw = sessionStorage.getItem(`exam:${recordId}`);
         if (raw) {
-          const r = JSON.parse(raw) as ExamRecord;
-          if (!cancelled) {
-            setRecord(r);
-            setLoaded(true);
+          // Anything that doesn't check out falls through to the worker copy.
+          const r: unknown = JSON.parse(raw);
+          if (isExamRecord(r)) {
+            if (!cancelled) {
+              setRecord(r);
+              setLoaded(true);
+            }
+            return;
           }
-          return;
         }
       } catch {
         // ignore

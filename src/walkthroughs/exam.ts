@@ -22,6 +22,33 @@ export interface ExamRecord {
   createdAt: number;
 }
 
+/** Shape check for a record read back from sessionStorage. That is a
+ *  boundary like any other: a stale or hand-edited entry has to fall through
+ *  to a refetch, not crash on the first `record.problems.map`. */
+export function isExamRecord(v: unknown): v is ExamRecord {
+  if (typeof v !== 'object' || v === null) return false;
+  const r = v as Record<string, unknown>;
+  return (
+    typeof r.examId === 'string' &&
+    typeof r.courseId === 'string' &&
+    typeof r.exam === 'string' &&
+    typeof r.examTitle === 'string' &&
+    typeof r.courseTitle === 'string' &&
+    typeof r.createdAt === 'number' &&
+    Array.isArray(r.problems) &&
+    r.problems.every((p: unknown) => {
+      if (typeof p !== 'object' || p === null) return false;
+      const q = p as Record<string, unknown>;
+      return (
+        typeof q.index === 'number' &&
+        typeof q.topicId === 'string' &&
+        typeof q.topicTitle === 'string' &&
+        typeof q.problemText === 'string'
+      );
+    })
+  );
+}
+
 export type ExamErrorKind =
   | 'sign_in_required'
   | 'upgrade_required'

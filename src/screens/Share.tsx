@@ -60,7 +60,15 @@ interface ShareProps {
 
 export function Share({ shareId }: ShareProps) {
   const { data, loading, error } = useAsync(async (signal) => {
-    const d = await fetchSharedAttempt(shareId, signal);
+    let d: SharedChallenge | null;
+    try {
+      d = await fetchSharedAttempt(shareId, signal);
+    } catch (err) {
+      if (signal.aborted) throw err;
+      // fetch() rejects with a bare "Failed to fetch" for anything from
+      // airplane mode to a blocked request — not copy anyone can act on.
+      throw new Error("Couldn't reach MathIQ. Check your connection and try again.");
+    }
     if (!d) throw new Error("This shared challenge expired or wasn't found.");
     return d;
   }, [shareId]);

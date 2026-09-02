@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { SignedOut, useAuth, useUser } from '@clerk/clerk-react';
 import { T } from '../design/tokens';
 import { getDailyContent } from '../state/dailyScribe';
 import { useTypedString } from '../state/useTypedString';
-import { classifyTopic } from '../walkthroughs/classify';
+import { ClassifyError, classifyTopic } from '../walkthroughs/classify';
 import { looksLikeProblem } from '../walkthroughs/isProblem';
 import { extractProblemFromImage, OcrError } from '../walkthroughs/ocr';
 import { fetchSubscriptionState, type Tier } from '../billing/client';
@@ -11,14 +11,25 @@ import { fetchTodaysChallenge, fetchStreak, type TodaysChallenge, type StreakSta
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
+import { latexToProblem, problemToLatex } from '../lib/problemLatex';
 import { DifficultyChip } from '../design/icons';
 import type { Route } from '../router';
+
+// mathlive is over a megabyte and only the hero needs it. Imported statically
+// it rode into the initial bundle of every route — /privacy, /pricing and a
+// shared challenge included. Landing itself stays in the initial bundle so
+// the rest of the page paints while the field is still on its way.
+const MathEntry = lazy(() =>
+  import('../components/MathEntry').then((m) => ({ default: m.MathEntry })),
+);
 
 interface LandingProps {
   onNavigate: (route: Route) => void;
 }
 
-type SearchState = 'idle' | 'expanded' | 'classifying' | 'no_match';
+/** `failed` is a search that never got an answer — offline, out of searches,
+ *  the worker down — as opposed to `no_match`, which is an answer of "nowhere". */
+type SearchState = 'idle' | 'classifying' | 'no_match' | 'failed';
 
 function getTimeGreeting(hour: number): string {
   if (hour < 5) return 'Up late';
@@ -41,6 +52,10 @@ export function Landing({ onNavigate }: LandingProps) {
   }, [user?.firstName]);
 
   const [searchState, setSearchState] = useState<SearchState>('idle');
+  const [searchMessage, setSearchMessage] = useState<string | null>(null);
+  // Raw mathfield LaTeX. Converted only on the way out (submit) and the way
+  // in (OCR) — see problemLatex.ts for why it can't round-trip through the
+  // converted form.
   const [problem, setProblem] = useState('');
   const [ocrState, setOcrState] = useState<'idle' | 'reading' | 'error'>('idle');
   const [ocrMessage, setOcrMessage] = useState<string | null>(null);
@@ -96,34 +111,14 @@ export function Landing({ onNavigate }: LandingProps) {
     }
     onNavigate({ name: 'homework' });
   }
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const scribeTriggerRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    if (searchState === 'expanded' || searchState === 'no_match') {
-      // Wait for the scribe-out / search-in cross-fade before focusing.
-      const t = window.setTimeout(() => textareaRef.current?.focus(), 240);
-      return () => window.clearTimeout(t);
-    }
-  }, [searchState]);
-
-  // Click outside the stage to collapse — only when textarea is empty.
-  useEffect(() => {
-    if (searchState !== 'expanded' && searchState !== 'no_match') return;
-    const onClick = (e: MouseEvent) => {
-      if (!stageRef.current) return;
-      if (stageRef.current.contains(e.target as Node)) return;
-      if (!problem.trim()) collapseToScribe();
-    };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
-  }, [searchState, problem]);
-
   async function submit() {
-    const trimmed = problem.trim();
+    // With smartMode on, a typed topic name leaves the field as `\text{…}`,
+    // which reads as a LaTeX command to the heuristic below. Converting first
+    // is what keeps "related rates" from auto-firing a walkthrough.
+    const trimmed = latexToProblem(problem);
     if (!trimmed) return;
     setSearchState('classifying');
+    setSearchMessage(null);
     try {
       const match = await classifyTopic({ problem: trimmed, getToken });
       if (match) {
@@ -140,18 +135,14 @@ export function Landing({ onNavigate }: LandingProps) {
         return;
       }
       setSearchState('no_match');
-    } catch {
+    } catch (err) {
+      if (err instanceof ClassifyError) {
+        setSearchMessage(err.message);
+        setSearchState('failed');
+        return;
+      }
       setSearchState('no_match');
     }
-  }
-
-  function collapseToScribe() {
-    setSearchState('idle');
-    setOcrState('idle');
-    setOcrMessage(null);
-    // Return focus to the trigger so keyboard users land where they started.
-    // Use rAF so the scribe is rendered + focusable before we focus it.
-    requestAnimationFrame(() => scribeTriggerRef.current?.focus());
   }
 
   async function handleImageFile(file: File) {
@@ -164,11 +155,11 @@ export function Landing({ onNavigate }: LandingProps) {
     setOcrMessage(null);
     try {
       const text = await extractProblemFromImage({ getToken, file });
-      setProblem(text);
+      // OCR answers in prose with $…$ math; the field wants LaTeX. Set raw,
+      // the prose becomes italic variables and each `$` an error glyph.
+      setProblem(problemToLatex(text));
       setOcrState('idle');
       setOcrMessage(null);
-      // Focus the textarea so the user can edit before submitting.
-      requestAnimationFrame(() => textareaRef.current?.focus());
     } catch (err) {
       setOcrState('error');
       if (err instanceof OcrError) setOcrMessage(err.message);
@@ -183,35 +174,6 @@ export function Landing({ onNavigate }: LandingProps) {
     }
   }
 
-  function onTextareaPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of Array.from(items)) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          void handleImageFile(file);
-          return;
-        }
-      }
-    }
-  }
-
-  function onTextareaKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      if (!problem.trim()) collapseToScribe();
-      else textareaRef.current?.blur();
-      return;
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      void submit();
-    }
-  }
-
-  const expanded = searchState !== 'idle';
   const busy = searchState === 'classifying';
 
   return (
@@ -356,25 +318,12 @@ export function Landing({ onNavigate }: LandingProps) {
         </a>
       )}
 
-      {/* The stage — scribe and search occupy the same cell; one cross-fades into the other */}
-      <div
-        ref={stageRef}
-        className="hero-stage reveal reveal-2"
-        data-expanded={expanded}
-      >
-        {/* Scribe — the click target */}
-        <button
-          ref={scribeTriggerRef}
-          type="button"
-          onClick={() => setSearchState('expanded')}
-          className="scribe-trigger"
-          aria-label="Open the problem input"
-          data-active={!expanded}
+      {/* The stage — the daily figure over an always-open math entry */}
+      <div className="hero-stage reveal reveal-2">
+        <span
+          className="scribe-art"
+          style={{ '--scribe': `url(${scribeSrc})` } as React.CSSProperties}
         >
-          <span
-            className="scribe-art"
-            style={{ '--scribe': `url(${scribeSrc})` } as React.CSSProperties}
-          >
           <img
             src={scribeSrc}
             alt=""
@@ -393,37 +342,38 @@ export function Landing({ onNavigate }: LandingProps) {
               display: 'block',
             }}
           />
-          </span>
-          <span className="scribe-hint">
-            Type a problem →
-          </span>
-        </button>
+        </span>
 
-        {/* Search form — emerges in place of the scribe */}
-        <div className="search-form" data-active={expanded} aria-hidden={!expanded}>
-          <textarea
-            ref={textareaRef}
-            value={problem}
-            onChange={(e) => setProblem(e.target.value)}
-            onKeyDown={onTextareaKeyDown}
-            onPaste={onTextareaPaste}
-            disabled={busy || ocrState === 'reading'}
-            aria-label="Math problem to walk through"
-            placeholder="Paste or type a problem — anything from algebra to differential equations…"
-            rows={3}
-            style={{
-              width: '100%',
-              border: `1px solid ${T.ink}`,
-              background: T.paper,
-              padding: '16px 18px',
-              fontSize: 16,
-              fontFamily: T.mono,
-              resize: 'vertical',
-              color: T.ink,
-              lineHeight: 1.5,
-              marginBottom: 14,
-            }}
-          />
+        {/* The label the sweep lives on — it names the field below it. */}
+        <span className="scribe-hint" id="math-entry-label">
+          Type a problem →
+        </span>
+
+        <div className="search-form">
+          <Suspense
+            fallback={
+              // The field's own footprint (72px + hairline), so the page
+              // doesn't jump when the editor lands.
+              <div
+                aria-busy="true"
+                style={{ minHeight: 74, border: `1px solid ${T.hair}`, background: T.paper2 }}
+              />
+            }
+          >
+            <MathEntry
+              value={problem}
+              onChange={(latex) => {
+                setProblem(latex);
+                // Editing after a miss should clear the miss.
+                if (searchState === 'no_match' || searchState === 'failed') {
+                  setSearchState('idle');
+                }
+              }}
+              onSubmit={() => void submit()}
+              onPasteImage={(file) => void handleImageFile(file)}
+              disabled={busy || ocrState === 'reading'}
+            />
+          </Suspense>
           <div
             style={{
               display: 'flex',
@@ -518,6 +468,38 @@ export function Landing({ onNavigate }: LandingProps) {
               instead.
             </p>
           )}
+
+          {searchState === 'failed' && searchMessage && (
+            <p
+              role="status"
+              aria-live="polite"
+              style={{
+                marginTop: 14,
+                fontSize: 13,
+                color: T.muted,
+                lineHeight: 1.5,
+              }}
+            >
+              {searchMessage} Or{' '}
+              <button
+                type="button"
+                onClick={() => onNavigate({ name: 'subjects' })}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  color: T.accent,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  fontFamily: 'inherit',
+                  fontSize: 'inherit',
+                }}
+              >
+                pick a subject
+              </button>{' '}
+              instead.
+            </p>
+          )}
         </div>
       </div>
 
@@ -532,8 +514,6 @@ export function Landing({ onNavigate }: LandingProps) {
           justifyContent: 'center',
           width: '100%',
           maxWidth: 640,
-          opacity: expanded ? 0.35 : 1,
-          transition: 'opacity 240ms ease-out',
         }}
       >
         <button

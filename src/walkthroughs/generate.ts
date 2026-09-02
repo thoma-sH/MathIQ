@@ -166,8 +166,15 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
       // ignore
     }
     failed('other', { status: resp.status, detail });
-    // The worker's own copy when it wrote some; the status otherwise.
-    throw new WalkthroughError('other', message || `Walkthrough failed: ${resp.status}`, {
+    // The worker's own copy when it wrote some; a sentence the student can
+    // act on otherwise. The status stays in the text for bug reports.
+    const fallback =
+      resp.status === 413
+        ? 'That problem is too long to send. Trim it to the problem itself.'
+        : resp.status >= 500
+          ? `Iris couldn't answer just now (error ${resp.status}). Try again in a moment.`
+          : `That request couldn't be completed (error ${resp.status}).`;
+    throw new WalkthroughError('other', message || fallback, {
       status: resp.status,
       detail,
     });

@@ -9,10 +9,17 @@
  * Used in the anonymous Daily Challenge grade flow to ensure each photo
  * grade is a real human and not a script.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { T } from '../design/tokens';
 
 // Public site key — safe to commit. Configured in Cloudflare dashboard.
 export const TURNSTILE_SITE_KEY = '0x4AAAAAADPsiOBUPVIoKAk4';
+
+// How long to keep waiting for the script. A blocked or unreachable script
+// never arrives at all, and without a cap the poll ran forever behind a
+// blank box that never explained itself.
+const SCRIPT_WAIT_MS = 10_000;
+const POLL_MS = 150;
 
 declare global {
   interface Window {
@@ -43,17 +50,24 @@ interface TurnstileWidgetProps {
 export function TurnstileWidget({ onSuccess, onError }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const [scriptMissing, setScriptMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let pollHandle: number | null = null;
+    const deadline = Date.now() + SCRIPT_WAIT_MS;
 
     const tryRender = () => {
       if (cancelled) return;
       if (!containerRef.current) return;
       if (typeof window === 'undefined' || !window.turnstile) {
+        if (Date.now() >= deadline) {
+          setScriptMissing(true);
+          onError?.();
+          return;
+        }
         // Turnstile script hasn't loaded yet — poll briefly.
-        pollHandle = window.setTimeout(tryRender, 150);
+        pollHandle = window.setTimeout(tryRender, POLL_MS);
         return;
       }
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
@@ -81,6 +95,28 @@ export function TurnstileWidget({ onSuccess, onError }: TurnstileWidgetProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (scriptMissing) {
+    return (
+      <div
+        role="alert"
+        style={{
+          minHeight: 65,
+          width: '100%',
+          padding: '12px 14px',
+          border: `1px solid ${T.ink}`,
+          background: T.paper2,
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: T.ink,
+        }}
+      >
+        The verification check couldn't load. If you use an ad blocker, allow
+        challenges.cloudflare.com, then reload the page — or sign in, which skips
+        the check.
+      </div>
+    );
+  }
 
   return <div ref={containerRef} style={{ minHeight: 65, width: '100%' }} />;
 }

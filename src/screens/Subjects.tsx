@@ -132,12 +132,13 @@ export function Subjects({ onNavigate }: SubjectsProps) {
                 letterSpacing: '0.22em',
                 color: T.ink,
                 textTransform: 'uppercase',
-                whiteSpace: 'pre',
+                // Most taglines are full sentences, so this slot has to wrap.
+                // (The day label it replaced was one word held on one line.)
+                lineHeight: 1.7,
+                maxWidth: 520,
               }}
-              aria-label={dayLabel}
             >
-              {typedLabel}
-              {typedLabel.length < dayLabel.length && <span className="type-caret" aria-hidden />}
+              {tagline}
             </span>
             <span
               aria-hidden
@@ -145,6 +146,8 @@ export function Subjects({ onNavigate }: SubjectsProps) {
                 flex: 1,
                 height: 1,
                 background: T.ink,
+                // Floor it so a long tagline can't squeeze the rule to nothing.
+                minWidth: 24,
                 maxWidth: 240,
               }}
             />
@@ -174,9 +177,12 @@ export function Subjects({ onNavigate }: SubjectsProps) {
               margin: 0,
               maxWidth: 620,
               fontWeight: 600,
+              whiteSpace: 'pre',
             }}
+            aria-label={dayLabel}
           >
-            {tagline}
+            {typedLabel}
+            {typedLabel.length < dayLabel.length && <span className="type-caret" aria-hidden />}
           </p>
         </div>
 
