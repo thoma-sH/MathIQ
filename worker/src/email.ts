@@ -38,6 +38,13 @@ export async function consumeUnsubscribeToken(
   return userId;
 }
 
+/** Whether the token is live, without spending it. The confirmation page a
+ *  mail scanner or link prefetch might load must not unsubscribe anyone;
+ *  only the POST does. */
+export async function peekUnsubscribeToken(kv: KVNamespace, token: string): Promise<boolean> {
+  return (await kv.get(`${UNSUB_TOKEN_PREFIX}${token}`)) !== null;
+}
+
 export async function isUnsubscribed(
   kv: KVNamespace,
   userId: string,

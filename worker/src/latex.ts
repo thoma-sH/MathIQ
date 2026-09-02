@@ -408,11 +408,34 @@ export async function generateLatexFromMmd(params: {
 }
 
 /**
+ * Commands that read or write files, run code, or reach outside the
+ * document. None of them appear in math homework, and any of them in
+ * source sent to a third-party compiler makes the request an attack on
+ * that service under this project's name. Checked on the finished .tex
+ * right before it ships, so it covers the model-written path and the
+ * converter alike; also checked when homework text is saved, so the
+ * author hears about it then rather than at compile time.
+ */
+const UNSAFE_TEX =
+  /\\(?:input|include|InputIfFileExists|openin|openout|read|write|immediate|special|catcode|csname|directlua|ShellEscape|pdfobj|pdfstream|pdffiledump|pdfmdfivesum)(?![A-Za-z])/;
+
+export function hasUnsafeTex(src: string): boolean {
+  return UNSAFE_TEX.test(src);
+}
+
+/**
  * Submit a complete .tex source to TeXLive.net and get back the compiled
  * PDF as base64. Returns a structured result so the caller can show a
  * "Download .tex source" fallback when the compile fails.
  */
 export async function compileLatex(tex: string): Promise<LatexCompileResult> {
+  if (hasUnsafeTex(tex)) {
+    return {
+      ok: false,
+      status: 400,
+      detail: 'The LaTeX source uses a command that reads or writes files, which the compile service does not allow.',
+    };
+  }
   const form = new FormData();
   form.append('filename[]', 'document.tex');
   form.append('filecontents[]', tex);

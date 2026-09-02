@@ -41,6 +41,7 @@ import {
   inventDailyLimit,
   monthlyOpusLimit,
   OCR_DAILY,
+  parseIdList,
   resolveTier,
   SONNET,
   type ModelKey,
@@ -96,7 +97,7 @@ import {
   listHomeworkForUser,
   type HomeworkRecord,
 } from './homework';
-import { mmdToTex, wrapTexSource, compileLatex, generateLatexFromMmd } from './latex';
+import { mmdToTex, wrapTexSource, compileLatex, generateLatexFromMmd, hasUnsafeTex } from './latex';
 import { verifyAnswer } from './verify';
 import {
   generateExam,
@@ -122,6 +123,7 @@ import {
   isUnsubscribed,
   mintUnsubscribeToken,
   sendReminderEmail,
+  peekUnsubscribeToken,
 } from './email';
 import {
   consumeTrial,
@@ -2372,6 +2374,16 @@ async function handleHomeworkUpdate(
   if (body.mmd.length > 200_000) {
     return json({ error: 'mmd too large' }, 413, cors);
   }
+  if (hasUnsafeTex(body.mmd)) {
+    return json(
+      {
+        error: 'unsafe_latex',
+        message: 'That text uses a LaTeX command that reads or writes files, which the typesetter does not allow.',
+      },
+      400,
+      cors,
+    );
+  }
 
   const ok = await updateHomeworkMmd(env.USAGE, authState.userId, body.hwId, body.mmd);
   if (!ok) {
@@ -2707,11 +2719,7 @@ async function handleAdminRunReminders(
   if (authState.kind !== 'user') {
     return json({ error: 'unauthorized' }, 401, cors);
   }
-  const allowlist = (env.MAX_USER_IDS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (!allowlist.includes(authState.userId)) {
+  if (!parseIdList(env.MAX_USER_IDS).includes(authState.userId)) {
     return json({ error: 'forbidden' }, 403, cors);
   }
   const stats = await runStreakReminders(env);
@@ -2730,11 +2738,7 @@ async function handleAdminResetDailyCounters(
   if (authState.kind !== 'user') {
     return json({ error: 'unauthorized' }, 401, cors);
   }
-  const allowlist = (env.MAX_USER_IDS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (!allowlist.includes(authState.userId)) {
+  if (!parseIdList(env.MAX_USER_IDS).includes(authState.userId)) {
     return json({ error: 'forbidden' }, 403, cors);
   }
   const gradeCounter = userChallengeGradeCounter(env.USAGE_DO, authState.userId);
@@ -2846,11 +2850,7 @@ async function handleAdminCacheStats(
   if (authState.kind !== 'user') {
     return json({ error: 'unauthorized' }, 401, cors);
   }
-  const allowlist = (env.MAX_USER_IDS ?? '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (!allowlist.includes(authState.userId)) {
+  if (!parseIdList(env.MAX_USER_IDS).includes(authState.userId)) {
     return json({ error: 'forbidden' }, 403, cors);
   }
   const url = new URL(request.url);
@@ -2930,25 +2930,50 @@ async function handleUnsubscribe(request: Request, env: Env): Promise<Response> 
   const token = url.searchParams.get('t');
   if (!token) return unsubscribePage('Invalid unsubscribe link.', 400);
 
+  // A GET only confirms. Mail scanners, Safe Links, and link prefetch all
+  // follow URLs in email, and every one of them used to unsubscribe the
+  // reader and spend the token before the reader had clicked anything.
+  // Only the POST — the form button, or a mail client's one-click — acts.
+  if (request.method !== 'POST') {
+    if (!(await peekUnsubscribeToken(env.USAGE, token))) {
+      return unsubscribePage('That unsubscribe link has expired or already been used.', 400);
+    }
+    return unsubscribePage('Unsubscribe from MathIQ streak reminders?', 200, {
+      confirmAction: `${url.pathname}?t=${encodeURIComponent(token)}`,
+    });
+  }
+
   const userId = await consumeUnsubscribeToken(env.USAGE, token);
   if (!userId) {
-    return unsubscribePage(
-      'That unsubscribe link has expired or already been used.',
-      400,
-    );
+    return unsubscribePage('That unsubscribe link has expired or already been used.', 400);
   }
   // RFC 8058 one-click POST — Gmail/Outlook require a successful body-less
-  // response, not the HTML confirmation page that humans see.
-  if (request.method === 'POST') {
+  // response, not the HTML confirmation page that humans see. Their body
+  // is a few bytes; anything larger is not a mail client and isn't read.
+  const declared = Number(request.headers.get('content-length'));
+  const form = Number.isFinite(declared) && declared <= 4096 ? await request.text() : '';
+  if (form.includes('List-Unsubscribe=One-Click')) {
     return new Response('ok', { status: 200 });
   }
-  return unsubscribePage(
-    'You have been unsubscribed from MathIQ streak reminders.',
-    200,
-  );
+  return unsubscribePage('You have been unsubscribed from MathIQ streak reminders.', 200);
 }
 
-function unsubscribePage(message: string, status: number): Response {
+function unsubscribePage(
+  message: string,
+  status: number,
+  options: { confirmAction?: string } = {},
+): Response {
+  const esc = (s: string) =>
+    s.replace(/[&<>"']/g, (c) =>
+      c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
+    );
+  const confirm = options.confirmAction
+    ? `<form method="post" action="${esc(options.confirmAction)}" style="margin:0 0 20px;">
+    <button type="submit" style="background:#1a4d6e;color:#d4e26a;border:none;padding:12px 22px;font-weight:600;font-size:14px;cursor:pointer;">
+      Unsubscribe
+    </button>
+  </form>`
+    : '';
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2961,10 +2986,9 @@ function unsubscribePage(message: string, status: number): Response {
     MATHIQ
   </div>
   <h1 style="font-size:22px;font-weight:700;line-height:1.2;letter-spacing:-0.01em;margin:0 0 20px;">
-    ${message.replace(/[&<>"']/g, (c) =>
-      c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
-    )}
+    ${esc(message)}
   </h1>
+  ${confirm}
   <a href="https://mathiq.io/" style="display:inline-block;background:#1a4d6e;color:#d4e26a;padding:12px 22px;text-decoration:none;font-weight:600;font-size:14px;">
     Back to MathIQ &rarr;
   </a>

@@ -3,7 +3,9 @@ import {
   decideTier,
   dailyOpusLimit,
   monthlyOpusLimit,
+  ANONYMOUS_LIMIT,
   FREE_LIMIT,
+  parseIdList,
   PLUS_OPUS_DAILY,
   PLUS_TOTAL_DAILY,
   PLUS_OPUS_MONTHLY,
@@ -32,13 +34,14 @@ describe('dailyOpusLimit / monthlyOpusLimit', () => {
 });
 
 describe('decideTier — unpaid ceilings', () => {
-  it('serves anonymous one Haiku walkthrough, then nothing', () => {
+  it('serves anonymous Haiku up to ANONYMOUS_LIMIT, then nothing', () => {
     const first = decideTier('anonymous', 0);
     expect(first.model).toEqual(HAIKU);
-    expect(first.ceiling).toBe(1);
+    expect(first.ceiling).toBe(ANONYMOUS_LIMIT);
     expect(first.claimsOpus).toBe(false);
 
-    expect(decideTier('anonymous', 1).model).toBeNull();
+    expect(decideTier('anonymous', ANONYMOUS_LIMIT - 1).model).toEqual(HAIKU);
+    expect(decideTier('anonymous', ANONYMOUS_LIMIT).model).toBeNull();
   });
 
   it('serves free up to FREE_LIMIT, then nothing', () => {
@@ -157,5 +160,15 @@ describe('decideTier — the opusUsedToday fallback', () => {
     });
     expect(measured.model).toEqual(OPUS);
     expect(measured.claimsOpus).toBe(true);
+  });
+});
+
+describe('parseIdList', () => {
+  it('accepts commas, whitespace, or both, and drops empties', () => {
+    expect(parseIdList('user_a,user_b')).toEqual(['user_a', 'user_b']);
+    expect(parseIdList('user_a user_b')).toEqual(['user_a', 'user_b']);
+    expect(parseIdList(' user_a, user_b ,,\n')).toEqual(['user_a', 'user_b']);
+    expect(parseIdList('')).toEqual([]);
+    expect(parseIdList(undefined)).toEqual([]);
   });
 });

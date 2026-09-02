@@ -37,16 +37,19 @@ interface ResolveTierEnv {
   USAGE: KVNamespace;
 }
 
+/** Comma- or whitespace-separated Clerk user ids from an env var. The one
+ *  parser for every allowlist, so a list that grants a tier here can't be
+ *  read differently by an admin route. */
+export function parseIdList(raw: string | undefined): string[] {
+  return (raw ?? '').split(/[,\s]+/).filter(Boolean);
+}
+
 export async function resolveTier(
   authState: { kind: 'user'; userId: string } | { kind: 'anonymous' },
   env: ResolveTierEnv,
 ): Promise<Tier> {
   if (authState.kind === 'anonymous') return 'anonymous';
-  const inList = (raw: string | undefined) =>
-    (raw ?? '')
-      .split(/[,\s]+/)
-      .filter(Boolean)
-      .includes(authState.userId);
+  const inList = (raw: string | undefined) => parseIdList(raw).includes(authState.userId);
   if (inList(env.MAX_USER_IDS)) return 'pro';
   if (inList(env.PRO_USER_IDS)) return 'plus';
 
