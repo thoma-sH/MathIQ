@@ -6,7 +6,7 @@
  *   GET  /api/health       — no auth
  */
 import { COURSES, COURSES_BY_ID, findTopic } from './courses';
-import { authenticate, type AuthState } from './auth';
+import { allowedOrigins, authenticate, type AuthState } from './auth';
 import {
   anonChallengeGradeCounter,
   anonChallengeGradeGlobalCounter,
@@ -263,9 +263,7 @@ export default {
     }
 
     const origin = request.headers.get('Origin') ?? '';
-    const allowed = env.ALLOWED_ORIGINS.split(',')
-      .map((o) => o.trim())
-      .filter(Boolean);
+    const allowed = allowedOrigins(env, url);
     const originAllowed = !!origin && allowed.includes(origin);
     // Some endpoints are public-by-design and must work without an Origin
     // header. iframe loads and direct PDF downloads don't send Origin on
