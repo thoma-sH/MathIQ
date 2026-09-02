@@ -217,7 +217,12 @@ interface WalkthroughBody {
   topicId?: string;
   problem?: string;
   action?: 'walkthrough' | 'why-how' | 'practice' | 'invent';
-  walkthroughSoFar?: string;
+  /** For action='why-how': the whole walkthrough exactly as it streamed, and
+   *  how many characters of it precede the end of the step being explained.
+   *  The worker proves the text is its own before it becomes the assistant
+   *  turn, then slices it. */
+  walkthroughFull?: string;
+  sliceEnd?: number;
   /** Paid-tier model choice. 'max' burns a daily + monthly Opus slot,
    *  'standard' burns only a daily total slot. Absent or unrecognized means
    *  'auto' — the pre-picker behavior every older client sends. */
@@ -254,7 +259,7 @@ export default {
     ctx.waitUntil(runStreakReminders(env));
   },
 
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     // Webhook from Stripe is server-to-server; no Origin, no CORS.
@@ -302,7 +307,7 @@ export default {
     }
 
     if (request.method === 'POST' && url.pathname === '/api/walkthrough') {
-      return handleWalkthrough(request, env, cors);
+      return handleWalkthrough(request, env, cors, ctx);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/classify') {
@@ -534,6 +539,7 @@ async function handleWalkthrough(
   request: Request,
   env: Env,
   cors: Record<string, string>,
+  ctx: ExecutionContext,
 ): Promise<Response> {
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
@@ -644,17 +650,44 @@ async function handleWalkthrough(
 
   const body = parsedBody;
 
-  const { courseId, topicId, problem, action, walkthroughSoFar } = body;
+  const { courseId, topicId, problem, action, walkthroughFull, sliceEnd } = body;
   if (typeof problem === 'string' && problem.length > MAX_PROBLEM_CHARS) {
     return bail({ error: 'problem too long', limit: MAX_PROBLEM_CHARS }, 413);
   }
-  if (typeof walkthroughSoFar === 'string' && walkthroughSoFar.length > MAX_HISTORY_CHARS) {
+  if (typeof walkthroughFull === 'string' && walkthroughFull.length > MAX_HISTORY_CHARS) {
     return bail({ error: 'context too long', limit: MAX_HISTORY_CHARS }, 413);
   }
   const walkAction: 'walkthrough' | 'why-how' | 'practice' =
     action === 'why-how' ? 'why-how' : action === 'practice' ? 'practice' : 'walkthrough';
-  const walkthroughSoFarClean =
-    typeof walkthroughSoFar === 'string' ? walkthroughSoFar : undefined;
+
+  // Why-how replays the walkthrough as the assistant turn, so the text has
+  // to be text this worker streamed — otherwise the client gets to author
+  // what the model "already said". The hash was recorded as the walkthrough
+  // went out; a walkthrough from before that existed, or a prefix of a
+  // stream still in flight, has none and is refused rather than trusted.
+  let walkthroughSoFarClean: string | undefined;
+  if (walkAction === 'why-how') {
+    if (
+      typeof walkthroughFull !== 'string' ||
+      !walkthroughFull ||
+      !Number.isInteger(sliceEnd) ||
+      (sliceEnd as number) < 1 ||
+      (sliceEnd as number) > walkthroughFull.length
+    ) {
+      return bail({ error: 'walkthroughFull and sliceEnd required' }, 400);
+    }
+    const known = await env.USAGE.get(walkthroughHashKey(await sha256Hex(walkthroughFull)));
+    if (!known) {
+      return bail(
+        {
+          error: 'walkthrough_unverified',
+          message: "This walkthrough can't be expanded — run it again to ask why.",
+        },
+        403,
+      );
+    }
+    walkthroughSoFarClean = walkthroughFull.slice(0, sliceEnd as number);
+  }
   // Never 400s: an unknown value degrades to 'standard' rather than bricking
   // a client that shipped before this field existed.
   const difficulty = parsePracticeDifficulty(body.difficulty);
@@ -809,7 +842,13 @@ async function handleWalkthrough(
     }),
   };
 
-  return new Response(upstream.body.pipeThrough(normalizeLatexDelimiters()), {
+  // Record what goes out so a later why-how can prove its assistant turn is
+  // this text. Only walkthroughs are ever replayed that way; a why-how
+  // answer never is, so it isn't recorded.
+  const outgoing = upstream.body.pipeThrough(normalizeLatexDelimiters());
+  return new Response(
+    walkAction === 'why-how' ? outgoing : outgoing.pipeThrough(recordWalkthroughHash(env, ctx)),
+    {
     status: 200,
     headers: {
       ...cors,
@@ -1161,6 +1200,61 @@ async function readJson<T>(
   } catch {
     return { ok: false, response: json({ error: 'invalid JSON body' }, 400, cors) };
   }
+}
+
+const WALKTHROUGH_HASH_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+
+function walkthroughHashKey(hash: string): string {
+  return `wt:${hash}`;
+}
+
+async function sha256Hex(input: string | Uint8Array): Promise<string> {
+  const bytes = typeof input === 'string' ? new TextEncoder().encode(input) : input;
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Passes a walkthrough stream through untouched and, once it has ended,
+ * records a content hash of everything that went by. That hash is what a
+ * later why-how presents to prove the text it hands back as the assistant
+ * turn is text this worker produced. Recorded for every caller, signed in
+ * or not: a student who starts anonymously and signs in to ask why is the
+ * ordinary case, and the property being protected is where the text came
+ * from, not who first received it.
+ */
+function recordWalkthroughHash(
+  env: Env,
+  ctx: ExecutionContext,
+): TransformStream<Uint8Array, Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      chunks.push(chunk);
+      total += chunk.byteLength;
+      controller.enqueue(chunk);
+    },
+    flush() {
+      const bytes = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      ctx.waitUntil(
+        sha256Hex(bytes)
+          .then((hash) =>
+            env.USAGE.put(walkthroughHashKey(hash), '1', {
+              expirationTtl: WALKTHROUGH_HASH_TTL_SECONDS,
+            }),
+          )
+          .catch((err) => console.error('walkthrough hash record failed', err)),
+      );
+    },
+  });
 }
 
 // ─── Billing handlers ──────────────────────────────────────────────────

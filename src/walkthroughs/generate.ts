@@ -1,3 +1,4 @@
+import { track } from '../analytics/track';
 import type { Course, Topic } from './types';
 import type { PracticeDifficulty } from '../state/practiceDifficulty';
 
@@ -72,8 +73,12 @@ export interface GenerateRequest {
    *  step from the prior walkthrough; 'invent' = a fresh problem statement and
    *  nothing else, which costs no walkthrough slot. */
   action?: WalkthroughAction;
-  /** For action='why-how': the walkthrough text up to and including the step being explained. */
-  walkthroughSoFar?: string;
+  /** For action='why-how': the whole walkthrough exactly as it streamed, and
+   *  how many characters of it precede the end of the step being explained.
+   *  The worker verifies the text is its own before replaying it as the
+   *  assistant turn, then slices it. */
+  walkthroughFull?: string;
+  sliceEnd?: number;
   /** Paid-tier model choice. Omitted means the server decides as it always
    *  has. Free/anonymous callers are ignored server-side. */
   model?: ModelChoice;
@@ -83,29 +88,53 @@ export interface GenerateRequest {
 }
 
 export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<string> {
+  // Every walkthrough, why-how and invented problem funnels through here, so
+  // instrumenting this one function covers all three Topic.tsx call sites.
+  // `action` rides on every event so the funnel can separate them again.
+  const funnel = {
+    courseId: req.course.id,
+    topicId: req.topic.id,
+    action: req.action ?? 'walkthrough',
+  };
+  const startedAt = Date.now();
+  const since = () => Date.now() - startedAt;
+  const failed = (kind: string, extra?: Record<string, unknown>) =>
+    track('walkthrough_error', { ...funnel, kind, ms: since(), ...extra });
+  track('problem_submitted', funnel);
+
   const token = await req.getToken?.();
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const resp = await fetch(`${WORKER_URL}/api/walkthrough`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      courseId: req.course.id,
-      topicId: req.topic.id,
-      problem: req.problem,
-      action: req.action ?? 'walkthrough',
-      walkthroughSoFar: req.walkthroughSoFar,
-      model: req.model,
-      difficulty: req.difficulty,
-    }),
-    signal: req.signal,
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(`${WORKER_URL}/api/walkthrough`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        courseId: req.course.id,
+        topicId: req.topic.id,
+        problem: req.problem,
+        action: funnel.action,
+        walkthroughFull: req.walkthroughFull,
+        sliceEnd: req.sliceEnd,
+        model: req.model,
+        difficulty: req.difficulty,
+      }),
+      signal: req.signal,
+    });
+  } catch (e) {
+    // Offline, DNS, CORS — or the student navigated away before the worker
+    // answered, which is a drop-off worth seeing rather than swallowing.
+    failed(isAbort(e) ? 'aborted' : 'network');
+    throw e;
+  }
 
   emitRateLimit(resp, req.onRateLimitInfo);
 
   if (resp.status === 401) {
     const body = await resp.json().catch(() => ({})) as { message?: string };
+    failed('sign_in_required');
     throw new WalkthroughError(
       'sign_in_required',
       body.message ?? 'Sign in to continue.',
@@ -118,6 +147,7 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
       used?: number;
       resetAt?: string;
     };
+    failed('rate_limit', { limit: body.limit, used: body.used });
     throw new WalkthroughError(
       'rate_limit',
       `You've used your ${body.limit ?? 'daily'} walkthroughs.`,
@@ -127,13 +157,17 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
 
   if (!resp.ok || !resp.body) {
     let detail = '';
+    let message = '';
     try {
-      const body = (await resp.json()) as { error?: string; detail?: string };
+      const body = (await resp.json()) as { error?: string; detail?: string; message?: string };
       detail = body.detail ?? body.error ?? '';
+      message = body.message ?? '';
     } catch {
       // ignore
     }
-    throw new WalkthroughError('other', `Walkthrough failed: ${resp.status}`, {
+    failed('other', { status: resp.status, detail });
+    // The worker's own copy when it wrote some; the status otherwise.
+    throw new WalkthroughError('other', message || `Walkthrough failed: ${resp.status}`, {
       status: resp.status,
       detail,
     });
@@ -141,12 +175,32 @@ export async function* streamWalkthrough(req: GenerateRequest): AsyncGenerator<s
 
   const reader = resp.body.getReader();
   const decoder = new TextDecoder();
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    if (chunk) yield chunk;
+  let chars = 0;
+  let done = false;
+  try {
+    while (true) {
+      const read = await reader.read();
+      if (read.done) break;
+      const chunk = decoder.decode(read.value, { stream: true });
+      if (!chunk) continue;
+      // Time to first token is the number that predicts whether anyone waits
+      // around for the second one.
+      if (chars === 0) track('walkthrough_first_token', { ...funnel, ttft_ms: since() });
+      chars += chunk.length;
+      yield chunk;
+    }
+    done = true;
+    track('walkthrough_completed', { ...funnel, ms: since(), chars });
+  } finally {
+    // The consumer broke out of its for-await — navigated away, hit stop, or
+    // threw. Reaching the end of a stream and abandoning it mid-answer look
+    // identical in a page-view metric and mean opposite things here.
+    if (!done) failed('abandoned', { chars });
   }
+}
+
+function isAbort(e: unknown): boolean {
+  return e instanceof DOMException ? e.name === 'AbortError' : false;
 }
 
 function emitRateLimit(

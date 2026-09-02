@@ -92,13 +92,17 @@ interface ParsedStream {
   preamble: string | null;
   /** Segments where the *next* marker has arrived, or stream is done. */
   complete: string[];
+  /** For each complete segment, where it ends in the raw buffer — so a
+   *  why-how can name "everything through this step" as an offset into the
+   *  text exactly as it streamed, rather than re-joining trimmed pieces. */
+  ends: number[];
   /** Currently-arriving last segment, while streaming. Null when done or no markers seen. */
   streamingTail: string | null;
 }
 
 function parseStream(buffer: string, done: boolean): ParsedStream {
   if (!buffer.trim()) {
-    return { preamble: null, complete: [], streamingTail: null };
+    return { preamble: null, complete: [], ends: [], streamingTail: null };
   }
   const positions: number[] = [];
   STEP_MARKER.lastIndex = 0;
@@ -109,20 +113,23 @@ function parseStream(buffer: string, done: boolean): ParsedStream {
     // opening line renders as it arrives; on done with no markers at all,
     // treat the whole thing as a single complete segment.
     return done
-      ? { preamble: null, complete: [buffer.trim()], streamingTail: null }
-      : { preamble: buffer.trim() || null, complete: [], streamingTail: null };
+      ? { preamble: null, complete: [buffer.trim()], ends: [buffer.length], streamingTail: null }
+      : { preamble: buffer.trim() || null, complete: [], ends: [], streamingTail: null };
   }
   const preamble = buffer.slice(0, positions[0]).trim() || null;
   const complete: string[] = [];
+  const ends: number[] = [];
   for (let i = 0; i < positions.length - 1; i++) {
     complete.push(buffer.slice(positions[i], positions[i + 1]).trim());
+    ends.push(positions[i + 1]);
   }
   const tail = buffer.slice(positions[positions.length - 1]).trim();
   if (done) {
     complete.push(tail);
-    return { preamble, complete, streamingTail: null };
+    ends.push(buffer.length);
+    return { preamble, complete, ends, streamingTail: null };
   }
-  return { preamble, complete, streamingTail: tail };
+  return { preamble, complete, ends, streamingTail: tail };
 }
 
 /**
@@ -662,10 +669,11 @@ export function TopicScreen({
     setStreaming({ kind: 'why-how', index });
     setWhyHowStream({ index, text: '' });
 
-    // Send the walkthrough text up to and including the target step.
-    // Prepend the preamble so practice-mode why-how sees the problem statement.
-    const steps = parsed.complete.slice(0, index + 1).join('\n\n');
-    const cumulative = parsed.preamble ? `${parsed.preamble}\n\n${steps}` : steps;
+    // The worker slices the walkthrough itself, from the text exactly as it
+    // streamed, so it can prove the assistant turn is its own before
+    // replaying it. `ends` is where the target step stops in that raw text;
+    // the preamble comes along because it precedes the first step.
+    const sliceEnd = parsed.ends[index];
 
     let accumulated = '';
     try {
@@ -677,7 +685,8 @@ export function TopicScreen({
         getToken,
         onRateLimitInfo: handleRateInfo,
         action: 'why-how',
-        walkthroughSoFar: cumulative,
+        walkthroughFull: buffer,
+        sliceEnd,
         // A follow-up explanation isn't worth a Max slot.
         model: 'standard',
       })) {
