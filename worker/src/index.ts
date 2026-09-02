@@ -196,6 +196,17 @@ const MAX_PROBLEM_CHARS = 8000;       // a generous math problem
 const MAX_HISTORY_CHARS = 60000;      // walkthrough-so-far for why/how
 const MAX_CLASSIFY_CHARS = 2000;      // classifier input
 
+// Byte budgets for JSON bodies, enforced on the wire by readJson rather than
+// on Content-Length, which a chunked request simply omits. Sized from the
+// character caps with room for multi-byte text and the JSON wrapper — the
+// point is a hard ceiling on what gets buffered, not a tight one.
+const MAX_SMALL_BODY_BYTES = 16 * 1024;              // ids, flags, price keys
+const MAX_CLASSIFY_BODY_BYTES = 32 * 1024;
+const MAX_VERIFY_BODY_BYTES = 256 * 1024;
+const MAX_WALKTHROUGH_BODY_BYTES = 512 * 1024;
+const MAX_HISTORY_BODY_BYTES = 512 * 1024;
+const MAX_HOMEWORK_UPDATE_BODY_BYTES = 1024 * 1024;
+
 // Daily Challenge ceilings. Per-user/IP rate limits are 1/day; the global
 // ceiling is the backstop against distributed abuse on the anonymous path.
 const ANON_CHALLENGE_GRADE_GLOBAL_DAILY_CAP = 500;
@@ -538,21 +549,20 @@ async function handleWalkthrough(
 
   // Gate Why/How to paid tiers — Free signed-in can spend one of their
   // lifetime whyHow trials to taste the feature.
-  let parsedBody: WalkthroughBody | null = null;
-  try {
-    parsedBody = (await request.clone().json()) as WalkthroughBody;
-  } catch {
-    // We'll re-parse below and surface the error there.
-  }
+  // One bounded read of the body, before any counter is touched. Too large or
+  // not JSON is answered here; nothing below re-parses.
+  const read = await readJson<WalkthroughBody>(request, MAX_WALKTHROUGH_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const parsedBody = read.body;
   // Inventing a practice problem never touches the walkthrough quota, so it
   // has to leave this path before the first counter round trip below — not
   // even a peek.
-  if (parsedBody?.action === 'invent') {
+  if (parsedBody.action === 'invent') {
     return handleInvent(request, env, cors, authState, tier, parsedBody);
   }
 
   let whyHowAccess: AccessResult | null = null;
-  if (parsedBody?.action === 'why-how') {
+  if (parsedBody.action === 'why-how') {
     whyHowAccess = await ensureFeatureAccess(env, authState, tier, 'whyHow', 'plus', cors);
     if (!whyHowAccess.ok) return whyHowAccess.response;
   }
@@ -577,9 +587,8 @@ async function handleWalkthrough(
       ? userOpusMonthlyCounter(env.USAGE_DO, authState.userId)
       : null;
 
-  // The model decision has to happen before the authoritative request.json()
-  // below, so read the preference off the clone already parsed for why-how.
-  let preference = parseModelPreference(parsedBody?.model, tier);
+  // The model decision has to happen before the daily slot is claimed below.
+  const preference = parseModelPreference(parsedBody.model, tier);
 
   const [usedToday, opusUsedToday, opusUsedMonth] = await Promise.all([
     peek(counter),
@@ -634,12 +643,7 @@ async function handleWalkthrough(
     );
   }
 
-  let body: WalkthroughBody;
-  try {
-    body = await request.json();
-  } catch {
-    return bail({ error: 'invalid JSON body' }, 400);
-  }
+  const body = parsedBody;
 
   const { courseId, topicId, problem, action, walkthroughSoFar } = body;
   if (typeof problem === 'string' && problem.length > MAX_PROBLEM_CHARS) {
@@ -664,10 +668,6 @@ async function handleWalkthrough(
     return bail({ error: 'unknown course or topic' }, 404);
   }
   const { course, topic } = found;
-
-  // Re-derive the preference from the authoritative parse. Identical to the
-  // clone in practice; this just removes any doubt about which body won.
-  preference = parseModelPreference(body.model, tier);
 
   // Claim 1 of 3 — the daily total slot. Atomic increment: the DO is
   // single-threaded per id, so concurrent requests can't both commit the
@@ -842,12 +842,9 @@ async function handleClassify(
     );
   }
 
-  let body: ClassifyBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<ClassifyBody>(request, MAX_CLASSIFY_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
 
   const { problem } = body;
   if (!problem?.trim()) {
@@ -1123,6 +1120,50 @@ function json(body: unknown, status: number, cors: Record<string, string>) {
   });
 }
 
+/**
+ * Reads a JSON body under a hard byte budget. The budget is enforced on the
+ * bytes actually received, so a request that omits Content-Length (chunked
+ * transfer, a streamed fetch body) is cut off at the same line as one that
+ * declares it. Returns either the parsed body or the 413 / 400 to send.
+ */
+async function readJson<T>(
+  request: Request,
+  maxBytes: number,
+  cors: Record<string, string>,
+): Promise<{ ok: true; body: T } | { ok: false; response: Response }> {
+  const tooLarge = () => ({
+    ok: false as const,
+    response: json({ error: 'request too large', limit: maxBytes }, 413, cors),
+  });
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) return tooLarge();
+  const reader = request.body?.getReader();
+  if (!reader) return { ok: false, response: json({ error: 'invalid JSON body' }, 400, cors) };
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return { ok: true, body: JSON.parse(new TextDecoder().decode(bytes)) as T };
+  } catch {
+    return { ok: false, response: json({ error: 'invalid JSON body' }, 400, cors) };
+  }
+}
+
 // ─── Billing handlers ──────────────────────────────────────────────────
 
 async function handleBillingState(
@@ -1185,12 +1226,9 @@ async function handleBillingCheckout(
     return json({ error: 'sign_in_required' }, 401, cors);
   }
 
-  let body: CheckoutBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<CheckoutBody>(request, MAX_SMALL_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (body.tier !== 'plus' && body.tier !== 'pro') {
     return json({ error: 'invalid tier' }, 400, cors);
   }
@@ -1378,12 +1416,9 @@ async function handleHistorySave(
   if (authState.kind !== 'user') {
     return json({ error: 'sign_in_required' }, 401, cors);
   }
-  let body: HistorySaveBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<HistorySaveBody>(request, MAX_HISTORY_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (!body.courseId || !body.topicId || typeof body.walkthrough !== 'string') {
     return json({ error: 'courseId, topicId, walkthrough required' }, 400, cors);
   }
@@ -1458,12 +1493,9 @@ async function handleHistoryDelete(
   if (authState.kind !== 'user') {
     return json({ error: 'sign_in_required' }, 401, cors);
   }
-  let body: HistoryDeleteBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<HistoryDeleteBody>(request, MAX_SMALL_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (!body.id) return json({ error: 'id required' }, 400, cors);
   await deleteHistory(env.USAGE, authState.userId, body.id);
   return json({ ok: true }, 200, cors);
@@ -1483,20 +1515,10 @@ const ALLOWED_GRADE_MEDIA = new Set([
 ]);
 const MAX_GRADE_BASE64_CHARS = 20 * 1024 * 1024;    // ~15MB raw — PDFs run larger
 
-// Content-length ceilings used to 413 oversized uploads before request.json()
-// parses the body. The +4 KiB covers JSON wrapper overhead.
+// Byte budgets for the upload endpoints, enforced by readJson. The +4 KiB
+// covers the JSON wrapper around the base64 payload.
 const MAX_OCR_BODY_BYTES = MAX_OCR_BASE64_CHARS + 4096;
 const MAX_GRADE_BODY_BYTES = MAX_GRADE_BASE64_CHARS + 4096;
-
-function assertContentLength(
-  request: Request,
-  max: number,
-  cors: Record<string, string>,
-): Response | null {
-  const cl = Number(request.headers.get('content-length') ?? 0);
-  if (cl > max) return json({ error: 'request too large', limit: max }, 413, cors);
-  return null;
-}
 
 interface OcrBody {
   image?: string;
@@ -1508,20 +1530,15 @@ async function handleOcr(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
-  const tooLarge = assertContentLength(request, MAX_OCR_BODY_BYTES, cors);
-  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
   }
   const tier: Tier = await resolveTier(authState, env);
 
-  let body: OcrBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<OcrBody>(request, MAX_OCR_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (!body.image || typeof body.image !== 'string') {
     return json({ error: 'image required' }, 400, cors);
   }
@@ -1605,12 +1622,9 @@ async function handleVerify(
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
   }
 
-  let body: VerifyBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<VerifyBody>(request, MAX_VERIFY_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (!body.walkthrough || typeof body.walkthrough !== 'string') {
     return json({ error: 'walkthrough required' }, 400, cors);
   }
@@ -1686,13 +1700,12 @@ async function handleExamGenerate(
   const examGenAccess = await ensureFeatureAccess(env, authState, tier, 'examGen', 'pro', cors);
   if (!examGenAccess.ok) return examGenAccess.response;
 
-  let body: ExamGenerateBody;
-  try {
-    body = await request.json();
-  } catch {
+  const read = await readJson<ExamGenerateBody>(request, MAX_SMALL_BODY_BYTES, cors);
+  if (!read.ok) {
     if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
-    return json({ error: 'invalid JSON body' }, 400, cors);
+    return read.response;
   }
+  const body = read.body;
   if (!body.courseId || typeof body.courseId !== 'string') {
     if (examGenAccess.trialConsumed) await refundAccess(env, authState, examGenAccess);
     return json({ error: 'courseId required' }, 400, cors);
@@ -1841,8 +1854,6 @@ async function handleExamGrade(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
-  const tooLarge = assertContentLength(request, MAX_GRADE_BODY_BYTES, cors);
-  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
@@ -1855,13 +1866,12 @@ async function handleExamGrade(
   const examGradeAccess = await ensureFeatureAccess(env, authState, tier, 'examGrade', 'pro', cors);
   if (!examGradeAccess.ok) return examGradeAccess.response;
 
-  let body: ExamGradeBody;
-  try {
-    body = await request.json();
-  } catch {
+  const read = await readJson<ExamGradeBody>(request, MAX_GRADE_BODY_BYTES, cors);
+  if (!read.ok) {
     if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
-    return json({ error: 'invalid JSON body' }, 400, cors);
+    return read.response;
   }
+  const body = read.body;
   if (!body.examId || typeof body.examId !== 'string') {
     if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json({ error: 'examId required' }, 400, cors);
@@ -2056,8 +2066,6 @@ async function handleHomeworkTranscribe(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
-  const tooLarge = assertContentLength(request, MAX_GRADE_BODY_BYTES, cors);
-  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
@@ -2070,13 +2078,12 @@ async function handleHomeworkTranscribe(
   const transcribeAccess = await ensureFeatureAccess(env, authState, tier, 'handwrittenPdf', 'plus', cors);
   if (!transcribeAccess.ok) return transcribeAccess.response;
 
-  let body: HomeworkTranscribeBody;
-  try {
-    body = await request.json();
-  } catch {
+  const read = await readJson<HomeworkTranscribeBody>(request, MAX_GRADE_BODY_BYTES, cors);
+  if (!read.ok) {
     if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
-    return json({ error: 'invalid JSON body' }, 400, cors);
+    return read.response;
   }
+  const body = read.body;
   if (!body.image || typeof body.image !== 'string') {
     if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json({ error: 'image required' }, 400, cors);
@@ -2207,12 +2214,9 @@ async function handleHomeworkUpdate(
     return json({ error: 'upgrade_required' }, 403, cors);
   }
 
-  let body: HomeworkUpdateBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<HomeworkUpdateBody>(request, MAX_HOMEWORK_UPDATE_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (!body.hwId || typeof body.hwId !== 'string') {
     return json({ error: 'hwId required' }, 400, cors);
   }
@@ -2293,12 +2297,9 @@ async function handleHomeworkLatexPdf(
 
   const tier = await resolveTier(authState, env);
 
-  let body: HomeworkLatexBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<HomeworkLatexBody>(request, MAX_SMALL_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   if (!body.hwId || typeof body.hwId !== 'string') {
     return json({ error: 'hwId required' }, 400, cors);
   }
@@ -2879,19 +2880,14 @@ async function handleChallengeGrade(
   env: Env,
   cors: Record<string, string>,
 ): Promise<Response> {
-  const tooLarge = assertContentLength(request, MAX_GRADE_BODY_BYTES, cors);
-  if (tooLarge) return tooLarge;
   const authState = await authenticate(request, env);
   if (authState.kind === 'invalid') {
     return json({ error: 'invalid_token', message: authState.message }, 401, cors);
   }
 
-  let body: ChallengeGradeBody;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: 'invalid JSON body' }, 400, cors);
-  }
+  const read = await readJson<ChallengeGradeBody>(request, MAX_GRADE_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+  const body = read.body;
   const typedAnswer: string | null =
     typeof body.studentAnswer === 'string' && body.studentAnswer.trim().length > 0
       ? body.studentAnswer.trim()
