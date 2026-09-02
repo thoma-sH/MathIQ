@@ -156,6 +156,14 @@ export const AUX_DAILY_USER = 60;
  */
 export const OCR_DAILY = 40;
 
+/**
+ * Daily per-IP ceiling on funnel events. A real session raises well under a
+ * hundred — a route view per screen, plus four per walkthrough — so this is
+ * generous for a shared campus address and still bounds what one caller can
+ * write to KV. Costs nothing upstream: no model is involved.
+ */
+export const EVENT_DAILY_IP = 500;
+
 // `satisfies` rather than a `: ModelKey` annotation so `HAIKU.id` stays the
 // single Haiku literal. Callers that pin the model (see handleInvent) need the
 // narrow type; widening it to the whole union would make them reach for a cast.

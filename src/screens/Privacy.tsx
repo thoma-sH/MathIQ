@@ -1,6 +1,6 @@
 import { T } from '../design/tokens';
 
-const LAST_UPDATED = 'May 11, 2026';
+const LAST_UPDATED = 'September 1, 2026';
 
 export function Privacy() {
   return (
@@ -87,7 +87,7 @@ export function Privacy() {
       </Section>
 
       <Section title="Cookies and storage">
-        We use localStorage for small preferences (walkthrough pace setting, dismissed install prompt). Clerk uses cookies for authentication. We use Vercel Web Analytics — a cookieless, privacy-friendly aggregate visit counter that does not track individuals. The TikTok ad-measurement pixel described above is the one exception: it can set advertising cookies to attribute visits to TikTok ads.
+        We use localStorage for small preferences (walkthrough pace setting, dismissed install prompt, and a random id that lets us count how far a visit got before it stopped — no third party sees it, and signing out replaces it). Clerk uses cookies for authentication. Vercel Web Analytics is a cookieless aggregate visit counter that does not track individuals. The TikTok ad-measurement pixel described above is the one thing here that can set advertising cookies, to attribute visits to TikTok ads.
       </Section>
 
       <Section title="Security">

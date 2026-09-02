@@ -69,6 +69,9 @@ export const KEY_PROMPT_FLOW = 'promptFlow';
 export const KEY_WALKTHROUGH_SESSION = 'walkthroughSession';
 // Preferred difficulty for generated practice problems.
 export const KEY_PRACTICE_DIFFICULTY = 'practiceDifficulty';
+// Opaque per-device id for the first-party funnel. Not an identifier of a
+// person: it is reset on sign-out and carries nothing but itself.
+export const KEY_ANALYTICS_SID = 'analyticsSid';
 // Appearance. Three values because "follow my device" has to know which light
 // and which dark palette to switch between. See src/state/theme.ts.
 export const KEY_THEME_MODE = 'themeMode';

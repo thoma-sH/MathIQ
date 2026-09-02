@@ -181,6 +181,16 @@ async function callCounter(ref: CounterRef, path: '/peek' | '/inc' | '/dec'): Pr
   return body.count;
 }
 
+/** Daily per-IP cap on funnel events. The endpoint has to be open — the first
+ *  steps of the funnel happen before anyone signs in — so this is what stops
+ *  an open KV write from being an open KV write. */
+export function anonEventDailyCounter(
+  ns: DurableObjectNamespace,
+  ip: string,
+): CounterRef {
+  return { ns, name: `anon:${ip}:event:${dateKey()}` };
+}
+
 export async function peek(ref: CounterRef): Promise<number> {
   return callCounter(ref, '/peek');
 }

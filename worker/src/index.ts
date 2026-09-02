@@ -11,6 +11,7 @@ import {
   anonChallengeGradeCounter,
   anonChallengeGradeGlobalCounter,
   anonClassifyDailyCounter,
+  anonEventDailyCounter,
   anonInventDailyCounter,
   anonVerifyDailyCounter,
   anonymousCounter,
@@ -32,11 +33,13 @@ import {
   type CounterRef,
 } from './rateLimit';
 export { UsageCounter } from './counterDO';
+import { parseEventBody, readFunnel, recordEvent } from './events';
 import {
   AUX_DAILY_ANON,
   AUX_DAILY_USER,
   dailyOpusLimit,
   decideTier,
+  EVENT_DAILY_IP,
   HAIKU,
   inventDailyLimit,
   monthlyOpusLimit,
@@ -414,6 +417,14 @@ export default {
 
     if (request.method === 'GET' && url.pathname === '/api/admin/cache-stats') {
       return handleAdminCacheStats(request, env, cors);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/api/admin/funnel') {
+      return handleAdminFunnel(request, env, cors);
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/event') {
+      return handleEvent(request, env, cors);
     }
 
     if (request.method === 'POST' && url.pathname === '/api/homework/transcribe') {
@@ -2841,6 +2852,62 @@ async function recordCacheMetrics(
 
 /** Returns the last N days of cache-hit metrics. Gated by MAX_USER_IDS so the
  *  endpoint stays admin-only. Default window is 7 days; ?days=30 widens it. */
+/** Bodies are one small JSON object; anything larger is not one of ours. */
+const MAX_EVENT_BODY_BYTES = 4096;
+
+/**
+ * One funnel step from the client.
+ *
+ * Open by necessity — the first two steps happen before anyone signs in — so
+ * it is bounded instead: a fixed event allowlist, a shape-checked session id,
+ * whitelisted props, a 4 KB body, and a per-IP daily cap. Answers 204 with no
+ * body; the client never reads the response.
+ */
+async function handleEvent(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const read = await readJson<unknown>(request, MAX_EVENT_BODY_BYTES, cors);
+  if (!read.ok) return read.response;
+
+  const parsed = parseEventBody(read.body);
+  if (!parsed.ok) return json({ error: 'bad_event', detail: parsed.reason }, 400, cors);
+
+  const counter = anonEventDailyCounter(
+    env.USAGE_DO,
+    request.headers.get('CF-Connecting-IP') ?? 'unknown',
+  );
+  const used = await increment(counter);
+  if (used > EVENT_DAILY_IP) {
+    await decrement(counter);
+    return json({ error: 'rate_limit' }, 429, cors);
+  }
+
+  await recordEvent(env.USAGE, parsed.value);
+  return new Response(null, { status: 204, headers: cors });
+}
+
+/** Distinct sessions per funnel step. Read by curl; nothing in the app calls
+ *  it. Same auth and allowlist gate as the cache stats beside it. */
+async function handleAdminFunnel(
+  request: Request,
+  env: Env,
+  cors: Record<string, string>,
+): Promise<Response> {
+  const authState = await authenticate(request, env);
+  if (authState.kind !== 'user') {
+    return json({ error: 'unauthorized' }, 401, cors);
+  }
+  if (!parseIdList(env.MAX_USER_IDS).includes(authState.userId)) {
+    return json({ error: 'forbidden' }, 403, cors);
+  }
+  const url = new URL(request.url);
+  const requested = Number(url.searchParams.get('days') ?? '7');
+  const days = Math.min(Math.max(Number.isFinite(requested) ? requested : 7, 1), 30);
+  return json(await readFunnel(env.USAGE, days), 200, cors);
+}
+
 async function handleAdminCacheStats(
   request: Request,
   env: Env,

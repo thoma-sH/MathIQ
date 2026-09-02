@@ -1,5 +1,6 @@
-import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { useUser } from '@clerk/clerk-react';
 import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
 import { Landing } from './screens/Landing';
@@ -7,6 +8,7 @@ import { UpgradeProvider } from './upgrade/UpgradePrompt';
 import { T } from './design/tokens';
 import { COURSES_BY_ID } from './walkthroughs/courses';
 import { readSession } from './state/walkthroughSession';
+import { identify, resetIdentity, track } from './analytics/track';
 import type { Route } from './router';
 
 // All non-home screens are split off into their own chunks so the initial
@@ -142,10 +144,36 @@ const REAL_URL_TITLES: Record<RealUrl['kind'], string> = {
   share: 'Shared challenge · MathIQ',
 };
 
+// Ties the anonymous pre-sign-in session to the Clerk user so a drop-off maps
+// to someone we can go ask. Lives above the realPath branch so it runs for
+// every surface.
+function useAnalyticsIdentity(): void {
+  const { isLoaded, isSignedIn, user } = useUser();
+  const userId = user?.id;
+  // Only a real sign-out clears the identity. Resetting whenever we merely
+  // *observe* a signed-out visitor would mint a fresh anonymous id on every
+  // page load and shatter each tester into a hundred one-step funnels.
+  const wasSignedIn = useRef(false);
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (isSignedIn && userId) {
+      wasSignedIn.current = true;
+      identify(userId);
+    } else if (wasSignedIn.current) {
+      wasSignedIn.current = false;
+      resetIdentity();
+    }
+  }, [isLoaded, isSignedIn, userId]);
+}
+
 export default function App() {
   const realPath = getRealUrlPath();
+  useAnalyticsIdentity();
   useEffect(() => {
     if (realPath) document.title = REAL_URL_TITLES[realPath.kind];
+    // The route_view for internal routes is emitted by MathIQApp; this branch
+    // never reaches it, so the marketing/legal pages report themselves here.
+    if (realPath) track('route_view', { route: realPath.kind });
     // realPath is derived from location.pathname, which never changes without
     // a full navigation — mount-only is correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -238,6 +266,17 @@ function MathIQApp() {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [route]);
+
+  // One event per internal route change. courseId/topicId ride along so the
+  // funnel can tell "picked a course, never typed a problem" from "never
+  // picked a course".
+  useEffect(() => {
+    track('route_view', {
+      route: route.name,
+      courseId: 'courseId' in route ? route.courseId : undefined,
+      topicId: 'topicId' in route ? route.topicId : undefined,
+    });
   }, [route]);
 
   useEffect(() => {
