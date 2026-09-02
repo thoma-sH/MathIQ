@@ -40,6 +40,7 @@ import {
   dailyOpusLimit,
   decideTier,
   EVENT_DAILY_IP,
+  FREE_LIMIT,
   HAIKU,
   inventDailyLimit,
   monthlyOpusLimit,
@@ -641,7 +642,9 @@ async function handleWalkthrough(
       return bail(
         {
           error: 'sign_in_required',
-          message: `You've used your ${decision.ceiling} free walkthroughs. Sign in to keep going.`,
+          // Names what signing in actually buys. It can only do that while
+          // FREE_LIMIT is the larger number — see the constants.
+          message: `You've used your ${decision.ceiling} free walkthroughs. Sign in for ${FREE_LIMIT}/day.`,
           limit: decision.ceiling,
           used: usedToday,
           resetAt: nextMidnightUtc(),

@@ -1062,10 +1062,10 @@ function SignedOutCard() {
     >
       <div style={kicker()}>NOT SIGNED IN</div>
       <div style={{ fontSize: 19, fontWeight: 500, lineHeight: 1.35, marginBottom: 8 }}>
-        You get 1 free walkthrough per day.
+        You get 3 free walkthroughs per day.
       </div>
       <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5, marginBottom: 16 }}>
-        Sign in (email magic link, no password) for 3 walkthroughs/day.
+        Sign in (email magic link, no password) for 5 walkthroughs/day.
       </div>
       <SignInButton mode="modal">
         <button

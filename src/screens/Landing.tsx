@@ -725,7 +725,7 @@ const SHOWCASE: ShowcaseEntry[] = [
     tier: 'Free',
     tierColor: 'var(--muted)',
     title: 'Step-by-step walkthroughs',
-    sub: 'Iris explains every move — not just the answer. Three free per day across nine college subjects.',
+    sub: 'Iris explains every move — not just the answer. Five free per day across nine college subjects.',
     deep: 'Each step lands one line at a time with a short note on why that move is the right one. You set the pace — tap forward when you\'re ready, back up, or jump ahead. Spans algebra, precalc, calc 1/2/3, discrete, combinatorics, linear algebra, and number theory.',
     cta: { kind: 'route', label: 'Pick a subject', route: { name: 'subjects' } },
   },

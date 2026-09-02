@@ -108,8 +108,13 @@ export interface TierDecision {
   downgradeReason?: 'user' | 'daily' | 'monthly';
 }
 
-export const ANONYMOUS_LIMIT = 5;
-export const FREE_LIMIT = 3;
+/**
+ * Anonymous has to stay below free, or signing in is a downgrade and the
+ * prompt that asks for it is pitching one. Three is enough to decide whether
+ * Iris is any good; the fourth is what an account is for.
+ */
+export const ANONYMOUS_LIMIT = 3;
+export const FREE_LIMIT = 5;
 
 export const PLUS_OPUS_DAILY = 5;
 export const PLUS_TOTAL_DAILY = 25;
