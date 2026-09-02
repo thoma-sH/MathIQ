@@ -1012,8 +1012,13 @@ export const COURSES: Course[] = [
   },
 ];
 
-export const COURSES_BY_ID: Record<string, Course> = Object.fromEntries(
-  COURSES.map((c) => [c.id, c]),
+// Null prototype, so a lookup by a route- or storage-supplied id like
+// 'constructor' or '__proto__' comes back undefined instead of an
+// Object.prototype member. Those are truthy and have no `topics`, which is
+// a TypeError at boot from a tampered session snapshot.
+export const COURSES_BY_ID: Record<string, Course> = Object.assign(
+  Object.create(null) as Record<string, Course>,
+  Object.fromEntries(COURSES.map((c) => [c.id, c])),
 );
 
 export function topicById(courseId: string, topicId: string): Topic | undefined {

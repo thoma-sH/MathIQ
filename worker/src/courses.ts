@@ -192,8 +192,13 @@ export const COURSES: Course[] = [
   },
 ];
 
-export const COURSES_BY_ID: Record<string, Course> = Object.fromEntries(
-  COURSES.map((c) => [c.id, c]),
+// Null prototype, so a lookup by a client-supplied id like 'constructor' or
+// '__proto__' comes back undefined instead of an Object.prototype member.
+// Those are truthy, have no `topics`, and threw a TypeError deep inside
+// handlers that had already spent the caller's quota.
+export const COURSES_BY_ID: Record<string, Course> = Object.assign(
+  Object.create(null) as Record<string, Course>,
+  Object.fromEntries(COURSES.map((c) => [c.id, c])),
 );
 
 export function findTopic(courseId: string, topicId: string): { course: Course; topic: Topic } | null {
