@@ -1,6 +1,6 @@
 const WORKER_URL = import.meta.env.VITE_WORKER_URL ?? 'http://localhost:8787';
 
-export type OcrErrorKind = 'sign_in_required' | 'upgrade_required' | 'too_large' | 'unsupported' | 'not_a_math_problem' | 'other';
+export type OcrErrorKind = 'sign_in_required' | 'upgrade_required' | 'rate_limit' | 'too_large' | 'unsupported' | 'not_a_math_problem' | 'other';
 
 export class OcrError extends Error {
   kind: OcrErrorKind;
@@ -58,6 +58,9 @@ export async function extractProblemFromImage(
   }
   if (resp.status === 413) {
     throw new OcrError('too_large', 'Image is too large — try a smaller photo.');
+  }
+  if (resp.status === 429) {
+    throw new OcrError('rate_limit', "You've hit today's photo-scan limit — try again tomorrow.");
   }
   if (resp.status === 400) {
     throw new OcrError('unsupported', 'Unsupported image format. Use JPG, PNG, or WebP.');

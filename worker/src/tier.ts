@@ -105,7 +105,7 @@ export interface TierDecision {
   downgradeReason?: 'user' | 'daily' | 'monthly';
 }
 
-const ANONYMOUS_LIMIT = 1;
+export const ANONYMOUS_LIMIT = 5;
 export const FREE_LIMIT = 3;
 
 export const PLUS_OPUS_DAILY = 5;
@@ -131,6 +131,27 @@ export function inventDailyLimit(tier: Tier): number {
   if (tier === 'free') return INVENT_DAILY_FREE;
   return INVENT_DAILY_ANON;
 }
+
+/**
+ * Ceilings for the two helper calls that ride alongside a walkthrough: the
+ * topic classifier and the answer verifier. Both stay open to anonymous
+ * callers on purpose — gating them would make the product feel broken before
+ * a student has typed a second problem — but open and uncounted is a way for
+ * a script to spend the Anthropic key, so each gets its own daily counter.
+ * Loose next to the walkthrough caps, because a search can take a few tries
+ * before it lands on a topic, and keyed on signed-in vs not rather than paid
+ * tier so the classifier never has to resolve a subscription first.
+ */
+export const AUX_DAILY_ANON = 15;
+export const AUX_DAILY_USER = 60;
+
+/**
+ * Daily photo-OCR ceiling. Free users are bounded by their lifetime
+ * photoInput trial as well; anonymous callers never reach OCR. A subscription
+ * used to be the only gate, which meant one Plus account could run Sonnet
+ * vision without limit.
+ */
+export const OCR_DAILY = 40;
 
 // `satisfies` rather than a `: ModelKey` annotation so `HAIKU.id` stays the
 // single Haiku literal. Callers that pin the model (see handleInvent) need the

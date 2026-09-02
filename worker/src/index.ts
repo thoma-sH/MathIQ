@@ -2,7 +2,7 @@
  * MathIQ API worker.
  *
  *   POST /api/walkthrough  — auth + tier-aware rate limit + streaming
- *   POST /api/classify     — auth optional, no rate limit (cheap call)
+ *   POST /api/classify     — auth optional, per-day counter
  *   GET  /api/health       — no auth
  */
 import { COURSES, COURSES_BY_ID, findTopic } from './courses';
@@ -10,7 +10,9 @@ import { authenticate, type AuthState } from './auth';
 import {
   anonChallengeGradeCounter,
   anonChallengeGradeGlobalCounter,
+  anonClassifyDailyCounter,
   anonInventDailyCounter,
+  anonVerifyDailyCounter,
   anonymousCounter,
   decrement,
   increment,
@@ -19,21 +21,26 @@ import {
   peek,
   userChallengeGradeCounter,
   userChallengeLatexCounter,
+  userClassifyDailyCounter,
   userCounter,
   userExamDailyCounter,
   userInventDailyCounter,
+  userOcrDailyCounter,
   userOpusDailyCounter,
   userOpusMonthlyCounter,
+  userVerifyDailyCounter,
   type CounterRef,
 } from './rateLimit';
 export { UsageCounter } from './counterDO';
 import {
+  AUX_DAILY_ANON,
+  AUX_DAILY_USER,
   dailyOpusLimit,
   decideTier,
-  FREE_LIMIT,
   HAIKU,
   inventDailyLimit,
   monthlyOpusLimit,
+  OCR_DAILY,
   resolveTier,
   SONNET,
   type ModelKey,
@@ -607,7 +614,7 @@ async function handleWalkthrough(
       return bail(
         {
           error: 'sign_in_required',
-          message: `You've used your free walkthrough. Sign in for ${FREE_LIMIT}/day.`,
+          message: `You've used your ${decision.ceiling} free walkthroughs. Sign in to keep going.`,
           limit: decision.ceiling,
           used: usedToday,
           resetAt: nextMidnightUtc(),
@@ -850,6 +857,33 @@ async function handleClassify(
     return json({ error: 'problem too long', limit: MAX_CLASSIFY_CHARS }, 413, cors);
   }
 
+  // Claim a daily slot before the upstream call; refunded below if the
+  // classifier itself fails. Keyed on sign-in rather than paid tier so this
+  // path never has to resolve a subscription.
+  const counter: CounterRef =
+    authState.kind === 'user'
+      ? userClassifyDailyCounter(env.USAGE_DO, authState.userId)
+      : anonClassifyDailyCounter(
+          env.USAGE_DO,
+          request.headers.get('CF-Connecting-IP') ?? 'unknown',
+        );
+  const limit = authState.kind === 'user' ? AUX_DAILY_USER : AUX_DAILY_ANON;
+  const used = await increment(counter);
+  if (used > limit) {
+    await decrement(counter);
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've run ${limit} searches today.`,
+        limit,
+        used: limit,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
   const upstream = await fetch(ANTHROPIC_MESSAGES_URL, {
     method: 'POST',
     headers: {
@@ -874,6 +908,7 @@ async function handleClassify(
   });
 
   if (!upstream.ok) {
+    await decrement(counter);
     console.error('classify upstream failed', upstream.status);
     return json(
       { error: 'classify_failed' },
@@ -1497,8 +1532,40 @@ async function handleOcr(
     return json({ error: 'image too large', limit: MAX_OCR_BASE64_CHARS }, 413, cors);
   }
 
+  // Same answer ensureFeatureAccess gives anonymous callers, taken here so
+  // the daily counter below has a userId to key on.
+  if (authState.kind !== 'user') {
+    return json(
+      { error: 'sign_in_required', feature: 'photoInput', message: 'Sign in to try this feature.' },
+      401,
+      cors,
+    );
+  }
+
+  // Daily ceiling first, then the feature gate: a 429 here never touches the
+  // lifetime trial, and a refused gate hands the slot straight back.
+  const ocrCounter = userOcrDailyCounter(env.USAGE_DO, authState.userId);
+  const ocrUsed = await increment(ocrCounter);
+  if (ocrUsed > OCR_DAILY) {
+    await decrement(ocrCounter);
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've scanned ${OCR_DAILY} photos today.`,
+        limit: OCR_DAILY,
+        used: OCR_DAILY,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
   const access = await ensureFeatureAccess(env, authState, tier, 'photoInput', 'plus', cors);
-  if (!access.ok) return access.response;
+  if (!access.ok) {
+    await decrement(ocrCounter);
+    return access.response;
+  }
 
   const result = await extractProblemFromImage({
     apiKey: env.ANTHROPIC_API_KEY,
@@ -1507,6 +1574,7 @@ async function handleOcr(
   });
 
   if (!result.ok) {
+    await decrement(ocrCounter);
     await refundAccess(env, authState, access);
     console.error('ocr upstream failed', result.status, result.detail);
     return json({ error: 'ocr_failed' }, 502, cors);
@@ -1553,12 +1621,39 @@ async function handleVerify(
     return json({ verdict: 'unclear', reason: 'no answer block' }, 200, cors);
   }
 
+  // Claim a daily slot only once we know an upstream call is coming — the
+  // early 'unclear' above costs nothing and shouldn't count.
+  const counter: CounterRef =
+    authState.kind === 'user'
+      ? userVerifyDailyCounter(env.USAGE_DO, authState.userId)
+      : anonVerifyDailyCounter(
+          env.USAGE_DO,
+          request.headers.get('CF-Connecting-IP') ?? 'unknown',
+        );
+  const limit = authState.kind === 'user' ? AUX_DAILY_USER : AUX_DAILY_ANON;
+  const used = await increment(counter);
+  if (used > limit) {
+    await decrement(counter);
+    return json(
+      {
+        error: 'rate_limit',
+        message: `You've verified ${limit} answers today.`,
+        limit,
+        used: limit,
+        resetAt: nextMidnightUtc(),
+      },
+      429,
+      cors,
+    );
+  }
+
   const result = await verifyAnswer({
     apiKey: env.ANTHROPIC_API_KEY,
     walkthrough: body.walkthrough,
   });
 
   if (!result.ok) {
+    await decrement(counter);
     console.error('verify upstream failed', result.status);
     return json({ error: 'verify_failed' }, 502, cors);
   }

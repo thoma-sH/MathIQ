@@ -74,6 +74,48 @@ export function anonInventDailyCounter(
   return { ns, name: `anon:${ip}:invent:${dateKey()}` };
 }
 
+/** Daily topic-classifier counters. Open to anonymous callers, so the
+ *  anonymous one is keyed on IP like the walkthrough counter. Ceilings live
+ *  in tier.ts as AUX_DAILY_ANON / AUX_DAILY_USER. */
+export function userClassifyDailyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:classify:${dateKey()}` };
+}
+
+export function anonClassifyDailyCounter(
+  ns: DurableObjectNamespace,
+  ip: string,
+): CounterRef {
+  return { ns, name: `anon:${ip}:classify:${dateKey()}` };
+}
+
+/** Daily answer-verifier counters — one call per finished walkthrough in
+ *  normal use, so the ceiling only ever binds on a script. */
+export function userVerifyDailyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:verify:${dateKey()}` };
+}
+
+export function anonVerifyDailyCounter(
+  ns: DurableObjectNamespace,
+  ip: string,
+): CounterRef {
+  return { ns, name: `anon:${ip}:verify:${dateKey()}` };
+}
+
+/** Daily photo-OCR counter. Signed-in only — anonymous callers are turned
+ *  away before any upstream call. Ceiling is OCR_DAILY in tier.ts. */
+export function userOcrDailyCounter(
+  ns: DurableObjectNamespace,
+  userId: string,
+): CounterRef {
+  return { ns, name: `user:${userId}:ocr:${dateKey()}` };
+}
+
 /** Daily Exam Mode counter — caps Pro users at N exam generations per day
  *  so one user can't generate 20 exams (20 × Opus × 15 problems each) overnight. */
 export function userExamDailyCounter(
