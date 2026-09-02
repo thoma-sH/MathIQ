@@ -2044,16 +2044,21 @@ async function handleExamGrade(
   const counter = userCounter(env.USAGE_DO, authState.userId);
   const opusDaily = userOpusDailyCounter(env.USAGE_DO, authState.userId);
   const opusMonthly = userOpusMonthlyCounter(env.USAGE_DO, authState.userId);
-  const usedToday = await peek(counter);
-  const decision = decideTier(tier, usedToday);
+  // Claim the daily slot before the OCR call, not after it. A peek is not a
+  // claim: concurrent requests all read the same value, all pass, and all
+  // bill a Mathpix job before any of them counts. The slot goes back on
+  // every failure below, so an OCR failure still costs the user nothing.
+  const newCount = await increment(counter);
+  const decision = decideTier(tier, newCount - 1);
   if (decision.model === null) {
+    await decrement(counter);
     if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     return json(
       {
         error: 'rate_limit',
         message: `You've used all ${decision.ceiling} Pro slots today.`,
         limit: decision.ceiling,
-        used: usedToday,
+        used: newCount - 1,
         resetAt: nextMidnightUtc(),
       },
       429,
@@ -2066,6 +2071,7 @@ async function handleExamGrade(
   // math priors and transcribes exactly what's on the page, then Claude
   // grades the transcribed text instead of looking at the photo.
   if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    await decrement(counter);
     if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     console.error('[exam-grade] Mathpix credentials missing');
     return json(
@@ -2091,6 +2097,7 @@ async function handleExamGrade(
           mediaType: body.mediaType,
         });
   if (!ocr.ok || !ocr.text) {
+    await decrement(counter);
     if (examGradeAccess.trialConsumed) await refundAccess(env, authState, examGradeAccess);
     console.error('[exam-grade] Mathpix failed', ocr.status, ocr.detail);
     const detailLower = (ocr.detail ?? '').toLowerCase();
@@ -2110,8 +2117,7 @@ async function handleExamGrade(
   }
 
   // Grading is hardcoded to Opus, so it spends a max slot alongside the
-  // daily one — same rule as generation.
-  await increment(counter);
+  // daily one — same rule as generation. The daily slot was claimed above.
   await increment(opusDaily);
   await increment(opusMonthly);
 
@@ -2233,19 +2239,22 @@ async function handleHomeworkTranscribe(
     return json({ error: 'file too large', limit: MAX_GRADE_BASE64_CHARS }, 413, cors);
   }
 
-  // Counts as one walkthrough slot. Increment after Mathpix succeeds so OCR
-  // failures don't burn the user's slot.
+  // Counts as one walkthrough slot, claimed before Mathpix rather than
+  // after: a peek lets concurrent requests all pass and all bill an OCR job
+  // before any of them counts. Every failure below hands the slot back, so
+  // an OCR failure still doesn't burn it.
   const counter = userCounter(env.USAGE_DO, authState.userId);
-  const usedToday = await peek(counter);
-  const decision = decideTier(tier, usedToday);
+  const newCount = await increment(counter);
+  const decision = decideTier(tier, newCount - 1);
   if (decision.model === null) {
+    await decrement(counter);
     if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     return json(
       {
         error: 'rate_limit',
         message: `You've used all ${decision.ceiling} slots today.`,
         limit: decision.ceiling,
-        used: usedToday,
+        used: newCount - 1,
         resetAt: nextMidnightUtc(),
       },
       429,
@@ -2254,6 +2263,7 @@ async function handleHomeworkTranscribe(
   }
 
   if (!env.MATHPIX_APP_ID || !env.MATHPIX_APP_KEY) {
+    await decrement(counter);
     if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     console.error('[homework-transcribe] Mathpix credentials missing');
     return json(
@@ -2277,6 +2287,7 @@ async function handleHomeworkTranscribe(
           mediaType: body.mediaType,
         });
   if (!ocr.ok || !ocr.text) {
+    await decrement(counter);
     if (transcribeAccess.trialConsumed) await refundAccess(env, authState, transcribeAccess);
     console.error('[homework-transcribe] Mathpix failed', ocr.status, ocr.detail);
     const detailLower = (ocr.detail ?? '').toLowerCase();
@@ -2294,8 +2305,6 @@ async function handleHomeworkTranscribe(
               : `Could not read the ${noun}. Try a clearer, better-lit scan with the whole page visible.`;
     return json({ error: 'ocr_failed', message }, 502, cors);
   }
-
-  await increment(counter);
 
   // Cleanup pass — Claude sees the original page + raw Mathpix output,
   // returns the cleaned transcription plus an `uncertain` list of fixes
@@ -3427,7 +3436,7 @@ async function ensureFeatureAccess(
   }
 
   // Free signed-in — try a lifetime trial.
-  const remaining = await consumeTrial(env.USAGE, authState.userId, feature);
+  const remaining = await consumeTrial(env, authState.userId, feature);
   if (remaining === null) {
     return {
       ok: false,
@@ -3448,7 +3457,7 @@ async function ensureFeatureAccess(
 async function refundAccess(env: Env, authState: AuthState, access: AccessResult): Promise<void> {
   if (!access.ok || !access.trialConsumed) return;
   if (authState.kind !== 'user') return;
-  await refundTrial(env.USAGE, authState.userId, access.feature);
+  await refundTrial(env, authState.userId, access.feature);
 }
 
 async function handleTrialsGet(
@@ -3461,7 +3470,7 @@ async function handleTrialsGet(
     return json({ error: 'sign_in_required' }, 401, cors);
   }
   const tier = await resolveTier(authState, env);
-  const remaining = await getRemainingTrials(env.USAGE, authState.userId);
+  const remaining = await getRemainingTrials(env, authState.userId);
   return json({ tier, remaining }, 200, cors);
 }
 

@@ -16,6 +16,7 @@
  * every visitor sees the same problem.
  */
 import { COURSES, COURSES_BY_ID, type Course, type Topic } from './courses';
+import { challengeGenerationCounter, decrement, increment } from './rateLimit';
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const GENERATE_MODEL = 'claude-opus-4-6';
@@ -269,44 +270,75 @@ function stripCodeFences(text: string): string {
   return trimmed;
 }
 
+// How long a request that lost the generation claim waits for the winner's
+// record before giving up. An Opus generation runs several seconds; the
+// caller answers 503 with "being prepared" past this, and the client retries.
+const GENERATION_WAIT_POLLS = 20;
+const GENERATION_WAIT_MS = 750;
+
 /**
  * Main entry point. Returns today's challenge — generating it if it's the
  * first request after UTC midnight, otherwise serving from KV.
  *
- * KV CAS isn't available in Workers, but the cost of a race (two near-
- * simultaneous first-of-day requests both generating) is bounded: each
- * generates one problem, the second overwrites the first. Tolerable.
+ * Exactly one request generates. The Durable Object counter is atomic
+ * where KV is not: the first caller past midnight to increment it sees 1
+ * and makes the Opus call; everyone else sees a higher number and waits
+ * for that record to land instead of starting a generation of their own.
+ * Before this, every first-of-day request that arrived before the KV write
+ * propagated generated its own — a burst at midnight was a burst of Opus
+ * calls from an endpoint that needs no auth.
  */
 export async function getOrGenerateTodaysChallenge(
-  env: { ANTHROPIC_API_KEY: string; USAGE: KVNamespace },
+  env: { ANTHROPIC_API_KEY: string; USAGE: KVNamespace; USAGE_DO: DurableObjectNamespace },
   date: string = todayUtcDateKey(),
 ): Promise<ChallengeRecord | null> {
-  const existing = await env.USAGE.get(key(date));
-  if (existing) {
-    try {
-      return JSON.parse(existing) as ChallengeRecord;
-    } catch {
-      // Corrupt cache — fall through and regenerate.
+  const cached = await readCached(env.USAGE, date);
+  if (cached) return cached;
+
+  const claim = challengeGenerationCounter(env.USAGE_DO, date);
+  const attempt = await increment(claim);
+  if (attempt > 1) {
+    for (let i = 0; i < GENERATION_WAIT_POLLS; i++) {
+      await new Promise((resolve) => setTimeout(resolve, GENERATION_WAIT_MS));
+      const landed = await readCached(env.USAGE, date);
+      if (landed) return landed;
     }
+    return null;
   }
 
   const course = courseForDate(date);
   const topic = pickTopicFromCourse(course);
   const natural = difficultyForDate(date);
   const difficulty = effectiveDifficulty(natural, course.id);
-  const record = await generateChallenge(
-    env.ANTHROPIC_API_KEY,
-    course,
-    topic,
-    difficulty,
-    date,
-  );
-  if (!record) return null;
+  let record: ChallengeRecord | null;
+  try {
+    record = await generateChallenge(env.ANTHROPIC_API_KEY, course, topic, difficulty, date);
+  } catch (err) {
+    await decrement(claim);
+    throw err;
+  }
+  if (!record) {
+    // Hand the claim back so the next request can try, rather than leaving
+    // the whole day waiting on a generation that already failed.
+    await decrement(claim);
+    return null;
+  }
 
   await env.USAGE.put(key(date), JSON.stringify(record), {
     expirationTtl: CHALLENGE_KV_TTL_SECONDS,
   });
   return record;
+}
+
+async function readCached(kv: KVNamespace, date: string): Promise<ChallengeRecord | null> {
+  const existing = await kv.get(key(date));
+  if (!existing) return null;
+  try {
+    return JSON.parse(existing) as ChallengeRecord;
+  } catch {
+    // Corrupt cache — treat as missing.
+    return null;
+  }
 }
 
 // ─── Grading ──────────────────────────────────────────────────────────

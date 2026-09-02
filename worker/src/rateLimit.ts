@@ -152,6 +152,16 @@ export function anonChallengeGradeGlobalCounter(
   return { ns, name: `anon:global:challenge-grade:${dateKey()}` };
 }
 
+/** Generation claim for one day's challenge. The first request past
+ *  midnight to increment it sees 1 and generates; every other request sees
+ *  a higher number and waits for that record instead of generating its own. */
+export function challengeGenerationCounter(
+  ns: DurableObjectNamespace,
+  date: string,
+): CounterRef {
+  return { ns, name: `challenge-gen:${date}`, period: date };
+}
+
 /** Daily LaTeX render counter for the challenge — per-user, 1/day, all tiers. */
 export function userChallengeLatexCounter(
   ns: DurableObjectNamespace,

@@ -9,13 +9,23 @@
  * users (already paid). Plus → Pro monthly trials are a separate mechanic,
  * deferred to a later phase.
  *
- * KV: `trials:user:USERID` → TrialState
+ * Spend is counted on the UsageCounter Durable Object, one counter per
+ * (user, feature) with a fixed period so it never rolls over, because the
+ * DO is the only atomic thing available here. A KV read-modify-write let
+ * two concurrent requests both see one trial left and both spend it, and
+ * KV reads are not read-your-writes, so that window was seconds wide, not
+ * microseconds. The old KV record (`trials:user:USERID`) is still read as
+ * the baseline of what a user had before the counter existed, and is never
+ * written again.
  */
+import { decrement, increment, peek, type CounterRef } from './rateLimit';
+
+export interface TrialsEnv {
+  USAGE: KVNamespace;
+  USAGE_DO: DurableObjectNamespace;
+}
 
 const TRIALS_KEY_PREFIX = 'trials:user:';
-// Long TTL so a user's trial state survives even a year of inactivity.
-// At reactivation they pick up where they left off.
-const TRIALS_TTL_SECONDS = 2 * 365 * 24 * 60 * 60;
 
 export type TrialFeature =
   | 'photoInput'
@@ -42,15 +52,25 @@ function key(userId: string): string {
   return `${TRIALS_KEY_PREFIX}${userId}`;
 }
 
+const FEATURES: TrialFeature[] = [
+  'photoInput',
+  'whyHow',
+  'handwrittenPdf',
+  'latex',
+  'examGen',
+  'examGrade',
+];
+
+function counter(ns: DurableObjectNamespace, userId: string, feature: TrialFeature): CounterRef {
+  return { ns, name: `user:${userId}:trial:${feature}`, period: 'lifetime' };
+}
+
 /**
- * Get a user's current trial state. Initializes from INITIAL_TRIALS on
- * first access (without writing — only writes happen on consume/refund so
- * read-only flows don't burn KV writes).
+ * What the user still had before the counter existed: the KV record if
+ * there is one, the initial allotment otherwise. Read only — the counter
+ * carries every spend from here on.
  */
-export async function getRemainingTrials(
-  kv: KVNamespace,
-  userId: string,
-): Promise<TrialState> {
+async function legacyRemaining(kv: KVNamespace, userId: string): Promise<TrialState> {
   const raw = await kv.get(key(userId));
   if (!raw) return { ...INITIAL_TRIALS };
   try {
@@ -68,45 +88,53 @@ export async function getRemainingTrials(
   }
 }
 
-/**
- * Atomically check + consume one trial for the given feature. Returns
- * the new remaining count if successful, or null if the user is out.
- *
- * KV doesn't expose CAS, so a race between two concurrent reads can in
- * theory let a user spend one extra trial. Tolerable: feature trials are
- * 1–5, and the cost of an extra trial is bounded ($0.10 worst case).
- */
-export async function consumeTrial(
-  kv: KVNamespace,
-  userId: string,
-  feature: TrialFeature,
-): Promise<number | null> {
-  const state = await getRemainingTrials(kv, userId);
-  if (state[feature] <= 0) return null;
-  state[feature] = state[feature] - 1;
-  await kv.put(key(userId), JSON.stringify(state), {
-    expirationTtl: TRIALS_TTL_SECONDS,
+/** Current remaining trials: the legacy baseline less what the counter has
+ *  recorded since. Six peeks, one per feature. */
+export async function getRemainingTrials(env: TrialsEnv, userId: string): Promise<TrialState> {
+  const legacy = await legacyRemaining(env.USAGE, userId);
+  const spent = await Promise.all(
+    FEATURES.map((feature) => peek(counter(env.USAGE_DO, userId, feature))),
+  );
+  const remaining = { ...legacy };
+  FEATURES.forEach((feature, i) => {
+    remaining[feature] = Math.max(0, legacy[feature] - spent[i]);
   });
-  return state[feature];
+  return remaining;
 }
 
 /**
- * Refund a previously-consumed trial. Use on upstream failure so the
- * user isn't penalized for an error they didn't cause.
+ * Check and consume one trial in a single atomic step: the counter is
+ * incremented first, and if that takes the user below zero the increment
+ * is handed straight back. Returns the new remaining count, or null if
+ * the user is out.
+ */
+export async function consumeTrial(
+  env: TrialsEnv,
+  userId: string,
+  feature: TrialFeature,
+): Promise<number | null> {
+  const ref = counter(env.USAGE_DO, userId, feature);
+  const legacy = (await legacyRemaining(env.USAGE, userId))[feature];
+  const spent = await increment(ref);
+  const remaining = legacy - spent;
+  if (remaining < 0) {
+    await decrement(ref);
+    return null;
+  }
+  return remaining;
+}
+
+/**
+ * Refund a previously-consumed trial. Use on upstream failure so the user
+ * isn't penalized for an error they didn't cause. The counter clamps at
+ * zero, so a refund can never grant more than the user started with.
  */
 export async function refundTrial(
-  kv: KVNamespace,
+  env: TrialsEnv,
   userId: string,
   feature: TrialFeature,
 ): Promise<void> {
-  const state = await getRemainingTrials(kv, userId);
-  // Cap at the initial allotment — we never want a refund to grant *more*
-  // trials than the user originally had (would happen if state was reset
-  // somehow between consume and refund).
-  state[feature] = Math.min(state[feature] + 1, INITIAL_TRIALS[feature]);
-  await kv.put(key(userId), JSON.stringify(state), {
-    expirationTtl: TRIALS_TTL_SECONDS,
-  });
+  await decrement(counter(env.USAGE_DO, userId, feature));
 }
 
 function numeric(v: number | undefined, fallback: number): number {
