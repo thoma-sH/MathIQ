@@ -11,7 +11,7 @@ import { fetchTodaysChallenge, fetchStreak, type TodaysChallenge, type StreakSta
 import { isPaid } from '../walkthroughs/tier';
 import { useUpgradePrompt } from '../upgrade/UpgradePrompt';
 import { openScanner } from '../scanner';
-import { latexToProblem, problemToLatex } from '../lib/problemLatex';
+import { hasUnfilledBody, latexToProblem, problemToLatex } from '../lib/problemLatex';
 import { DifficultyChip } from '../design/icons';
 import type { Route } from '../router';
 
@@ -63,6 +63,7 @@ export function Landing({ onNavigate }: LandingProps) {
   const [dailyTease, setDailyTease] = useState<TodaysChallenge | null>(null);
   const [streak, setStreak] = useState<StreakState | null>(null);
   const { requireUpgrade } = useUpgradePrompt();
+  const unready = !problem.trim() || hasUnfilledBody(problem);
 
   useEffect(() => {
     let cancelled = false;
@@ -384,16 +385,16 @@ export function Landing({ onNavigate }: LandingProps) {
             <button
               type="button"
               onClick={() => void submit()}
-              disabled={!problem.trim() || busy}
+              disabled={unready || busy}
               className="btn-press chamfer"
               style={{
-                background: !problem.trim() || busy ? T.hair : T.accent,
-                color: !problem.trim() || busy ? T.muted : T.paper,
+                background: unready || busy ? T.hair : T.accent,
+                color: unready || busy ? T.muted : T.paper,
                 border: 'none',
                 padding: '12px 22px',
                 fontSize: 15,
                 fontWeight: 500,
-                cursor: !problem.trim() || busy ? 'not-allowed' : 'pointer',
+                cursor: unready || busy ? 'not-allowed' : 'pointer',
                 fontFamily: T.sans,
               }}
             >

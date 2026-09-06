@@ -93,6 +93,12 @@ function dropUnfilledScripts(latex: string): string {
   return out;
 }
 
+/** Blank limits are a legitimate indefinite integral; a blank body is just an
+ *  unfinished problem, and submitting one spends a walkthrough on nothing. */
+export function hasUnfilledBody(latex: string): boolean {
+  return dropUnfilledScripts(latex).includes(EMPTY_PLACEHOLDER);
+}
+
 function stripPlaceholders(latex: string): string {
   return dropUnfilledScripts(latex)
     .split(EMPTY_PLACEHOLDER)
