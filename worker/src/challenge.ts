@@ -324,9 +324,18 @@ export async function getOrGenerateTodaysChallenge(
     return null;
   }
 
-  await env.USAGE.put(key(date), JSON.stringify(record), {
-    expirationTtl: CHALLENGE_KV_TTL_SECONDS,
-  });
+  // The claim is keyed on the date, so it only resets at midnight: a put that
+  // rejects here would leave every later request today polling for a record
+  // nobody is going to write, and the challenge 503s until tomorrow. Hand the
+  // claim back for the same reason the two paths above do.
+  try {
+    await env.USAGE.put(key(date), JSON.stringify(record), {
+      expirationTtl: CHALLENGE_KV_TTL_SECONDS,
+    });
+  } catch (err) {
+    await decrement(claim);
+    throw err;
+  }
   return record;
 }
 
