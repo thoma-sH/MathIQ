@@ -36,13 +36,16 @@ export interface DailyContent {
   dayLabel: string;
   tagline: string;
   scribeSrc: string;
+  scribeFillSrc: string;
 }
 
 export function getDailyContent(index: number = getTodayIndex()): DailyContent {
   const safe = ((index % 7) + 7) % 7;
+  const scribeSrc = DAY_SCRIBES[safe];
   return {
     dayLabel: DAY_LABELS[safe],
     tagline: DAY_TAGLINES[safe],
-    scribeSrc: DAY_SCRIBES[safe],
+    scribeSrc,
+    scribeFillSrc: scribeSrc.replace('.png', '-fill.png'),
   };
 }

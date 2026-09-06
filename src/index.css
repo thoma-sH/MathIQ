@@ -804,10 +804,26 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
  */
 .scribe-art { position: relative; display: inline-block; }
 .scribe-art img { opacity: 0; }
+.scribe-art::before,
 .scribe-art::after {
   content: '';
   position: absolute;
   inset: 0;
+}
+/* The regions the line art encloses — the tub's porcelain, a robe — are bare
+   transparency, so they showed the page and the figure read as a wireframe on
+   the dark palettes. The companion asset's alpha is exactly those regions,
+   painted a surface tone so the figure keeps a body in any theme. */
+.scribe-art::before {
+  /* Not --paper: on a dark palette the page *is* paper, so the fill would be
+     invisible again. A lift toward the ink reads as a surface in both
+     directions — 1.7:1 against the page at the flattest, and the strokes still
+     clear 4.2:1 on top of it. */
+  background: color-mix(in srgb, var(--paper) 72%, var(--ink));
+  -webkit-mask: var(--scribe-fill) center / contain no-repeat;
+  mask: var(--scribe-fill) center / contain no-repeat;
+}
+.scribe-art::after {
   background: var(--ink);
   -webkit-mask: var(--scribe) center / contain no-repeat;
   mask: var(--scribe) center / contain no-repeat;

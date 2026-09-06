@@ -42,7 +42,7 @@ function getTimeGreeting(hour: number): string {
 export function Landing({ onNavigate }: LandingProps) {
   const { getToken, isSignedIn } = useAuth();
   const { user } = useUser();
-  const { dayLabel, scribeSrc } = useMemo(() => getDailyContent(), []);
+  const { dayLabel, scribeSrc, scribeFillSrc } = useMemo(() => getDailyContent(), []);
   const typedLabel = useTypedString(dayLabel, 40, 220);
 
   const personalGreeting = useMemo(() => {
@@ -323,7 +323,12 @@ export function Landing({ onNavigate }: LandingProps) {
       <div className="hero-stage reveal reveal-2">
         <span
           className="scribe-art"
-          style={{ '--scribe': `url(${scribeSrc})` } as React.CSSProperties}
+          style={
+            {
+              '--scribe': `url(${scribeSrc})`,
+              '--scribe-fill': `url(${scribeFillSrc})`,
+            } as React.CSSProperties
+          }
         >
           <img
             src={scribeSrc}

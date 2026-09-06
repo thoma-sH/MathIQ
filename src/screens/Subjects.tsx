@@ -15,11 +15,17 @@ interface CourseCardProps {
   onClick: () => void;
 }
 
-function ScribeMark({ src }: { src: string }) {
+function ScribeMark({ src, fill }: { src: string; fill: string }) {
   return (
     <span
       className="scribe-art"
-      style={{ '--scribe': `url(${src})`, flexShrink: 0 } as React.CSSProperties}
+      style={
+        {
+          '--scribe': `url(${src})`,
+          '--scribe-fill': `url(${fill})`,
+          flexShrink: 0,
+        } as React.CSSProperties
+      }
     >
       <img
         src={src}
@@ -92,7 +98,7 @@ function CourseCard({ title, blurb, onClick }: CourseCardProps) {
 }
 
 export function Subjects({ onNavigate }: SubjectsProps) {
-  const { dayLabel, tagline, scribeSrc } = useMemo(() => getDailyContent(), []);
+  const { dayLabel, tagline, scribeSrc, scribeFillSrc } = useMemo(() => getDailyContent(), []);
   const typedLabel = useTypedString(dayLabel, 40, 180);
 
   return (
@@ -195,7 +201,7 @@ export function Subjects({ onNavigate }: SubjectsProps) {
             paddingRight: 'clamp(0px, 3vw, 32px)',
           }}
         >
-          <ScribeMark src={scribeSrc} />
+          <ScribeMark src={scribeSrc} fill={scribeFillSrc} />
         </div>
       </div>
 
