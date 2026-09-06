@@ -101,12 +101,27 @@ const KEYPAD: { tab: string; keys: Key[] }[] = [
   },
 ];
 
+const EMPTY_SLOT = '\\placeholder{}';
+
+/** MathLive's own `moveToNextPlaceholder` leaps off whichever slot the caret
+ *  starts in — an integral opens in its superscript — and then dead-ends on the
+ *  last one, leaving the upper limit unreachable by tapping. This wraps. */
+function moveToNextSlot(mf: MathfieldElement): void {
+  const slots: number[] = [];
+  for (let p = 0; p <= mf.lastOffset; p += 1) {
+    if (mf.getElementInfo(p)?.latex === EMPTY_SLOT) slots.push(p);
+  }
+  if (slots.length === 0) return;
+  const next = slots.find((p) => p > mf.position) ?? slots[0];
+  mf.selection = { ranges: [[next - 1, next]] };
+}
+
 /** A phone keyboard has no arrow keys, so without these the field is
  *  write-only: tap Exponent once and the rest of the equation lands inside it. */
-const NAV: { cmd: Selector; face?: string; word?: string; label: string }[] = [
+const NAV: { cmd: Selector | 'nextSlot'; face?: string; word?: string; label: string }[] = [
   { cmd: 'moveToPreviousChar', face: '\\leftarrow', label: 'Move left' },
   { cmd: 'moveToNextChar', face: '\\rightarrow', label: 'Move right' },
-  { cmd: 'moveToNextPlaceholder', word: 'NEXT', label: 'Next field' },
+  { cmd: 'nextSlot', word: 'NEXT', label: 'Next field' },
   { cmd: 'deleteBackward', word: 'DEL', label: 'Delete' },
 ];
 
@@ -235,11 +250,12 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
 
   // Pressing the button took the focus off the field, and a command runs
   // against the caret — so it has to go back before the command, not after.
-  function command(cmd: Selector) {
+  function command(cmd: Selector | 'nextSlot') {
     const mf = fieldRef.current;
     if (!mf || disabled) return;
     mf.focus();
-    mf.executeCommand(cmd);
+    if (cmd === 'nextSlot') moveToNextSlot(mf);
+    else mf.executeCommand(cmd);
     handlers.current.onChange(mf.value);
   }
 
