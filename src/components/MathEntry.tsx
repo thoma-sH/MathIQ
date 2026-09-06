@@ -21,7 +21,54 @@ interface Key {
   label: string;
 }
 
-const KEYPAD: { tab: string; keys: Key[] }[] = [
+/** Built rather than listed: 26 keys twice over is the one place here where
+ *  spelling every entry out loses more than it documents. */
+function letterKeys(upper: boolean): Key[] {
+  return [...'abcdefghijklmnopqrstuvwxyz'].map((c) => {
+    const ch = upper ? c.toUpperCase() : c;
+    return { insert: ch, face: ch, label: upper ? `Capital ${c}` : c };
+  });
+}
+
+const KEYPAD: { tab: string; keys: Key[]; shiftable?: true }[] = [
+  {
+    // A phone has no OS keyboard here, so this tab carries the whole of
+    // `x^2 + 3x - 4 = 0` on its own: calculator digit order, the two
+    // variables that turn up most, and an exponent so a quadratic doesn't
+    // cost a trip to another tab.
+    tab: '123',
+    keys: [
+      { insert: '7', face: '7', label: 'Seven' },
+      { insert: '8', face: '8', label: 'Eight' },
+      { insert: '9', face: '9', label: 'Nine' },
+      { insert: 'x', face: 'x', label: 'x' },
+      { insert: '^{#?}', face: 'x^n', label: 'Exponent' },
+      { insert: '4', face: '4', label: 'Four' },
+      { insert: '5', face: '5', label: 'Five' },
+      { insert: '6', face: '6', label: 'Six' },
+      { insert: 'y', face: 'y', label: 'y' },
+      { insert: '\\frac{#?}{#?}', face: '\\frac{a}{b}', label: 'Fraction' },
+      { insert: '1', face: '1', label: 'One' },
+      { insert: '2', face: '2', label: 'Two' },
+      { insert: '3', face: '3', label: 'Three' },
+      { insert: '+', face: '+', label: 'Plus' },
+      { insert: '-', face: '-', label: 'Minus' },
+      { insert: '0', face: '0', label: 'Zero' },
+      { insert: '.', face: '.', label: 'Decimal point' },
+      { insert: '=', face: '=', label: 'Equals' },
+      { insert: '(', face: '(', label: 'Open parenthesis' },
+      { insert: ')', face: ')', label: 'Close parenthesis' },
+    ],
+  },
+  {
+    // Capitals are not decoration: a linear algebra student names matrices A
+    // and B, and a discrete one writes A ∪ B. The Relations tab already has
+    // the operators and had nothing to apply them to. A shift key rather than
+    // a seventh tab — both cases at once is 52 keys, a screen and a half.
+    tab: 'abc',
+    keys: letterKeys(false),
+    shiftable: true,
+  },
   {
     tab: 'Basic',
     keys: [
@@ -115,6 +162,7 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
   const hostRef = useRef<HTMLDivElement | null>(null);
   const fieldRef = useRef<MathfieldElement | null>(null);
   const [tab, setTab] = useState(0);
+  const [shift, setShift] = useState(false);
 
   // Keep the listeners reading the current callbacks without tearing down and
   // rebuilding the mathfield (which would drop the caret) on every render.
@@ -216,10 +264,15 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
     handlers.current.onChange(mf.value);
   }
 
-  const faces = useMemo(
-    () => KEYPAD.map((group) => group.keys.map((k) => renderFace(k.face))),
-    [],
-  );
+  // Only the visible tab gets laid out. Rendering all six at mount is ~150
+  // KaTeX calls on the landing page's critical path, and the letters have to
+  // be re-rendered on shift regardless.
+  const keys = useMemo(() => {
+    const group = KEYPAD[tab];
+    return group.shiftable && shift ? letterKeys(true) : group.keys;
+  }, [tab, shift]);
+
+  const faces = useMemo(() => keys.map((k) => renderFace(k.face)), [keys]);
 
   return (
     <div className="math-entry">
@@ -242,7 +295,20 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
         </div>
 
         <div className="math-keypad-grid" role="group" aria-label={`${KEYPAD[tab].tab} symbols`}>
-          {KEYPAD[tab].keys.map((k, i) => (
+          {/* Its own face is the state: "abc" while the letters below are
+              lowercase, "ABC" once they aren't. */}
+          {KEYPAD[tab].shiftable && (
+            <button
+              type="button"
+              className="math-keypad-key math-keypad-shift"
+              aria-pressed={shift}
+              disabled={disabled}
+              onClick={() => setShift((s) => !s)}
+            >
+              {shift ? 'ABC' : 'abc'}
+            </button>
+          )}
+          {keys.map((k, i) => (
             <button
               key={k.insert}
               type="button"
@@ -251,7 +317,7 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
               disabled={disabled}
               onClick={() => insert(k.insert)}
             >
-              <span aria-hidden dangerouslySetInnerHTML={{ __html: faces[tab][i] }} />
+              <span aria-hidden dangerouslySetInnerHTML={{ __html: faces[i] }} />
             </button>
           ))}
         </div>

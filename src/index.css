@@ -680,17 +680,25 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   border: 1px solid var(--ink);
   background: var(--paper-2);
 }
+/* Six tabs don't fit one row at 375px — "Calculus" and "Relations" together
+   want a third of it — so the strip wraps to two rows of three, and back to
+   one row once there's width for it. The dividers are 1px gaps over a hairline
+   ground: a border-right can't draw the seam between two wrapped rows. */
 .math-keypad-tabs {
   display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--hair-strong);
   border-bottom: 1px solid var(--ink);
 }
 .math-keypad-tab {
-  flex: 1;
+  /* This is what decides the wrap: three per row at 375px, six by 600px. */
+  flex: 1 1 auto;
+  min-width: 88px;
   min-height: 44px;
   padding: 10px 6px;
-  background: transparent;
+  background: var(--paper-2);
   border: none;
-  border-right: 1px solid var(--hair-strong);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -699,7 +707,6 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   cursor: pointer;
   transition: background-color 160ms ease, color 160ms ease;
 }
-.math-keypad-tab:last-child { border-right: none; }
 .math-keypad-tab[aria-selected="true"] {
   background: var(--ink);
   color: var(--paper);
@@ -735,6 +742,12 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 /* KaTeX draws the key faces — let them inherit so the invert takes the
    glyph with it instead of leaving ink-on-accent. */
 .math-keypad-key .katex { color: inherit; font-size: 1em; }
+/* The one key carrying a word rather than a formula. */
+.math-keypad-shift {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
 
 /* ─── Responsive padding utility ──────────────────────────────────── */
 .responsive-pad { padding: 24px 20px; }
