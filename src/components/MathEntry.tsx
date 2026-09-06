@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MathfieldElement, type Selector } from 'mathlive';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { T } from '../design/tokens';
 
 // The katex stylesheet imported above is load-bearing twice over: it draws the
 // keypad faces, and MathLive's loadFonts() bails out early as "ready" when all
@@ -190,7 +191,15 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
       'adoptedStyleSheets' in mf.shadowRoot
     ) {
       const sheet = new CSSStyleSheet();
-      sheet.replaceSync('.ML__toggles { display: none; }');
+      // A template's slots are four identical boxes, and MathLive's own
+      // selected-placeholder styling is invisible against these palettes —
+      // so nothing said which one the next keystroke would land in.
+      // `:host` only for the specificity — MathLive's own rule forces the
+      // selection white, which on a yellow accent is 1.6:1.
+      sheet.replaceSync(
+        `.ML__toggles { display: none; }
+         :host .ML__selected { background: ${T.accent}; color: ${T.paper}; }`,
+      );
       mf.shadowRoot.adoptedStyleSheets = [...mf.shadowRoot.adoptedStyleSheets, sheet];
     }
 
