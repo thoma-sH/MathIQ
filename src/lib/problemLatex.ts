@@ -45,9 +45,31 @@ function joinRuns(runs: string[]): string {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Drops the slots a student never filled in.
+ *
+ * The keypad's operator keys always offer both limits and a body, so one
+ * integral key covers the definite and the indefinite case. The cost is that
+ * an indefinite one leaves `\placeholder{}` behind, and that would otherwise
+ * travel to the classifier and into the problem card as literal text. An
+ * empty limit takes its `_` or `^` with it — `\int_{}^{}` is not what anyone
+ * means by an indefinite integral — while an empty body just goes.
+ *
+ * A *filled* placeholder (`\placeholder{x}`, which MathLive writes when it
+ * has a default) keeps its contents; only the empty ones are noise.
+ */
+function stripPlaceholders(latex: string): string {
+  return latex
+    .replace(/[_^]\{\\placeholder\{\}\}/g, '')
+    .replace(/[_^]\\placeholder\{\}/g, '')
+    .replace(/\\placeholder\{\}/g, '')
+    .replace(/\s+/g, ' ');
+}
+
 /** Mathfield LaTeX → the prose-with-`$…$` string the classifier, the
  *  heuristic and the problem card all expect. */
-export function latexToProblem(latex: string): string {
+export function latexToProblem(rawLatex: string): string {
+  const latex = stripPlaceholders(rawLatex);
   const runs: string[] = [];
   let math = '';
   const flushMath = () => {

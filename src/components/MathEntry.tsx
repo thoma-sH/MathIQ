@@ -21,54 +21,9 @@ interface Key {
   label: string;
 }
 
-/** Built rather than listed: 26 keys twice over is the one place here where
- *  spelling every entry out loses more than it documents. */
-function letterKeys(upper: boolean): Key[] {
-  return [...'abcdefghijklmnopqrstuvwxyz'].map((c) => {
-    const ch = upper ? c.toUpperCase() : c;
-    return { insert: ch, face: ch, label: upper ? `Capital ${c}` : c };
-  });
-}
-
-const KEYPAD: { tab: string; keys: Key[]; shiftable?: true }[] = [
-  {
-    // A phone has no OS keyboard here, so this tab carries the whole of
-    // `x^2 + 3x - 4 = 0` on its own: calculator digit order, the two
-    // variables that turn up most, and an exponent so a quadratic doesn't
-    // cost a trip to another tab.
-    tab: '123',
-    keys: [
-      { insert: '7', face: '7', label: 'Seven' },
-      { insert: '8', face: '8', label: 'Eight' },
-      { insert: '9', face: '9', label: 'Nine' },
-      { insert: 'x', face: 'x', label: 'x' },
-      { insert: '^{#?}', face: 'x^n', label: 'Exponent' },
-      { insert: '4', face: '4', label: 'Four' },
-      { insert: '5', face: '5', label: 'Five' },
-      { insert: '6', face: '6', label: 'Six' },
-      { insert: 'y', face: 'y', label: 'y' },
-      { insert: '\\frac{#?}{#?}', face: '\\frac{a}{b}', label: 'Fraction' },
-      { insert: '1', face: '1', label: 'One' },
-      { insert: '2', face: '2', label: 'Two' },
-      { insert: '3', face: '3', label: 'Three' },
-      { insert: '+', face: '+', label: 'Plus' },
-      { insert: '-', face: '-', label: 'Minus' },
-      { insert: '0', face: '0', label: 'Zero' },
-      { insert: '.', face: '.', label: 'Decimal point' },
-      { insert: '=', face: '=', label: 'Equals' },
-      { insert: '(', face: '(', label: 'Open parenthesis' },
-      { insert: ')', face: ')', label: 'Close parenthesis' },
-    ],
-  },
-  {
-    // Capitals are not decoration: a linear algebra student names matrices A
-    // and B, and a discrete one writes A ∪ B. The Relations tab already has
-    // the operators and had nothing to apply them to. A shift key rather than
-    // a seventh tab — both cases at once is 52 keys, a screen and a half.
-    tab: 'abc',
-    keys: letterKeys(false),
-    shiftable: true,
-  },
+// Digits and letters are the OS keyboard's job; this carries what it has no
+// key for.
+const KEYPAD: { tab: string; keys: Key[] }[] = [
   {
     tab: 'Basic',
     keys: [
@@ -89,17 +44,18 @@ const KEYPAD: { tab: string; keys: Key[]; shiftable?: true }[] = [
     ],
   },
   {
+    // Limits are always inserted; unfilled ones are dropped by
+    // stripPlaceholders, which is what lets one key serve both cases.
     tab: 'Calculus',
     keys: [
-      { insert: '\\int #? \\,d#?', face: '\\int', label: 'Integral' },
-      { insert: '\\int_{#?}^{#?} #? \\,d#?', face: '\\int_a^b', label: 'Definite integral' },
-      { insert: '\\oint', face: '\\oint', label: 'Contour integral' },
-      { insert: '\\frac{d}{d#?}', face: '\\frac{d}{dx}', label: 'Derivative' },
-      { insert: '\\frac{\\partial}{\\partial #?}', face: '\\frac{\\partial}{\\partial x}', label: 'Partial derivative' },
+      { insert: '\\int_{#?}^{#?} #? \\,d#?', face: '\\int_a^b', label: 'Integral' },
+      { insert: '\\oint_{#?}^{#?} #? \\,d#?', face: '\\oint', label: 'Contour integral' },
+      { insert: '\\sum_{#?}^{#?} #?', face: '\\sum_a^b', label: 'Sum' },
+      { insert: '\\prod_{#?}^{#?} #?', face: '\\prod_a^b', label: 'Product' },
+      { insert: '\\lim_{#? \\to #?} #?', face: '\\lim', label: 'Limit' },
+      { insert: '\\frac{d}{d#?} #?', face: '\\frac{d}{dx}', label: 'Derivative' },
+      { insert: '\\frac{\\partial}{\\partial #?} #?', face: '\\frac{\\partial}{\\partial x}', label: 'Partial derivative' },
       { insert: "'", face: "f'", label: 'Prime' },
-      { insert: '\\sum_{#?}^{#?}', face: '\\sum', label: 'Sum' },
-      { insert: '\\prod_{#?}^{#?}', face: '\\prod', label: 'Product' },
-      { insert: '\\lim_{#?\\to#?}', face: '\\lim', label: 'Limit' },
       { insert: '\\nabla', face: '\\nabla', label: 'Nabla' },
       { insert: '\\binom{#?}{#?}', face: '\\binom{n}{k}', label: 'Binomial coefficient' },
       { insert: '#?!', face: 'n!', label: 'Factorial' },
@@ -145,14 +101,12 @@ const KEYPAD: { tab: string; keys: Key[]; shiftable?: true }[] = [
   },
 ];
 
-/** Caret and delete. Every tab can insert a `#?` placeholder — an exponent, a
- *  fraction, an integral — and a phone has no arrow key or backspace to get
- *  back out of one, so without these the field is write-only: tap Exponent
- *  once and the rest of the equation lands inside it. `moveToNextChar` steps
- *  out of a group when the caret is at its end, which is the escape. */
+/** A phone keyboard has no arrow keys, so without these the field is
+ *  write-only: tap Exponent once and the rest of the equation lands inside it. */
 const NAV: { cmd: Selector; face?: string; word?: string; label: string }[] = [
   { cmd: 'moveToPreviousChar', face: '\\leftarrow', label: 'Move left' },
   { cmd: 'moveToNextChar', face: '\\rightarrow', label: 'Move right' },
+  { cmd: 'moveToNextPlaceholder', word: 'NEXT', label: 'Next field' },
   { cmd: 'deleteBackward', word: 'DEL', label: 'Delete' },
 ];
 
@@ -173,7 +127,6 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
   const hostRef = useRef<HTMLDivElement | null>(null);
   const fieldRef = useRef<MathfieldElement | null>(null);
   const [tab, setTab] = useState(0);
-  const [shift, setShift] = useState(false);
 
   // Keep the listeners reading the current callbacks without tearing down and
   // rebuilding the mathfield (which would drop the caret) on every render.
@@ -185,8 +138,7 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
     if (!host) return;
 
     const mf = new MathfieldElement();
-    // Our own keypad covers the symbols, so MathLive's built-in virtual
-    // keyboard would only be a second, differently-styled copy of it.
+    // Off, so it can't stack a second keyboard on top of the student's own.
     mf.mathVirtualKeyboardPolicy = 'manual';
     // Lets a student type "integrate x^2" and have the prose stay prose.
     mf.smartMode = true;
@@ -202,6 +154,12 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
     // No context menu: its entries (copy as MathML, change colour…) are a
     // different app's affordances, and it opens on right-click too.
     mf.menuItems = [];
+
+    // MathLive hardcodes `inputmode=none` on the element that takes focus,
+    // which is the whole of what holds a phone's keyboard down — it expects
+    // its own virtual keyboard to answer for it, and we've turned that off.
+    const sink = mf.shadowRoot?.querySelector('.ML__keyboard-sink');
+    if (sink) sink.setAttribute('inputmode', 'text');
 
     // MathLive also parks a keyboard toggle and a menu button inside the
     // field. Neither is exposed as a ::part, so reaching them means a
@@ -285,14 +243,9 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
     handlers.current.onChange(mf.value);
   }
 
-  // Only the visible tab gets laid out. Rendering all six at mount is ~150
-  // KaTeX calls on the landing page's critical path, and the letters have to
-  // be re-rendered on shift regardless.
-  const keys = useMemo(() => {
-    const group = KEYPAD[tab];
-    return group.shiftable && shift ? letterKeys(true) : group.keys;
-  }, [tab, shift]);
-
+  // Only the visible tab is laid out; these are KaTeX calls on the landing
+  // page's critical path.
+  const keys = KEYPAD[tab].keys;
   const faces = useMemo(() => keys.map((k) => renderFace(k.face)), [keys]);
   const navFaces = useMemo(() => NAV.map((n) => (n.face ? renderFace(n.face) : '')), []);
 
@@ -301,9 +254,8 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
       <div ref={hostRef} />
 
       <div className="math-keypad">
-        {/* Above the tabs, so a six-row letters grid can never push the only
-            way of correcting a typo off the bottom of the screen. */}
-        <div className="math-keypad-nav" role="group" aria-label="Cursor and delete">
+        {/* Above the tabs, so it stays put as the grid below changes height. */}
+        <div className="math-keypad-nav" role="group" aria-label="Cursor and editing">
           {NAV.map((n, i) => (
             <button
               key={n.cmd}
@@ -334,19 +286,6 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
         </div>
 
         <div className="math-keypad-grid" role="group" aria-label={`${KEYPAD[tab].tab} symbols`}>
-          {/* Its own face is the state: "abc" while the letters below are
-              lowercase, "ABC" once they aren't. */}
-          {KEYPAD[tab].shiftable && (
-            <button
-              type="button"
-              className="math-keypad-key math-keypad-word"
-              aria-pressed={shift}
-              disabled={disabled}
-              onClick={() => setShift((s) => !s)}
-            >
-              {shift ? 'ABC' : 'abc'}
-            </button>
-          )}
           {keys.map((k, i) => (
             <button
               key={k.insert}
