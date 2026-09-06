@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MathfieldElement } from 'mathlive';
+import { MathfieldElement, type Selector } from 'mathlive';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
@@ -145,6 +145,17 @@ const KEYPAD: { tab: string; keys: Key[]; shiftable?: true }[] = [
   },
 ];
 
+/** Caret and delete. Every tab can insert a `#?` placeholder — an exponent, a
+ *  fraction, an integral — and a phone has no arrow key or backspace to get
+ *  back out of one, so without these the field is write-only: tap Exponent
+ *  once and the rest of the equation lands inside it. `moveToNextChar` steps
+ *  out of a group when the caret is at its end, which is the escape. */
+const NAV: { cmd: Selector; face?: string; word?: string; label: string }[] = [
+  { cmd: 'moveToPreviousChar', face: '\\leftarrow', label: 'Move left' },
+  { cmd: 'moveToNextChar', face: '\\rightarrow', label: 'Move right' },
+  { cmd: 'deleteBackward', word: 'DEL', label: 'Delete' },
+];
+
 /** Key faces are our own constants, never user input — safe to inject. */
 function renderFace(latex: string): string {
   return katex.renderToString(latex, { throwOnError: false, displayMode: false });
@@ -264,6 +275,16 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
     handlers.current.onChange(mf.value);
   }
 
+  // Pressing the button took the focus off the field, and a command runs
+  // against the caret — so it has to go back before the command, not after.
+  function command(cmd: Selector) {
+    const mf = fieldRef.current;
+    if (!mf || disabled) return;
+    mf.focus();
+    mf.executeCommand(cmd);
+    handlers.current.onChange(mf.value);
+  }
+
   // Only the visible tab gets laid out. Rendering all six at mount is ~150
   // KaTeX calls on the landing page's critical path, and the letters have to
   // be re-rendered on shift regardless.
@@ -273,12 +294,30 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
   }, [tab, shift]);
 
   const faces = useMemo(() => keys.map((k) => renderFace(k.face)), [keys]);
+  const navFaces = useMemo(() => NAV.map((n) => (n.face ? renderFace(n.face) : '')), []);
 
   return (
     <div className="math-entry">
       <div ref={hostRef} />
 
       <div className="math-keypad">
+        {/* Above the tabs, so a six-row letters grid can never push the only
+            way of correcting a typo off the bottom of the screen. */}
+        <div className="math-keypad-nav" role="group" aria-label="Cursor and delete">
+          {NAV.map((n, i) => (
+            <button
+              key={n.cmd}
+              type="button"
+              className={n.word ? 'math-keypad-key math-keypad-word' : 'math-keypad-key'}
+              aria-label={n.label}
+              disabled={disabled}
+              onClick={() => command(n.cmd)}
+            >
+              {n.word ?? <span aria-hidden dangerouslySetInnerHTML={{ __html: navFaces[i] }} />}
+            </button>
+          ))}
+        </div>
+
         <div className="math-keypad-tabs" role="tablist" aria-label="Math symbols">
           {KEYPAD.map((group, i) => (
             <button
@@ -300,7 +339,7 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
           {KEYPAD[tab].shiftable && (
             <button
               type="button"
-              className="math-keypad-key math-keypad-shift"
+              className="math-keypad-key math-keypad-word"
               aria-pressed={shift}
               disabled={disabled}
               onClick={() => setShift((s) => !s)}

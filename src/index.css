@@ -742,12 +742,20 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
 /* KaTeX draws the key faces — let them inherit so the invert takes the
    glyph with it instead of leaving ink-on-accent. */
 .math-keypad-key .katex { color: inherit; font-size: 1em; }
-/* The one key carrying a word rather than a formula. */
-.math-keypad-shift {
+/* The keys carrying a word rather than a formula. */
+.math-keypad-word {
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: 0.06em;
 }
+/* Caret and delete, sharing the key styling but sitting above the tabs. */
+.math-keypad-nav {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--hair-strong);
+}
+.math-keypad-nav .math-keypad-key { flex: 1; }
 
 /* ─── Responsive padding utility ──────────────────────────────────── */
 .responsive-pad { padding: 24px 20px; }
