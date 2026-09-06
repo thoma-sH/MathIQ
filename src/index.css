@@ -680,10 +680,8 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   border: 1px solid var(--ink);
   background: var(--paper-2);
 }
-/* Six tabs don't fit one row at 375px — "Calculus" and "Relations" together
-   want a third of it — so the strip wraps to two rows of three, and back to
-   one row once there's width for it. The dividers are 1px gaps over a hairline
-   ground: a border-right can't draw the seam between two wrapped rows. */
+/* The dividers are 1px gaps over a hairline ground — a border-right can't draw
+   the seam once the strip wraps. */
 .math-keypad-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -692,9 +690,9 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   border-bottom: 1px solid var(--ink);
 }
 .math-keypad-tab {
-  /* This is what decides the wrap: three per row at 375px, six by 600px. */
+  /* Fits all four on one row at 375px; "Relations" is the widest at 89px. */
   flex: 1 1 auto;
-  min-width: 88px;
+  min-width: 72px;
   min-height: 44px;
   padding: 10px 6px;
   background: var(--paper-2);
