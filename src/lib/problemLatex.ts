@@ -45,24 +45,61 @@ function joinRuns(runs: string[]): string {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+const EMPTY_PLACEHOLDER = '\\placeholder{}';
+
+/** Index just past the brace group opening at `i`, or -1 if it never closes. */
+function groupEnd(latex: string, i: number): number {
+  let depth = 0;
+  for (let j = i; j < latex.length; j += 1) {
+    if (latex[j] === '{') depth += 1;
+    else if (latex[j] === '}') {
+      depth -= 1;
+      if (depth === 0) return j + 1;
+    }
+  }
+  return -1;
+}
+
 /**
- * Drops the slots a student never filled in.
- *
- * The keypad's operator keys always offer both limits and a body, so one
- * integral key covers the definite and the indefinite case. The cost is that
- * an indefinite one leaves `\placeholder{}` behind, and that would otherwise
- * travel to the classifier and into the problem card as literal text. An
- * empty limit takes its `_` or `^` with it — `\int_{}^{}` is not what anyone
- * means by an indefinite integral — while an empty body just goes.
- *
- * A *filled* placeholder (`\placeholder{x}`, which MathLive writes when it
- * has a default) keeps its contents; only the empty ones are noise.
+ * Drops sub/superscripts holding an unfilled slot, *whole* and *in pairs*:
+ * half a limit is not a limit, so `\int_{a}^{}` becomes `\int` and the
+ * student's `a` survives in the field for them to finish. The space matters —
+ * deleting outright welds the operator to what follows, turning `\int_{}^{}x`
+ * into the undefined command `\intx`.
  */
+function dropUnfilledScripts(latex: string): string {
+  let out = '';
+  let i = 0;
+  while (i < latex.length) {
+    const script = latex[i] === '_' || latex[i] === '^';
+    if (script && latex[i + 1] === '{') {
+      let end = i;
+      let unfilled = false;
+      while ((latex[end] === '_' || latex[end] === '^') && latex[end + 1] === '{') {
+        const close = groupEnd(latex, end + 1);
+        if (close < 0) break;
+        if (latex.slice(end + 2, close - 1).includes(EMPTY_PLACEHOLDER)) unfilled = true;
+        end = close;
+      }
+      if (end > i) {
+        out += unfilled ? ' ' : latex.slice(i, end);
+        i = end;
+        continue;
+      }
+    }
+    out += latex[i];
+    i += 1;
+  }
+  return out;
+}
+
 function stripPlaceholders(latex: string): string {
-  return latex
-    .replace(/[_^]\{\\placeholder\{\}\}/g, '')
-    .replace(/[_^]\\placeholder\{\}/g, '')
-    .replace(/\\placeholder\{\}/g, '')
+  return dropUnfilledScripts(latex)
+    .split(EMPTY_PLACEHOLDER)
+    .join(' ')
+    // A command left holding nothing but empty groups — an untouched
+    // `\frac{}{}` — is a bare fraction bar in the problem card.
+    .replace(/\\[a-zA-Z]+(?:\{\s*\})+(?!\s*\{)/g, ' ')
     .replace(/\s+/g, ' ');
 }
 
