@@ -944,42 +944,46 @@ async function handleClassify(
     );
   }
 
-  const upstream = await fetch(ANTHROPIC_MESSAGES_URL, {
-    method: 'POST',
-    headers: {
-      'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: CLASSIFY_MODEL,
-      max_tokens: 32,
-      // Static catalog is cached via ephemeral cache_control — after the
-      // first request in a 5-min window subsequent calls pay ~10% input.
-      system: [
-        {
-          type: 'text',
-          text: CLASSIFIER_SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [{ role: 'user', content: `Problem:\n${problem}` }],
-    }),
-  });
+  // Every exit from here refunds the slot. A throw — the network, a timeout, a
+  // body that isn't JSON — used to escape instead, leaving the student a search
+  // short for a failure that was upstream's.
+  let data: { content?: Array<{ type: string; text?: string }> };
+  try {
+    const upstream = await fetch(ANTHROPIC_MESSAGES_URL, {
+      method: 'POST',
+      headers: {
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: CLASSIFY_MODEL,
+        max_tokens: 32,
+        // Static catalog is cached via ephemeral cache_control — after the
+        // first request in a 5-min window subsequent calls pay ~10% input.
+        system: [
+          {
+            type: 'text',
+            text: CLASSIFIER_SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        messages: [{ role: 'user', content: `Problem:\n${problem}` }],
+      }),
+    });
 
-  if (!upstream.ok) {
+    if (!upstream.ok) {
+      await decrement(counter);
+      console.error('classify upstream failed', upstream.status);
+      return json({ error: 'classify_failed' }, 502, cors);
+    }
+
+    data = (await upstream.json()) as { content?: Array<{ type: string; text?: string }> };
+  } catch (err) {
     await decrement(counter);
-    console.error('classify upstream failed', upstream.status);
-    return json(
-      { error: 'classify_failed' },
-      502,
-      cors,
-    );
+    console.error('classify upstream unreachable', err);
+    return json({ error: 'classify_failed' }, 502, cors);
   }
-
-  const data = (await upstream.json()) as {
-    content?: Array<{ type: string; text?: string }>;
-  };
 
   const text =
     (data.content ?? [])
