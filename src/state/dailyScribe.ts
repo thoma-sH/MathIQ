@@ -12,7 +12,7 @@ export const DAY_TAGLINES = [
   'Every walkthrough now comes with a complimentary introspection.',
   'The world is your oyster.',
   "Yesterday's confusion is today's intuition.",
-  'Halfway through the week. Halfway through the proof. Both end the same way- lunch.',
+  'Halfway through the week. Halfway through the proof. Both end the same way — lunch.',
   'Business as usual.',
   'Math is the gift that keeps on giving... and taking and splitting and multiplying.',
   'No days off.',
