@@ -113,6 +113,9 @@ export function Landing({ onNavigate }: LandingProps) {
     onNavigate({ name: 'homework' });
   }
   async function submit() {
+    // Enter reaches here without passing the disabled button, and an untouched
+    // template survives latexToProblem as a non-empty `\int \,d`.
+    if (unready) return;
     // With smartMode on, a typed topic name leaves the field as `\text{…}`,
     // which reads as a LaTeX command to the heuristic below. Converting first
     // is what keeps "related rates" from auto-firing a walkthrough.
