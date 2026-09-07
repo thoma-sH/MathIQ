@@ -90,7 +90,8 @@ STRIPE_PORTAL_RETURN_URL = "https://mathiq.io/"
 # Example: "MathIQ <streaks@mathiq.io>".
 REMINDER_FROM_EMAIL = "MathIQ <streaks@mathiq.io>"
 
-# Public origin used in email links (unsubscribe especially). Leave empty to
-# fall back to the workers.dev URL; set to a custom-domain origin once /api/email/*
-# is proxied through it (e.g. via a Vercel rewrite to keep the user-visible host).
-WORKER_PUBLIC_URL = ""
+# Public origin used in email links (unsubscribe especially). Empty falls back
+# to the workers.dev URL, which is what a student would see in a reminder. The
+# rewrite in vercel.json proxies /api/email/unsubscribe here, so the link can be
+# a mathiq.io one — the two have to move together.
+WORKER_PUBLIC_URL = "https://mathiq.io"
