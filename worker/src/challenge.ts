@@ -338,9 +338,16 @@ export async function getOrGenerateTodaysChallenge(
     await env.USAGE.put(key(date), JSON.stringify(record), {
       expirationTtl: CHALLENGE_KV_TTL_SECONDS,
     });
-  } catch (err) {
-    await decrement(claim);
-    throw err;
+  } catch {
+    // The challenge itself is already generated and paid for, so serve it
+    // uncached rather than 500 on the way out; the next request regenerates.
+    // The refund gets its own catch — failing to free the claim is not a
+    // reason to withhold a record we are holding.
+    try {
+      await decrement(claim);
+    } catch {
+      /* The claim expires with the day either way. */
+    }
   }
   return record;
 }
