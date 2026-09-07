@@ -298,6 +298,12 @@ export async function getOrGenerateTodaysChallenge(
   const claim = challengeGenerationCounter(env.USAGE_DO, date);
   const attempt = await increment(claim);
   if (attempt > 1) {
+    // Hand back the increment that only established we lost the race. The
+    // counter is keyed on the date, so anything a waiter leaves on it is held
+    // until midnight: with waiters counted, a generation that fails can never
+    // bring it back to 0, no later request ever reads 1, and every request for
+    // the rest of the day polls for a record nobody is generating.
+    await decrement(claim);
     for (let i = 0; i < GENERATION_WAIT_POLLS; i++) {
       await new Promise((resolve) => setTimeout(resolve, GENERATION_WAIT_MS));
       const landed = await readCached(env.USAGE, date);
