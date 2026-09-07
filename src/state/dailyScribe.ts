@@ -10,10 +10,10 @@ export const DAY_LABELS = [
 
 export const DAY_TAGLINES = [
   'Every walkthrough now comes with a complimentary introspection.',
-  'Pick a course. Type a problem. Walk through it; the world is our oyster.',
-  "Yesterday's confusion is today's intuition. Embrace the growth.",
+  'The world is your oyster.',
+  "Yesterday's confusion is today's intuition.",
   'Halfway through the week. Halfway through the proof. Both end the same way- lunch.',
-  'Every breakthrough was once a guess. What will yours be?',
+  'Business as usual.',
   'Math is the gift that keeps on giving... and taking and splitting and multiplying.',
   'No days off.',
 ];
