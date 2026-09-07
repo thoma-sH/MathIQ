@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/email/unsubscribe",
+      "destination": "https://mathiq-api.t-hamilton0416.workers.dev/api/email/unsubscribe"
+    },
+    {
       "source": "/share/:shareId",
       "has": [
         {
