@@ -61,11 +61,13 @@ function groupEnd(latex: string, i: number): number {
 }
 
 /**
- * Drops sub/superscripts holding an unfilled slot, *whole* and *in pairs*:
- * half a limit is not a limit, so `\int_{a}^{}` becomes `\int` and the
- * student's `a` survives in the field for them to finish. The space matters —
- * deleting outright welds the operator to what follows, turning `\int_{}^{}x`
- * into the undefined command `\intx`.
+ * Drops a run of sub/superscripts *whole*, and only when every slot in it is
+ * empty: that is the untouched `\int_{}^{}`, a legitimate indefinite integral.
+ * A half-filled `\int_{a}^{}` keeps its placeholder instead, so the submit
+ * guard holds — dropping it would send Iris an indefinite integral while the
+ * field still showed the student a lower bound. The space matters — deleting
+ * outright welds the operator to what follows, turning `\int_{}^{}x` into the
+ * undefined command `\intx`.
  */
 function dropUnfilledScripts(latex: string): string {
   let out = '';
@@ -74,15 +76,17 @@ function dropUnfilledScripts(latex: string): string {
     const script = latex[i] === '_' || latex[i] === '^';
     if (script && latex[i + 1] === '{') {
       let end = i;
-      let unfilled = false;
+      let slots = 0;
+      let unfilled = 0;
       while ((latex[end] === '_' || latex[end] === '^') && latex[end + 1] === '{') {
         const close = groupEnd(latex, end + 1);
         if (close < 0) break;
-        if (latex.slice(end + 2, close - 1).includes(EMPTY_PLACEHOLDER)) unfilled = true;
+        slots += 1;
+        if (latex.slice(end + 2, close - 1).includes(EMPTY_PLACEHOLDER)) unfilled += 1;
         end = close;
       }
       if (end > i) {
-        out += unfilled ? ' ' : latex.slice(i, end);
+        out += unfilled === slots ? ' ' : latex.slice(i, end);
         i = end;
         continue;
       }
