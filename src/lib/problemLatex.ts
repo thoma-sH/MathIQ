@@ -47,6 +47,16 @@ function joinRuns(runs: string[]): string {
 
 const EMPTY_PLACEHOLDER = '\\placeholder{}';
 
+/** Index just past the single token at `i` — a `\command` or one character.
+ *  MathLive drops the braces off a one-token script, so `^0` and `^{0}` are
+ *  the same limit written two ways. */
+function tokenEnd(latex: string, i: number): number {
+  if (i >= latex.length) return -1;
+  if (latex[i] !== '\\') return i + 1;
+  const command = /^\\([a-zA-Z]+|.)/.exec(latex.slice(i));
+  return command ? i + command[0].length : -1;
+}
+
 /** Index just past the brace group opening at `i`, or -1 if it never closes. */
 function groupEnd(latex: string, i: number): number {
   let depth = 0;
@@ -60,6 +70,12 @@ function groupEnd(latex: string, i: number): number {
   return -1;
 }
 
+/** A slot the student never touched is `\placeholder{}`; one they emptied with
+ *  DEL is a bare `{}`. Nothing below should have to know the difference. */
+function normalizeEmptySlots(latex: string): string {
+  return latex.replace(/([_^])\{\s*\}/g, `$1{${EMPTY_PLACEHOLDER}}`);
+}
+
 /**
  * Drops a run of sub/superscripts *whole*, and only when every slot in it is
  * empty: that is the untouched `\int_{}^{}`, a legitimate indefinite integral.
@@ -69,21 +85,31 @@ function groupEnd(latex: string, i: number): number {
  * outright welds the operator to what follows, turning `\int_{}^{}x` into the
  * undefined command `\intx`.
  */
-function dropUnfilledScripts(latex: string): string {
+function dropUnfilledScripts(raw: string): string {
+  const latex = normalizeEmptySlots(raw);
   let out = '';
   let i = 0;
   while (i < latex.length) {
-    const script = latex[i] === '_' || latex[i] === '^';
-    if (script && latex[i + 1] === '{') {
+    if (latex[i] === '_' || latex[i] === '^') {
       let end = i;
       let slots = 0;
       let unfilled = 0;
-      while ((latex[end] === '_' || latex[end] === '^') && latex[end + 1] === '{') {
-        const close = groupEnd(latex, end + 1);
-        if (close < 0) break;
-        slots += 1;
-        if (latex.slice(end + 2, close - 1).includes(EMPTY_PLACEHOLDER)) unfilled += 1;
-        end = close;
+      while (latex[end] === '_' || latex[end] === '^') {
+        if (latex[end + 1] === '{') {
+          const close = groupEnd(latex, end + 1);
+          if (close < 0) break;
+          slots += 1;
+          if (latex.slice(end + 2, close - 1).includes(EMPTY_PLACEHOLDER)) unfilled += 1;
+          end = close;
+        } else {
+          // A limit written without braces is a single token, and a single
+          // token is never the empty one — it just has to be counted, or the
+          // `_{}` beside it looks like the whole run and gets dropped.
+          const token = tokenEnd(latex, end + 1);
+          if (token < 0) break;
+          slots += 1;
+          end = token;
+        }
       }
       if (end > i) {
         out += unfilled === slots ? ' ' : latex.slice(i, end);
