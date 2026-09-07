@@ -40,11 +40,10 @@ new_sqlite_classes = ["UsageCounter"]
 # running under `wrangler dev`, never from this list.
 ALLOWED_ORIGINS = "https://mathiq.io,https://www.mathiq.io,https://math-iq.vercel.app"
 
-# Clerk publishable key — safe to commit (client-visible by design).
-# This is the development instance (pk_test_). Going live means a production
-# Clerk instance and swapping BOTH this and the CLERK_SECRET_KEY secret
-# together — they must belong to the same instance or every token fails.
-CLERK_PUBLISHABLE_KEY = "pk_test_ZXF1YWwtbWFsYW11dGUtMzIuY2xlcmsuYWNjb3VudHMuZGV2JA"
+# Clerk publishable key — safe to commit (client-visible by design). Production
+# instance (clerk.mathiq.io); must belong to the same instance as the
+# CLERK_SECRET_KEY secret or every token fails.
+CLERK_PUBLISHABLE_KEY = "pk_live_Y2xlcmsubWF0aGlxLmlvJA"
 
 # Comma-separated Clerk user IDs (user_xxx...) granted MathIQ+ tier manually
 # (dev override / comp accounts). Stripe-paid subs are stored in KV via webhook.
