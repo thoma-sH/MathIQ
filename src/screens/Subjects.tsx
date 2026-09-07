@@ -27,18 +27,9 @@ function ScribeMark({ src, fill }: { src: string; fill: string }) {
         } as React.CSSProperties
       }
     >
-      <img
-        src={src}
-        alt=""
-        aria-hidden
-        style={{
-          height: 'clamp(120px, 18vw, 180px)',
-          width: 'auto',
-          maxWidth: '100%',
-          display: 'block',
-          flexShrink: 0,
-        }}
-      />
+      {/* Sized in index.css — the squished layout has to be able to override
+          it, and an inline style would outrank any media query. */}
+      <img src={src} alt="" aria-hidden />
     </span>
   );
 }
@@ -148,6 +139,7 @@ export function Subjects({ onNavigate }: SubjectsProps) {
             </span>
             <span
               aria-hidden
+              className="kicker-rule"
               style={{
                 flex: 1,
                 height: 1,
@@ -193,13 +185,8 @@ export function Subjects({ onNavigate }: SubjectsProps) {
         </div>
 
         <div
-          className="reveal reveal-2"
-          style={{
-            flex: '2 1 200px',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            paddingRight: 'clamp(0px, 3vw, 32px)',
-          }}
+          className="reveal reveal-2 scribe-slot"
+          style={{ flex: '2 1 200px', display: 'flex' }}
         >
           <ScribeMark src={scribeSrc} fill={scribeFillSrc} />
         </div>

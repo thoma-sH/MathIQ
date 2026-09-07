@@ -803,7 +803,19 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
  * while a masked overlay paints the same alpha in the live --ink.
  */
 .scribe-art { position: relative; display: inline-block; }
+/* The img is invisible — it is here to give the box the drawing's intrinsic
+   proportions, which the two masked layers below then paint into. */
 .scribe-art img { opacity: 0; }
+/* Subjects sizes and places its copy from the stylesheet so the squished
+   layout can override it. Landing bounds its own inline, for the reason
+   written there. */
+.scribe-slot { justify-content: flex-end; padding-right: clamp(0px, 3vw, 32px); }
+.scribe-slot .scribe-art img {
+  display: block;
+  height: clamp(120px, 18vw, 180px);
+  width: auto;
+  max-width: 100%;
+}
 .scribe-art::before,
 .scribe-art::after {
   content: '';
@@ -830,6 +842,36 @@ a { color: inherit; text-decoration: none; cursor: pointer; }
   background: light-dark(var(--ink), var(--paper));
   -webkit-mask: var(--scribe) center / contain no-repeat;
   mask: var(--scribe) center / contain no-repeat;
+}
+
+/* Below this the Subjects hero wraps to one column — the same 600px the
+   padding steps at — and the drawing gets a whole row to itself. Sized by
+   height it sits in the corner of all that space at its desktop size, so
+   size it by the row instead and centre it. The height cap is what keeps a
+   tall scribe from taking the whole screen on a short phone. */
+@media (max-width: 600px) {
+  .scribe-slot { justify-content: center; padding-right: 0; }
+  /* Still driven by height, so every day's drawing reads the same size
+     whatever its proportions. 62vw is what keeps the widest of them —
+     Friday, 455x336 — inside the row rather than into the page gutter: the
+     span is shrink-to-fit, so a max-width on the image resolves against the
+     image and cannot rescue it. */
+  .scribe-slot .scribe-art img { height: clamp(180px, 62vw, 260px); }
+  /* Every drawing is exported inside a wide transparent margin — the ink is
+     only about half its canvas — so `contain` spends half the box on nothing
+     and the figure reads tiny however big the box gets. The box is
+     height-driven with width:auto, so it carries the canvas's own aspect
+     ratio and `contain` is exactly 100%: overshooting that scales about the
+     centre and crops 17% off each edge. The tightest margin of the seven
+     (Friday, 18%) still clears it, so this eats padding and never ink. */
+  .scribe-slot .scribe-art::before,
+  .scribe-slot .scribe-art::after {
+    -webkit-mask-size: 150%;
+    mask-size: 150%;
+  }
+  /* Written for the one-word day label it replaced; against a full sentence
+     it never gets room and lands as a stray 24px dash. */
+  .kicker-rule { display: none; }
 }
 
 /* ─── Constraints / utilities ─────────────────────────────────────── */
