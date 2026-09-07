@@ -427,6 +427,8 @@ export function Landing({ onNavigate }: LandingProps) {
                 letterSpacing: '0.08em',
                 color: T.ink,
                 marginLeft: 10,
+                position: 'relative',
+                top: 1,
               }}
             >
               {ocrState === 'reading' ? 'Reading…' : 'Scan'}
