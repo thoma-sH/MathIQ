@@ -108,6 +108,11 @@ const EMPTY_SLOT = '\\placeholder{}';
  *  starts in — an integral opens in its superscript — and then dead-ends on the
  *  last one, leaving the upper limit unreachable by tapping. This wraps. */
 function moveToNextSlot(mf: MathfieldElement): void {
+  // `getElementInfo` measures the atom — a rect and a computed style each —
+  // so the walk below costs a layout read per atom. A field with no slots at
+  // all is the long OCR'd equation, and the expensive case: the LaTeX says so
+  // without touching the DOM.
+  if (!mf.value.includes(EMPTY_SLOT)) return;
   const slots: number[] = [];
   for (let p = 0; p <= mf.lastOffset; p += 1) {
     if (mf.getElementInfo(p)?.latex === EMPTY_SLOT) slots.push(p);
