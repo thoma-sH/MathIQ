@@ -404,6 +404,8 @@ export function Landing({ onNavigate }: LandingProps) {
                 fontWeight: 500,
                 cursor: unready || busy ? 'not-allowed' : 'pointer',
                 fontFamily: T.sans,
+                position: 'relative',
+                top: 2,
               }}
             >
               {busy ? 'Routing…' : 'Walk me through it →'}
