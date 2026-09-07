@@ -3054,7 +3054,7 @@ function unsubscribePage(
     );
   const confirm = options.confirmAction
     ? `<form method="post" action="${esc(options.confirmAction)}" style="margin:0 0 20px;">
-    <button type="submit" style="background:#1a4d6e;color:#d4e26a;border:none;padding:12px 22px;font-weight:600;font-size:14px;cursor:pointer;">
+    <button type="submit" style="background:var(--accent);color:var(--paper);border:none;padding:12px 22px;font-weight:600;font-size:14px;cursor:pointer;">
       Unsubscribe
     </button>
   </form>`
@@ -3065,16 +3065,32 @@ function unsubscribePage(
   <meta charset="utf-8" />
   <title>MathIQ — Unsubscribe</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Arrived from an email, so there is no stored theme to read here — but a
+       student tapping this at 11pm should not get a screenful of pistachio.
+       Light is the brand palette, dark is warm-brown, the one the app's own
+       auto mode serves at night. Both are lifted from src/index.css. */
+    :root {
+      --paper: #d4e26a; --ink: #1a2b1a; --muted: #4e5e30; --accent: #1a4d6e;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --paper: #1d2021; --ink: #ebdbb2; --muted: #a89984; --accent: #d5d639;
+        color-scheme: dark;
+      }
+    }
+  </style>
 </head>
-<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',sans-serif;max-width:540px;margin:60px auto;padding:24px;color:#1a2b1a;background:#d4e26a;line-height:1.55;">
-  <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:0.18em;color:rgba(26,43,26,0.6);text-transform:uppercase;margin-bottom:10px;">
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',sans-serif;max-width:540px;margin:60px auto;padding:24px;color:var(--ink);background:var(--paper);line-height:1.55;">
+  <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;letter-spacing:0.18em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">
     MATHIQ
   </div>
   <h1 style="font-size:22px;font-weight:700;line-height:1.2;letter-spacing:-0.01em;margin:0 0 20px;">
     ${esc(message)}
   </h1>
   ${confirm}
-  <a href="https://mathiq.io/" style="display:inline-block;background:#1a4d6e;color:#d4e26a;padding:12px 22px;text-decoration:none;font-weight:600;font-size:14px;">
+  <a href="https://mathiq.io/" style="display:inline-block;background:var(--accent);color:var(--paper);padding:12px 22px;text-decoration:none;font-weight:600;font-size:14px;">
     Back to MathIQ &rarr;
   </a>
 </body>
