@@ -104,8 +104,10 @@ function stripPlaceholders(latex: string): string {
     .split(EMPTY_PLACEHOLDER)
     .join(' ')
     // A command left holding nothing but empty groups — an untouched
-    // `\frac{}{}` — is a bare fraction bar in the problem card.
-    .replace(/\\[a-zA-Z]+(?:\{\s*\})+(?!\s*\{)/g, ' ')
+    // `\frac{}{}` — is a bare fraction bar in the problem card. `\text` is
+    // exempt: its group is prose, so `\text{ }` is a real seam holding two
+    // math runs apart and `\textbackslash{}` is a character.
+    .replace(/\\(?!text)[a-zA-Z]+(?:\{\s*\})+(?!\s*\{)/g, ' ')
     .replace(/\s+/g, ' ');
 }
 
