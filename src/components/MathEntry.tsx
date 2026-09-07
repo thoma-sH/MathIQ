@@ -174,6 +174,9 @@ export function MathEntry({ value, onChange, onSubmit, onPasteImage, disabled }:
     // MathLive hardcodes `inputmode=none` on the element that takes focus,
     // which is the whole of what holds a phone's keyboard down — it expects
     // its own virtual keyboard to answer for it, and we've turned that off.
+    // `.ML__keyboard-sink` is its internal class, not a ::part, and a miss
+    // here is silent: phones would lose every digit and letter with nothing
+    // to show for it. That is why `mathlive` is pinned to an exact version.
     const sink = mf.shadowRoot?.querySelector('.ML__keyboard-sink');
     if (sink) sink.setAttribute('inputmode', 'text');
 

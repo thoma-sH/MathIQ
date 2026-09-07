@@ -15,7 +15,7 @@
     "@vercel/analytics": "^2.0.1",
     "jspdf": "^4.2.1",
     "katex": "^0.16.45",
-    "mathlive": "^0.110.0",
+    "mathlive": "0.110.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
