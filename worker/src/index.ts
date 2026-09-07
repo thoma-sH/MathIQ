@@ -692,7 +692,16 @@ async function handleWalkthrough(
     ) {
       return bail({ error: 'walkthroughFull and sliceEnd required' }, 400);
     }
-    const known = await env.USAGE.get(walkthroughHashKey(await sha256Hex(walkthroughFull)));
+    // The record is written from the walkthrough stream's flush, under
+    // waitUntil, and KV is eventually consistent — a student who clicks "why"
+    // the moment the walkthrough lands can beat it. Retry before refusing:
+    // the alternative is telling them to spend another walkthrough.
+    const hashKey = walkthroughHashKey(await sha256Hex(walkthroughFull));
+    let known = await env.USAGE.get(hashKey);
+    for (let i = 0; !known && i < WHY_HOW_HASH_RETRIES; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, WHY_HOW_HASH_RETRY_MS));
+      known = await env.USAGE.get(hashKey);
+    }
     if (!known) {
       return bail(
         {
@@ -1219,6 +1228,8 @@ async function readJson<T>(
 }
 
 const WALKTHROUGH_HASH_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
+const WHY_HOW_HASH_RETRIES = 3;
+const WHY_HOW_HASH_RETRY_MS = 400;
 
 function walkthroughHashKey(hash: string): string {
   return `wt:${hash}`;
