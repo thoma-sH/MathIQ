@@ -125,11 +125,13 @@ export function latexToProblem(rawLatex: string): string {
   while (i < latex.length) {
     if (latex.startsWith('\\text{', i)) {
       // Walk to the matching brace so a nested group inside the text stays
-      // whole.
+      // whole. Escapes step over their own next character: the `\{` and `\}`
+      // `escapeText` writes for a brace in the prose are not depth.
       let depth = 1;
       let j = i + '\\text{'.length;
       while (j < latex.length && depth > 0) {
-        if (latex[j] === '{') depth += 1;
+        if (latex[j] === '\\') j += 1;
+        else if (latex[j] === '{') depth += 1;
         else if (latex[j] === '}') depth -= 1;
         j += 1;
       }
