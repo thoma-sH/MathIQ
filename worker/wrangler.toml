@@ -51,7 +51,7 @@ PRO_USER_IDS = ""
 
 # Comma-separated Clerk user IDs granted MathIQ Pro tier manually.
 # Set to empty string if no manual grants.
-MAX_USER_IDS = "user_3DYnEzyeFI36j2JWovhFyBEvRPe"
+MAX_USER_IDS = "user_3IyqrMvb7nojPF4mxaKOqEPA3oW"
 
 # Live Stripe price IDs — six SKUs (Monthly + Annual recurring, Semester
 # one-time, for both Plus and Pro). When prices are reshaped, move the
