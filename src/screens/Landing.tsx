@@ -388,6 +388,7 @@ export function Landing({ onNavigate }: LandingProps) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              paddingTop: 2,
             }}
           >
             <button
@@ -404,8 +405,6 @@ export function Landing({ onNavigate }: LandingProps) {
                 fontWeight: 500,
                 cursor: unready || busy ? 'not-allowed' : 'pointer',
                 fontFamily: T.sans,
-                position: 'relative',
-                top: 2,
               }}
             >
               {busy ? 'Routing…' : 'Walk me through it →'}
@@ -427,8 +426,6 @@ export function Landing({ onNavigate }: LandingProps) {
                 letterSpacing: '0.08em',
                 color: T.ink,
                 marginLeft: 10,
-                position: 'relative',
-                top: 2,
               }}
             >
               {ocrState === 'reading' ? 'Reading…' : 'Scan'}
