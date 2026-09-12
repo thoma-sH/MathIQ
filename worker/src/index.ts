@@ -1309,11 +1309,11 @@ async function handleBillingState(
     return json(
       {
         tier: pass.tier,
-        interval: 'semester' as const,
+        interval: pass.kind === 'grant' ? null : ('semester' as const),
         status: 'active' as const,
         currentPeriodEnd: pass.expiresAt,
         manageable: false,
-        accessKind: 'pass' as const,
+        accessKind: pass.kind,
         expiresAt: pass.expiresAt,
       },
       200,

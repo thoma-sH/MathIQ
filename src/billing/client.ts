@@ -6,7 +6,7 @@ const WORKER_URL = import.meta.env.VITE_WORKER_URL ?? 'http://localhost:8787';
 
 export type Tier = 'plus' | 'pro';
 export type Interval = 'monthly' | 'annual' | 'semester';
-export type AccessKind = 'subscription' | 'pass';
+export type AccessKind = 'subscription' | 'pass' | 'grant';
 
 export interface SubscriptionStateResponse {
   tier: Tier | null;

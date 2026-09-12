@@ -32,7 +32,8 @@ export interface SubscriptionState {
  * coexist (rare, but possible if a Semester holder later subscribes).
  */
 export interface PassState {
-  kind: 'pass';
+  /** 'grant' is a comp written by hand into KV — no Stripe payment behind it. */
+  kind: 'pass' | 'grant';
   tier: SubscriptionTier;
   purchasedAt: number; // seconds since epoch
   expiresAt: number; // seconds since epoch

@@ -853,7 +853,8 @@ function BillingSection() {
   // Active or granted plan — Stripe sub OR dev/comp whitelist
   if (state?.tier) {
     const stripeActive = state.status === 'active' || state.status === 'trialing';
-    const isPass = state.accessKind === 'pass';
+    const isGrant = state.accessKind === 'grant';
+    const isPass = state.accessKind === 'pass' || isGrant;
     const expiry = (isPass ? state.expiresAt : stripeActive ? state.currentPeriodEnd : null);
     const expiryText = expiry
       ? new Date(expiry * 1000).toLocaleDateString(undefined, {
@@ -867,7 +868,7 @@ function BillingSection() {
         <div style={kicker()}>CURRENT PLAN</div>
         <div style={{ fontSize: 17, fontWeight: 600, marginTop: 6 }}>
           {PLAN_LABELS[state.tier]}
-          {isPass ? ' · Semester access' : state.interval ? ` (${state.interval})` : ''}
+          {isGrant ? ' · 30-day trial granted' : isPass ? ' · Semester access' : state.interval ? ` (${state.interval})` : ''}
         </div>
         {!stripeActive && !isPass && (
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4, fontFamily: T.mono, letterSpacing: '0.1em' }}>
@@ -876,7 +877,9 @@ function BillingSection() {
         )}
         {expiryText && (
           <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
-            {isPass
+            {isGrant
+              ? `Ends ${expiryText} · no billing`
+              : isPass
               ? `Expires ${expiryText} · no auto-renew`
               : state.status === 'trialing'
                 ? `Trial ends ${expiryText} · billing starts then`
