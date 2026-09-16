@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { useUser } from '@clerk/clerk-react';
 import { Header } from './shell/Header';
 import { InstallPrompt } from './shell/InstallPrompt';
@@ -189,6 +190,7 @@ export default function App() {
           {realPath.kind === 'share' && <Share shareId={realPath.shareId} />}
         </Suspense>
         <Analytics />
+        <SpeedInsights />
       </>
     );
   }
@@ -335,6 +337,7 @@ function MathIQApp() {
       </Page>
       <InstallPrompt />
       <Analytics />
+      <SpeedInsights />
     </UpgradeProvider>
   );
 }

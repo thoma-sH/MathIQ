@@ -13,6 +13,7 @@
   "dependencies": {
     "@clerk/clerk-react": "^5.61.6",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "jspdf": "^4.2.1",
     "katex": "^0.16.45",
     "mathlive": "0.110.0",
