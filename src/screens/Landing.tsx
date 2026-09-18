@@ -513,43 +513,18 @@ export function Landing({ onNavigate }: LandingProps) {
         </div>
       </div>
 
-      {/* Secondary CTAs — fade back when the search has focus */}
-      <div
-        className="reveal reveal-5"
-        style={{
-          marginTop: 'clamp(40px, 8vh, 72px)',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 12,
-          justifyContent: 'center',
-          width: '100%',
-          maxWidth: 640,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => onNavigate({ name: 'subjects' })}
-          className="landing-cta-card"
-        >
-          <span className="cta-kicker">Explore</span>
-          <span className="cta-title">Pick a subject</span>
-          <span className="cta-sub">
-            Nine college subjects, walked through one line at a time.
-          </span>
-          <span className="cta-arrow" aria-hidden>→</span>
-        </button>
+      <SubjectIndex onNavigate={onNavigate} />
 
-        <button
-          type="button"
-          onClick={onHomeworkClick}
-          className="landing-cta-card"
-        >
-          <span className="cta-kicker">Plus · Pro</span>
-          <span className="cta-title">Handwritten to PDF · LaTeX Mode</span>
-          <span className="cta-sub">
-            Snap your work. Pro adds a typeset LaTeX render.
-          </span>
-          <span className="cta-arrow" aria-hidden>→</span>
+      <div className="tool-block reveal reveal-5">
+        <div className="index-kicker">
+          <span>Also in MathIQ</span>
+          <span aria-hidden className="index-rule" />
+        </div>
+        <button type="button" onClick={onHomeworkClick} className="tool-row btn-press">
+          <span className="tool-tag chamfer">Plus · Pro</span>
+          <span className="tool-title">Handwritten to PDF</span>
+          <span className="tool-sub">Snap your work. Pro adds a typeset LaTeX render.</span>
+          <span className="tool-arrow arrow-nudge" aria-hidden>→</span>
         </button>
       </div>
 
@@ -583,6 +558,65 @@ export function Landing({ onNavigate }: LandingProps) {
       </footer>
 
     </main>
+  );
+}
+
+const PICK_WORDS = ['Or', 'pick', 'a', 'subject'];
+
+/** Stroke paths in a 24x40 box for the operator that leads "Or pick a
+ *  subject". Strokes rather than glyphs so each can draw itself in. */
+const OPERATORS = [
+  'M20 6C18 2 13 2 12.5 8L11.5 32C11 38 6 38 4 34', // ∫
+  'M20 6H4L13 20L4 34H20', // ∑
+  'M3 6H21M7 6V34M17 6V34', // ∏
+  'M5 9C8 4 16 4 18 11C20 18 18 30 13 33C9 36 5 33 5 28C5 23 9 20 13 20C16 20 18 22 18.5 24', // ∂
+  'M3 6H21L12 34Z', // ∇
+  'M2 24L6 21L12 34L22 4', // √
+  'M4 6L12 34L20 6M7.5 19H16.5', // ∀
+];
+
+/** Explore is most of the app, so its way in is the page's second headline
+ *  rather than a card. On hover each letter rolls up to an accent copy of
+ *  itself; the operator stays visible so touch still reads it as a link. */
+function SubjectIndex({ onNavigate }: { onNavigate: (route: Route) => void }) {
+  const [op, setOp] = useState(0);
+  let i = 0;
+  return (
+    <section className="subject-index reveal reveal-4">
+      <button
+        type="button"
+        className="pick-subject"
+        aria-label="Pick a subject"
+        onClick={() => onNavigate({ name: 'subjects' })}
+      >
+        <span className="pick-text" aria-hidden>
+          {PICK_WORDS.map((word) => (
+            <span key={word} className="pick-word">
+              {[...word].map((ch) => (
+                <span key={i} className="pick-char" style={{ '--i': i++ } as React.CSSProperties}>
+                  <span>{ch}</span>
+                  <span>{ch}</span>
+                </span>
+              ))}
+            </span>
+          ))}
+        </span>
+        {/* The operator draws itself in on hover. Once it has fully faded
+            out again, the next one takes its place for the next hover. */}
+        <svg
+          className="pick-operator"
+          viewBox="0 0 24 40"
+          aria-hidden
+          onTransitionEnd={(e) => {
+            if (e.propertyName === 'opacity' && getComputedStyle(e.currentTarget).opacity === '0') {
+              setOp((n) => (n + 1) % OPERATORS.length);
+            }
+          }}
+        >
+          <path pathLength={1} d={OPERATORS[op]} />
+        </svg>
+      </button>
+    </section>
   );
 }
 
